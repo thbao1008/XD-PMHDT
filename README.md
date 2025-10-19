@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 ﻿# AESP (microservices scaffold)
 
 Các file tạo sẵn: docker-compose.yml, Dockerfile mẫu, infra/nginx/frontend.conf, services/*/Dockerfile, services/auth/.env.example
@@ -11,3 +12,6 @@ Chạy local:
 Lưu ý:
 - Tạo file .env riêng cho mỗi service từ .env.example và đặt giá trị thực tế.
 - Mỗi service cần code trong services/<service>/src, file entry chạy server tại src/server.js
+=======
+# XD-PMHDT
+>>>>>>> bbf071b7daff80d3e4d368d4305f5d5cf1aa37c7
