@@ -1,0 +1,1 @@
+﻿import AdminSidebar from "./AdminSidebar.jsx"; import AdminHeader from "./AdminHeader.jsx"; export default function AdminLayout({children}){ return (<div className="admin-layout"><AdminSidebar/><div className="admin-main"><AdminHeader/>{children}</div></div>); }
