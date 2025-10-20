@@ -1,2 +1,7 @@
-﻿import React from "react";
-export default function App(){ return <div>AESP App</div>; }
+﻿// src/app/App.jsx
+import React from "react";
+import AppRoutes from "./routes.jsx";
+
+export default function App() {
+  return <AppRoutes />;
+}
