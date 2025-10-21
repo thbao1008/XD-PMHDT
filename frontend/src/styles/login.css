@@ -106,8 +106,46 @@ body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial; }
 .form { display: grid; gap: 12px; }
 .field { display: grid; gap: 6px; }
 .label { font-size: 13px; font-weight: 700; color: #052626; }
-.input-group { position: relative; }
+/* đảm bảo input chừa chỗ cho icon ở bên phải */
+.input {
+  padding: 0 44px 0 12px; /* giữ nội dung cách trái 12px, chừa 44px bên phải cho icon */
+  position: relative;
+  box-sizing: border-box;
+}
 
+/* .input-group làm container relative để đặt icon absolute bên trong */
+.input-group { position: relative; display: block; }
+
+/* nút con mắt nằm trong khung input, không phá layout */
+.toggle-password {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 32px;
+  width: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: #556b6b;
+  padding: 0;
+  border-radius: 8px;
+  z-index: 2; /* đảm bảo hiển thị trên input */
+}
+
+/* kích thước SVG trong nút */
+.toggle-password svg { width: 18px; height: 18px; display: block; }
+
+/* trạng thái hover/focus */
+.toggle-password:hover,
+.toggle-password:focus {
+  color: var(--primary);
+  background: rgba(5,156,160,0.06);
+  outline: none;
+}
 .input {
   width: 100%;
   height: 44px;
