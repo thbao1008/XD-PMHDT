@@ -1,17 +1,31 @@
-export function saveAuth({ token, user }, remember) {
-  if (remember) localStorage.setItem("aesp_token", token);
-  else sessionStorage.setItem("aesp_token", token);
-  localStorage.setItem("aesp_user", JSON.stringify(user));
+// src/utils/auth.js
+const KEY = "aesp_auth_v1";
+
+export function saveAuth(payload, remember = true) {
+  const data = {
+    token: payload.token,
+    user: payload.user,
+    _ts: Date.now()
+  };
+  try {
+    const str = JSON.stringify(data);
+    if (remember) localStorage.setItem(KEY, str);
+    else sessionStorage.setItem(KEY, str);
+  } catch (e) {
+    console.error("saveAuth error - auth.js:15", e);
+  }
 }
 
 export function getAuth() {
-  const token = localStorage.getItem("aesp_token") || sessionStorage.getItem("aesp_token");
-  const user = localStorage.getItem("aesp_user");
-  return { token, user: user ? JSON.parse(user) : null };
+  try {
+    const str = localStorage.getItem(KEY) || sessionStorage.getItem(KEY);
+    return str ? JSON.parse(str) : null;
+  } catch (e) {
+    return null;
+  }
 }
 
 export function clearAuth() {
-  localStorage.removeItem("aesp_token");
-  sessionStorage.removeItem("aesp_token");
-  localStorage.removeItem("aesp_user");
+  localStorage.removeItem(KEY);
+  sessionStorage.removeItem(KEY);
 }

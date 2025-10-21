@@ -1,6 +1,7 @@
-﻿import React, { createContext, useContext, useState, useEffect } from "react";
+﻿// src/context/AuthContext.jsx
+import React, { createContext, useContext, useState, useEffect } from "react";
 import { login as apiLogin } from "../services/authService";
-import { saveAuth, clearAuth } from "../utils/auth";
+import { saveAuth, clearAuth, getAuth } from "../utils/auth";
 
 const AuthContext = createContext();
 
@@ -11,11 +12,10 @@ export function AuthProvider({ children }) {
 
   // Khôi phục trạng thái đăng nhập khi reload
   useEffect(() => {
-    const storedToken = localStorage.getItem("aesp_token") || sessionStorage.getItem("aesp_token");
-    const storedUser = localStorage.getItem("aesp_user");
-    if (storedToken && storedUser) {
-      setToken(storedToken);
-      setUser(JSON.parse(storedUser));
+    const stored = getAuth();
+    if (stored) {
+      setToken(stored.token);
+      setUser(stored.user);
     }
   }, []);
 

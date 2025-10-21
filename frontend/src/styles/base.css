@@ -1,1 +1,193 @@
-﻿:root{ --primary:#06b2b2; } body{ margin:0; font-family:system-ui; }
+﻿/* base.css - uses design tokens from theme.css (import theme.css first) */
+
+:root {
+  /* fallback nếu theme.css chưa được import (optional) */
+  --bg: #f6f8f9;
+  --surface: #ffffff;
+  --primary: #059ca0;
+  --text-900: #0b1b1c;
+  --muted: #6f8a8c;
+  --card-radius: 12px;
+  --shadow-low: 0 8px 20px rgba(2,12,22,0.06);
+  --border-1: 1px solid rgba(0,0,0,0.06);
+}
+
+/* Admin shell */
+.admin-root {
+  display: flex;
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+/* Sidebar phong cách Creative Tim (tùy chọn) */
+.admin-sidebar {
+  background: linear-gradient(180deg, #6a11cb, #2575fc);
+}
+.sidebar-link:hover,
+.sidebar-link.active {
+  background: rgba(255,255,255,0.15);
+  color: #fff;
+}
+
+.admin-sidebar.collapsed { width: 72px; }
+
+.sidebar-logo {
+  height: 40px;
+  display: block;
+  margin-bottom: 12px;
+}
+.sidebar-title {
+  font-weight: 800;
+  margin-bottom: 18px;
+  color: var(--surface);
+}
+
+/* Sidebar nav */
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sidebar-link {
+  color: #bfe7e7;
+  padding: 8px 10px;
+  border-radius: 8px;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition: background .12s ease, transform .12s ease;
+}
+.sidebar-link:hover { transform: translateX(4px); }
+.sidebar-link.active {
+  background: rgba(255,255,255,0.06);
+  color: #fff;
+}
+
+/* Main area */
+.admin-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: transparent;
+}
+
+/* Header */
+.admin-header {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  border-bottom: var(--border-1);
+  background: var(--surface);
+  box-shadow: 0 6px 12px rgba(2,12,22,0.02);
+}
+.collapse-btn {
+  background: transparent;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+}
+.header-right { display:flex; gap:12px; align-items:center; }
+
+/* Content */
+.admin-content {
+  padding: 20px;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Panels and cards */
+.panel {
+  background: var(--surface);
+  border-radius: var(--card-radius);
+  padding: 16px;
+  box-shadow: var(--shadow-low);
+}
+
+/* Table */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  background: transparent;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.table th, .table td {
+  padding: 10px;
+  border-bottom: 1px solid #eee;
+  text-align: left;
+  font-size: 14px;
+  vertical-align: middle;
+}
+.table thead th {
+  background: linear-gradient(90deg, rgba(5,156,160,0.04), transparent);
+  font-weight: 600;
+}
+
+/* Responsive */
+@media (max-width: 880px) {
+  .admin-root { flex-direction: column; }
+  .admin-sidebar { width: 100%; display: flex; overflow: auto; }
+  .admin-sidebar.collapsed { width: 100%; }
+  .admin-header { padding: 0 12px; }
+  .admin-content { padding: 12px; }
+}
+
+/* Small utilities */
+.toolbar {
+  margin-bottom: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.input {
+  width: 100%;
+  max-width: 320px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  font-size: 14px;
+}
+.btn-action {
+  background: #f0f0f0;
+  border: none;
+  padding: 6px 8px;
+  margin-right: 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.pagination { margin-top: 16px; display:flex; justify-content:center; gap:12px; align-items:center; }
+.page-btn { background: var(--primary); color: #fff; border: none; padding: 6px 12px; border-radius: 8px; cursor: pointer; }
+.page-btn:disabled { background: #ccc; cursor: not-allowed; }
+/* Dashboard grid 2x2 và card nâng cấp */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--gap);
+}
+.card {
+  background: var(--surface);
+  border-radius: var(--card-radius);
+  padding: 16px;
+  box-shadow: var(--shadow-low);
+  border: var(--border-1);
+}
+
+/* KPI card đẹp hơn */
+.kpi-row { display: flex; gap: var(--gap); align-items: stretch; margin-bottom: var(--gap); }
+.kpi-card { background: linear-gradient(180deg,#ffffff,#fbffff); border-radius: var(--card-radius); padding: 14px; box-shadow: var(--shadow-low); border: var(--border-1); flex: 1; }
+
+/* Tasks list */
+.task-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.task-item { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; }
+.task-item input { margin-top: 2px; }
+
+/* Responsive cho dashboard */
+@media (max-width: 980px) {
+  .dashboard-grid { grid-template-columns: 1fr; }
+}

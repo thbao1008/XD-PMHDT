@@ -4,39 +4,50 @@ import { MENU } from "../config/menu.jsx";
 import { ROUTE_MAP } from "../config/routeMap.jsx";
 
 import Login from "../pages/Login.jsx";
-import AdminLogin from "../pages/AdminLogin.jsx";
 import NotFound from "../pages/NotFound.jsx";
 
-// Component render route theo role
-function RoleRoutes({ role }) {
-  return (
-    <Routes>
-      {MENU.filter(m => m.role.includes(role)).map(item => {
-        const Comp = ROUTE_MAP[item.id] || (() => <div>{item.label}</div>);
-        // bỏ prefix /admin, /mentor, /learn để nested route hoạt động
-        const path = item.path.replace(/^\/(admin|mentor|learn)/, "");
-        return <Route key={item.id} path={path || ""} element={<Comp />} />;
-      })}
-      {/* fallback nếu không match */}
-      <Route path="*" element={<NotFound />} />
-    </Routes>
-  );
-}
+import AdminLayout from "../components/admin/AdminLayout.jsx";
+import ProtectedRoute from "../components/ProtectedRoute.jsx";
+
+import Dashboard from "../components/admin/Dashboard.jsx";
+import UsersList from "../components/admin/UsersList.jsx";
+import MentorsList from "../components/admin/MentorsList.jsx";
+import PackagesList from "../components/admin/PackagesList.jsx";
+import PurchasesList from "../components/admin/PurchasesList.jsx";
+import ReportsPage from "../components/admin/ReportsPage.jsx";
+import SupportTickets from "../components/admin/SupportTickets.jsx";
 
 export default function AppRoutes() {
   return (
     <Routes>
-      {/* Public routes */}
       <Route path="/" element={<Login />} />
       <Route path="/login" element={<Login />} />
-      <Route path="/admin/login" element={<AdminLogin />} />
 
-      {/* Role-based routes */}
-      <Route path="/admin/*" element={<RoleRoutes role="admin" />} />
-      <Route path="/mentor/*" element={<RoleRoutes role="mentor" />} />
-      <Route path="/learn/*" element={<RoleRoutes role="learner" />} />
+      {/* Debug: kiểm tra router mount */}
+      <Route path="/__test" element={<div style={{ padding: 20 }}>TEST RENDER OK</div>} />
 
-      {/* Fallback */}
+      <Route
+        path="/admin/*"
+        element={
+          <ProtectedRoute requiredRole="admin">
+            <AdminLayout />
+          </ProtectedRoute>
+        }
+      >
+        <Route index element={<Dashboard />} />
+        <Route path="dashboard" element={<Dashboard />} />
+        <Route path="users" element={<UsersList />} />
+        <Route path="mentors" element={<MentorsList />} />
+        <Route path="packages" element={<PackagesList />} />
+        <Route path="purchases" element={<PurchasesList />} />
+        <Route path="reports" element={<ReportsPage />} />
+        <Route path="support" element={<SupportTickets />} />
+        <Route path="*" element={<NotFound />} />
+      </Route>
+
+      {/* redirect legacy admin login to /login */}
+      <Route path="/admin/login" element={<Navigate to="/login" replace />} />
+
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

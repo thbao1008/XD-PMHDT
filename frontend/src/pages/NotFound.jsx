@@ -1,1 +1,5 @@
-﻿export default function NotFound(){ return <div>NotFound page</div>; }
+﻿// src/pages/NotFound.jsx
+import React from "react";
+export default function NotFound(){
+  return <div style={{padding:20}}>404 — Not Found</div>;
+}
