@@ -1,5 +1,4 @@
-﻿// src/pages/Login.jsx
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { login as apiLogin } from "../services/authService";
 import { saveAuth } from "../utils/auth";
@@ -9,8 +8,8 @@ import logo from "../assets/images/logo.png";
 import bg from "../assets/images/background.png";
 
 export default function Login({ onLogin }) {
-  const [mode, setMode] = useState("login"); // "login" | "forgot"
-  const [username, setUsername] = useState("");
+  const [mode, setMode] = useState("login");
+  const [identifier, setIdentifier] = useState(""); // email or phone
   const [password, setPassword] = useState("");
   const [resetEmail, setResetEmail] = useState("");
   const [remember, setRemember] = useState(false);
@@ -26,15 +25,27 @@ export default function Login({ onLogin }) {
     setError("");
     setInfo("");
 
-    const trimmedUsername = (username || "").trim();
-    if (!trimmedUsername) return setError("Vui lòng nhập tên đăng nhập.");
+    const trimmedIdentifier = (identifier || "").trim();
+    if (!trimmedIdentifier) return setError("Vui lòng nhập email hoặc số điện thoại.");
     if (!password) return setError("Vui lòng nhập mật khẩu.");
 
     setLoading(true);
     try {
-      const { token, user } = await apiLogin(trimmedUsername, password);
+      const result = await apiLogin(trimmedIdentifier, password);
+
+      if (!result || !result.user) {
+        throw new Error("Phản hồi đăng nhập không hợp lệ");
+      }
+
+      const { token, user } = result;
+
       saveAuth({ token, user }, remember);
       onLogin?.(user);
+
+      // chỉ dùng user.role khi chắc chắn user tồn tại
+      const roleClass = `theme-${user.role || "learner"}`;
+      document.body.classList.remove("theme-admin", "theme-mentor", "theme-learner");
+      document.body.classList.add(roleClass);
 
       if (user.role === "admin") navigate("/admin", { replace: true });
       else if (user.role === "mentor") navigate("/mentor", { replace: true });
@@ -44,11 +55,6 @@ export default function Login({ onLogin }) {
     } finally {
       setLoading(false);
     }
-    // sau khi xác định user.role
-const roleClass = `theme-${user.role}`; // "theme-admin" | "theme-mentor" | "theme-learner"
-document.body.classList.remove("theme-admin","theme-mentor","theme-learner");
-document.body.classList.add(roleClass);
-
   }
 
   async function handleForgot(e) {
@@ -89,16 +95,16 @@ document.body.classList.add(roleClass);
         {mode === "login" ? (
           <form className="form" onSubmit={handleSubmit} noValidate>
             <div className="field">
-              <label className="label" htmlFor="username">Tên đăng nhập</label>
+              <label className="label" htmlFor="identifier">Email hoặc Số điện thoại</label>
               <div className="input-group">
                 <input
-                  id="username"
+                  id="identifier"
                   type="text"
                   className={`input ${error ? "error" : ""}`}
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
                   autoComplete="username"
-                  placeholder="Tên đăng nhập"
+                  placeholder="Nhập email hoặc số điện thoại"
                 />
               </div>
             </div>
@@ -116,7 +122,6 @@ document.body.classList.add(roleClass);
                   placeholder="Mật khẩu"
                   aria-describedby="toggle-password"
                 />
-
                 <button
                   id="toggle-password"
                   type="button"
@@ -166,11 +171,7 @@ document.body.classList.add(roleClass);
             {info && <div className="note" role="status">{info}</div>}
 
             <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
-              <button
-                className={`button ${loading ? "loading" : ""}`}
-                type="submit"
-                disabled={loading}
-              >
+              <button className={`button ${loading ? "loading" : ""}`} type="submit" disabled={loading}>
                 {loading ? "Đang xử lý..." : "Đăng nhập"}
               </button>
             </div>

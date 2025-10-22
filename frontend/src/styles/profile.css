@@ -1,0 +1,141 @@
+.profile-fullscreen {
+  width: 100%;
+  height: 100%;
+  padding: 32px;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.profile-container {
+  display: flex;
+  align-items: flex-start;
+  gap: 40px;
+  margin-top: 20px;
+}
+
+/* Avatar + nút cập nhật */
+.profile-avatar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.profile-avatar img {
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid #eee;
+}
+
+.upload-btn {
+  display: inline-block;
+  padding: 8px 16px;
+  background: var(--primary, #4868d9);
+  color: #fff;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.2s ease;
+}
+
+.upload-btn:hover {
+  background: var(--primary-600, #3d58b6);
+}
+
+/* Thông tin chi tiết */
+.profile-details {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  font-size: 18px;
+}
+
+.info-row {
+  padding: 8px 0;
+  border-bottom: 1px solid #eee;
+}
+
+.info-row strong {
+  display: inline-block;
+  width: 140px;
+  font-weight: 600;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .profile-container {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .info-row strong {
+    width: auto;
+    margin-right: 8px;
+  }
+}
+.change-password {
+  margin-top: 24px;
+}
+
+.change-password h3 {
+  margin-bottom: 12px;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.change-password form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.change-password input {
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.change-password .btn-primary {
+  padding: 10px;
+  background: var(--primary, #4868d9);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.change-password .btn-primary:hover {
+  background: var(--primary-600, #3d58b6);
+}
+
+.change-password .message {
+  margin-top: 8px;
+  font-size: 14px;
+  color: #d9534f; /* đỏ cho lỗi */
+}
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--primary, #4868d9);
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+  margin-top: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: color 0.2s ease;
+}
+
+.btn-link:hover {
+  color: var(--primary-600, #3d58b6);
+  text-decoration: underline;
+}
