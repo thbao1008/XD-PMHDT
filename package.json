@@ -1,1 +1,1 @@
-﻿{ "name": "aesp", "private": true, "workspaces": ["frontend", "backend"] }
+{"name":"aesp","private":true,"workspaces":["frontend","backend"],"dependencies":{"react-icons":"^5.5.0"}}

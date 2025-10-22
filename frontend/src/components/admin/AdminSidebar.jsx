@@ -1,34 +1,68 @@
-﻿import React from "react";
+﻿// src/components/admin/AdminSidebar.jsx
+import React from "react";
 import { NavLink } from "react-router-dom";
 import { MENU } from "../../config/menu.jsx";
+import { getAuth } from "../../utils/auth";
 
-export default function AdminSidebar({ collapsed = false, onToggle }) {
-  const adminMenu = MENU.filter(m => m.role.includes("admin"));
+export default function AdminSidebar({ basePath = "/admin", roleOverride = null, collapsed = false }) {
+  const auth = getAuth();
+  const role = roleOverride || auth?.user?.role || "guest";
+
+  const menuArray = Array.isArray(MENU) ? MENU : [];
+
+  const filtered = React.useMemo(() => {
+    return menuArray.filter((m) => {
+      if (!m) return false;
+      if (!m.role) return true;
+      if (Array.isArray(m.role)) return m.role.includes(role);
+      return String(m.role) === String(role);
+    });
+  }, [menuArray, role]);
+
+  function buildTo(raw = "/") {
+    if (typeof raw !== "string") return basePath;
+    if (/^https?:\/\//.test(raw)) return raw;
+    const normalized = raw.startsWith("/") ? raw : `/${raw}`;
+    if (normalized === "/") return basePath;
+    return normalized.startsWith(basePath) ? normalized : `${basePath}${normalized}`;
+  }
 
   return (
-    <aside className={`admin-sidebar ${collapsed ? "collapsed" : ""}`}>
-      <div className="sidebar-top">
-        <div className="sidebar-brand">
-          <img src="/assets/images/logo.png" alt="logo" className="sidebar-logo" />
-          {!collapsed && <div className="sidebar-title">ASEP Admin</div>}
-        </div>
-        <button className="sidebar-collapse-btn" onClick={onToggle}>
-          {collapsed ? "☰" : "×"}
-        </button>
-      </div>
+    <aside className={`shell-sidebar${collapsed ? " collapsed" : ""}`} role="navigation" aria-label="Admin sidebar">
+      <nav className="sidebar-nav" aria-label="Main navigation">
+        {filtered.length === 0 && (
+          <div className="muted" style={{ padding: 12 }}>No menu items available</div>
+        )}
 
-      <nav className="sidebar-nav">
-        {adminMenu.map(item => {
-          const to = item.path.replace(/^\/admin/, "") || "/";
+        {filtered.map((item) => {
+          const to = buildTo(item.path);
+          const key = item.id ?? item.label ?? to;
+          const isExternal = typeof to === "string" && /^https?:\/\//.test(to);
+
+          if (isExternal) {
+            return (
+              <a
+                key={key}
+                href={to}
+                className="sidebar-link"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <span className="link-icon" aria-hidden>{item.icon ?? "🔗"}</span>
+                <span className="link-label">{item.label}</span>
+              </a>
+            );
+          }
+
           return (
             <NavLink
-              key={item.id}
+              key={key}
               to={to}
-              end={to === "/"}
-              className={({ isActive }) => "sidebar-link" + (isActive ? " active" : "")}
+              end={to === basePath}
+              className={({ isActive }) => `sidebar-link${isActive ? " active" : ""}`}
             >
-              <span className="link-icon">{item.icon || "📁"}</span>
-              {!collapsed && <span className="link-label">{item.label}</span>}
+              <span className="link-icon" aria-hidden>{item.icon ?? "📁"}</span>
+              <span className="link-label">{item.label}</span>
             </NavLink>
           );
         })}

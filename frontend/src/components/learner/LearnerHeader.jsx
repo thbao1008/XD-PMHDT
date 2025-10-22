@@ -1,14 +1,14 @@
-﻿// src/components/admin/AdminHeader.jsx
+// src/components/learner/LearnerHeader.jsx
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { clearAuth, getAuth } from "../../utils/auth";
 import logo from "../../assets/images/logo.png";
 import userAvatar from "../../assets/icons/users.png";
 
-export default function AdminHeader() {
+export default function LearnerHeader() {
   const navigate = useNavigate();
   const auth = getAuth();
-  const userName = auth?.user?.name || "Admin";
+  const userName = auth?.user?.name || "Learner";
 
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef(null);
@@ -19,12 +19,10 @@ export default function AdminHeader() {
     navigate("/login", { replace: true });
   }
 
-  // Toggle dropdown
   function toggleDropdown() {
     setOpen((s) => !s);
   }
 
-  // Close on outside click / Escape
   useEffect(() => {
     function onClick(e) {
       if (!dropdownRef.current || !buttonRef.current) return;
@@ -48,25 +46,18 @@ export default function AdminHeader() {
 
   return (
     <header className="shell-header" role="banner">
-      {/* Logo */}
       <div className="header-left">
         <img src={logo} alt="AESP logo" className="header-mark" />
-        <div className="brand">
-          <span className="brand-name"></span>
-          <span className="brand-sub"></span>
-        </div>
       </div>
 
-      {/* Welcome text */}
       <div className="header-center">
         <div className="welcome-text">
           Welcome, <strong>{userName}!</strong>
         </div>
       </div>
 
-      {/* Dropdown user menu */}
       <div className="header-right">
-        <div style={{ position: "relative" }}>
+        <div className="user-menu">
           <button
             ref={buttonRef}
             className="user-dropdown-toggle"
@@ -76,7 +67,7 @@ export default function AdminHeader() {
           >
             <img
               src={auth?.user?.avatar || userAvatar}
-              alt=""
+              alt="User avatar"
               className="user-avatar"
             />
             <span className="user-name">{userName}</span>
@@ -86,31 +77,20 @@ export default function AdminHeader() {
           {open && (
             <div
               ref={dropdownRef}
-              className="dropdown-menu dropdown-elevated"
+              className="dropdown-menu"
               role="menu"
             >
               <button
                 className="dropdown-item"
                 onClick={() => {
-                  navigate("/admin/profile");
+                  navigate("/learn/profile");
                   setOpen(false);
                 }}
               >
                 Thông tin cá nhân
-              
-              
-                
-                  
-                  
-               
-              
-                
               </button>
               <div className="divider-hr" />
-              <button
-                className="dropdown-item danger"
-                onClick={handleLogout}
-              >
+              <button className="dropdown-item danger" onClick={handleLogout}>
                 Đăng xuất
               </button>
             </div>

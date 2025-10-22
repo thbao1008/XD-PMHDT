@@ -1,54 +1,112 @@
-﻿import React from "react";
+﻿// src/app/routes.jsx
+import React from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
-import { MENU } from "../config/menu.jsx";
-import { ROUTE_MAP } from "../config/routeMap.jsx";
 
-import Login from "../pages/Login.jsx";
-import NotFound from "../pages/NotFound.jsx";
+import Login from "../pages/Login";
+import Dashboard from "../components/admin/Dashboard";
+import Profile from "../pages/Profile";
+import NotFound from "../pages/NotFound";
 
-import AdminLayout from "../components/admin/AdminLayout.jsx";
-import ProtectedRoute from "../components/ProtectedRoute.jsx";
+import AdminLayout from "../components/admin/AdminLayout";
+import ReportsPage from "../components/admin/ReportsPage";
 
-import Dashboard from "../components/admin/Dashboard.jsx";
-import UsersList from "../components/admin/UsersList.jsx";
-import MentorsList from "../components/admin/MentorsList.jsx";
-import PackagesList from "../components/admin/PackagesList.jsx";
-import PurchasesList from "../components/admin/PurchasesList.jsx";
-import ReportsPage from "../components/admin/ReportsPage.jsx";
-import SupportTickets from "../components/admin/SupportTickets.jsx";
+import LearnerLayout from "../components/learner/LearnerLayout";
+import SpeakingPractice from "../components/learner/SpeakingPractice";
+import ProgressAnalytics from "../components/learner/ProgressAnalytics";
+import Challenges from "../components/learner/Challenges";
+import PackageCatalog from "../components/learner/PackageCatalog";
+
+import MentorLayout from "../components/mentor/MentorLayout";
+import AssessmentPanel from "../components/mentor/AssessmentPanel";
+import FeedbackPanel from "../components/mentor/FeedbackPanel";
+import TopicManager from "../components/mentor/TopicManager";
+
+import { getAuth } from "../utils/auth";
+
+/* Bọc route cần đăng nhập cho admin */
+function RequireAdmin({ children }) {
+  const auth = getAuth();
+  if (!auth?.token || auth?.user?.role !== "admin") {
+    return <Navigate to="/login" replace />;
+  }
+  return children;
+}
+
+/* Bọc route cần đăng nhập cho learner */
+function RequireLearner({ children }) {
+  const auth = getAuth();
+  if (!auth?.token || auth?.user?.role !== "learner") {
+    return <Navigate to="/login" replace />;
+  }
+  return children;
+}
+
+/* Bọc route cần đăng nhập cho mentor */
+function RequireMentor({ children }) {
+  const auth = getAuth();
+  if (!auth?.token || auth?.user?.role !== "mentor") {
+    return <Navigate to="/login" replace />;
+  }
+  return children;
+}
 
 export default function AppRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<Login />} />
+      {/* Route không cần đăng nhập */}
       <Route path="/login" element={<Login />} />
 
-      {/* Debug: kiểm tra router mount */}
-      <Route path="/__test" element={<div style={{ padding: 20 }}>TEST RENDER OK</div>} />
-
+      {/* Admin */}
       <Route
-        path="/admin/*"
+        path="/admin"
         element={
-          <ProtectedRoute requiredRole="admin">
+          <RequireAdmin>
             <AdminLayout />
-          </ProtectedRoute>
+          </RequireAdmin>
         }
       >
         <Route index element={<Dashboard />} />
         <Route path="dashboard" element={<Dashboard />} />
-        <Route path="users" element={<UsersList />} />
-        <Route path="mentors" element={<MentorsList />} />
-        <Route path="packages" element={<PackagesList />} />
-        <Route path="purchases" element={<PurchasesList />} />
+        <Route path="profile" element={<Profile />} />
         <Route path="reports" element={<ReportsPage />} />
-        <Route path="support" element={<SupportTickets />} />
-        <Route path="*" element={<NotFound />} />
+        <Route path="404" element={<NotFound />} />
+        <Route path="*" element={<Navigate to="/admin/404" replace />} />
       </Route>
 
-      {/* redirect legacy admin login to /login */}
-      <Route path="/admin/login" element={<Navigate to="/login" replace />} />
+      {/* Learner */}
+      <Route
+        path="/learn"
+        element={
+          <RequireLearner>
+            <LearnerLayout />
+          </RequireLearner>
+        }
+      >
+        <Route index element={<PackageCatalog />} />
+        <Route path="catalog" element={<PackageCatalog />} />
+        <Route path="practice" element={<SpeakingPractice />} />
+        <Route path="challenges" element={<Challenges />} />
+        <Route path="progress" element={<ProgressAnalytics />} />
+      </Route>
 
-      <Route path="*" element={<NotFound />} />
+      {/* Mentor */}
+      <Route
+        path="/mentor"
+        element={
+          <RequireMentor>
+            <MentorLayout />
+          </RequireMentor>
+        }
+      >
+        <Route index element={<AssessmentPanel />} />
+        <Route path="assessment" element={<AssessmentPanel />} />
+        <Route path="feedback" element={<FeedbackPanel />} />
+        <Route path="topics" element={<TopicManager />} />
+      </Route>
+
+      {/* Fallback root */}
+      <Route path="/" element={<Navigate to="/admin" replace />} />
+      <Route path="*" element={<Navigate to="/admin/404" replace />} />
     </Routes>
   );
 }

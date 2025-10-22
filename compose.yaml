@@ -1,4 +1,4 @@
-services:
+  services:
   aesp:
     image: aesp
     build:

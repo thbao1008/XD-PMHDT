@@ -36,16 +36,6 @@ body{
   -webkit-font-smoothing:antialiased;
   -moz-osx-font-smoothing:grayscale;
 }
-
-/* Shell layout */
-.app-shell{display:flex;min-height:100vh}
-.sidebar{
-  width:240px;
-  background:#06343a;
-  color:#dff7f7;
-  padding:20px;
-  transition: width .18s ease;
-}
 .sidebar.collapsed{width:72px}
 .header{
   height:64px;
