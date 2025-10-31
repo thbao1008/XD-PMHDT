@@ -30,7 +30,7 @@ export async function register(req, res) {
       email,
       phone,
       dob,
-      role: role || "user",
+      role: role || "user", 
       password: hashed,
     });
 
@@ -107,6 +107,51 @@ export async function resetPassword(req, res) {
     res.json({ message: "Đặt lại mật khẩu thành công" });
   } catch (err) {
     console.error("ResetPassword error: - authController.js:109", err);
+    res.status(500).json({ message: "Lỗi server" });
+  }
+}
+
+// ✅ Lấy profile user (admin/learner/mentor đều dùng chung)
+export async function getProfile(req, res) {
+  try {
+    // giả sử middleware auth đã gắn req.user từ JWT
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({ message: "Chưa đăng nhập" });
+    }
+    res.json({ profile: user });
+  } catch (err) {
+    console.error("GetProfile error: - authController.js:124", err);
+    res.status(500).json({ message: "Lỗi server" });
+  }
+}
+
+// ✅ Đổi mật khẩu (dùng chung cho mọi role)
+export async function changePassword(req, res) {
+  try {
+    const { oldPassword, newPassword } = req.body;
+    const user = req.user; // lấy từ JWT middleware
+
+    if (!user) {
+      return res.status(401).json({ message: "Chưa đăng nhập" });
+    }
+
+    const dbUser = await findUserByIdentifier(user.email);
+    if (!dbUser) {
+      return res.status(404).json({ message: "User không tồn tại" });
+    }
+
+    const match = await bcrypt.compare(oldPassword, dbUser.password);
+    if (!match) {
+      return res.status(400).json({ message: "Mật khẩu cũ không đúng" });
+    }
+
+    const hashed = await bcrypt.hash(newPassword, 10);
+    await updateUserPassword(user.email, hashed);
+
+    res.json({ message: "Đổi mật khẩu thành công" });
+  } catch (err) {
+    console.error("ChangePassword error: - authController.js:154", err);
     res.status(500).json({ message: "Lỗi server" });
   }
 }

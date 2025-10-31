@@ -15,3 +15,4 @@ Lưu ý:
 
 # XD-PMHDT
 
+npm run seed:admin --prefix backend(cập nhập admin)
