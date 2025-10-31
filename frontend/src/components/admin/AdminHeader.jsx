@@ -1,5 +1,4 @@
-﻿// src/components/admin/AdminHeader.jsx
-import React, { useState, useRef, useEffect } from "react";
+﻿import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { clearAuth, getAuth } from "../../utils/auth";
 import logo from "../../assets/images/logo.png";
@@ -19,12 +18,10 @@ export default function AdminHeader() {
     navigate("/login", { replace: true });
   }
 
-  // Toggle dropdown
   function toggleDropdown() {
     setOpen((s) => !s);
   }
 
-  // Close on outside click / Escape
   useEffect(() => {
     function onClick(e) {
       if (!dropdownRef.current || !buttonRef.current) return;
@@ -50,10 +47,8 @@ export default function AdminHeader() {
     <header className="shell-header" role="banner">
       {/* Logo */}
       <div className="header-left">
-        <img src={logo} alt="AESP logo" className="header-mark" />
-        <div className="brand">
-          <span className="brand-name"></span>
-          <span className="brand-sub"></span>
+        <div className="brand-block">
+          <img src={logo} alt="AESP logo" className="header-logo" />
         </div>
       </div>
 
@@ -64,7 +59,7 @@ export default function AdminHeader() {
         </div>
       </div>
 
-      {/* Dropdown user menu */}
+      {/* User dropdown */}
       <div className="header-right">
         <div style={{ position: "relative" }}>
           <button
@@ -76,7 +71,7 @@ export default function AdminHeader() {
           >
             <img
               src={auth?.user?.avatar || userAvatar}
-              alt=""
+              alt="User avatar"
               className="user-avatar"
             />
             <span className="user-name">{userName}</span>
@@ -97,20 +92,9 @@ export default function AdminHeader() {
                 }}
               >
                 Thông tin cá nhân
-              
-              
-                
-                  
-                  
-               
-              
-                
               </button>
               <div className="divider-hr" />
-              <button
-                className="dropdown-item danger"
-                onClick={handleLogout}
-              >
+              <button className="dropdown-item danger" onClick={handleLogout}>
                 Đăng xuất
               </button>
             </div>

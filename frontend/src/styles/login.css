@@ -9,7 +9,7 @@
   --primary-hover: #049b9b;
 }
 
-/* Dark mode support */
+/* Dark mode */
 @media (prefers-color-scheme: dark) {
   :root {
     --card-bg: rgba(20, 20, 20, 0.96);
@@ -24,30 +24,27 @@
 html, body, #root { height: 100%; margin: 0; background: var(--bg-fill); }
 body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial; }
 
-/* Container */
+/* Layout */
 .login-wrap {
   position: relative;
   min-height: 100vh;
-  width: 100vw;
+  width: 100%;
   overflow: hidden;
   background-color: var(--bg-fill);
 }
 
 /* Background */
 .hero-bg {
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
   position: fixed;
   inset: 0;
   background-image: var(--hero-url);
-  background-repeat: no-repeat;
-  background-position: var(--hero-pos);
-  background-size: cover;
   z-index: 0;
   pointer-events: none;
   filter: saturate(1.06) contrast(1.08) brightness(1.03);
-  will-change: transform, filter;
 }
-
-/* Responsive background position */
 @media (max-width: 880px) {
   :root { --hero-pos: center; }
 }
@@ -55,11 +52,8 @@ body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial; }
 /* Logo */
 .brand {
   position: fixed;
-  top: 18px;
-  left: 18px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  top: 18px; left: 18px;
+  display: flex; align-items: center; gap: 10px;
   z-index: 6;
 }
 .brand-logo {
@@ -71,7 +65,7 @@ body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial; }
 }
 .brand-name {
   font-weight: 900;
-  color: #ffffff;
+  color: #fff;
   font-size: 18px;
   line-height: 1;
   text-shadow: 0 2px 6px rgba(0,0,0,0.28);
@@ -80,8 +74,7 @@ body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial; }
 /* Card */
 .login-card {
   position: fixed;
-  top: 22px;
-  right: 22px;
+  top: 22px; right: 22px;
   width: 460px;
   max-width: calc(100vw - 40px);
   background: var(--card-bg);
@@ -90,13 +83,11 @@ body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial; }
   box-shadow: 0 18px 40px rgba(2,12,22,0.18);
   padding: 24px;
   z-index: 6;
-  animation: fadeInUp 0.6s ease-out;
+  animation: fadeInUp .6s ease-out;
 }
-
-/* Animation */
 @keyframes fadeInUp {
   from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 /* Form */
@@ -106,176 +97,97 @@ body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial; }
 .form { display: grid; gap: 12px; }
 .field { display: grid; gap: 6px; }
 .label { font-size: 13px; font-weight: 700; color: #052626; }
-/* đảm bảo input chừa chỗ cho icon ở bên phải */
+
 .input {
-  padding: 0 44px 0 12px; /* giữ nội dung cách trái 12px, chừa 44px bên phải cho icon */
-  position: relative;
-  box-sizing: border-box;
-}
-
-/* .input-group làm container relative để đặt icon absolute bên trong */
-.input-group { position: relative; display: block; }
-
-/* nút con mắt nằm trong khung input, không phá layout */
-.toggle-password {
-  position: absolute;
-  right: 8px;
-  top: 50%;
-  transform: translateY(-50%);
-  height: 32px;
-  width: 36px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  color: #556b6b;
-  padding: 0;
-  border-radius: 8px;
-  z-index: 2; /* đảm bảo hiển thị trên input */
-}
-
-/* kích thước SVG trong nút */
-.toggle-password svg { width: 18px; height: 18px; display: block; }
-
-/* trạng thái hover/focus */
-.toggle-password:hover,
-.toggle-password:focus {
-  color: var(--primary);
-  background: rgba(5,156,160,0.06);
-  outline: none;
-}
-.input {
-  width: 100%;
-  height: 44px;
-  padding: 0 12px;
-  border-radius: 10px;
-  border: 1px solid rgba(7,62,62,0.12);
-  background: #fff;
-  font-size: 14px;
-  outline: none;
+  width: 100%; height: 44px; padding: 0 12px;
+  border-radius: 10px; border: 1px solid rgba(7,62,62,0.12);
+  background: #fff; font-size: 14px;
   transition: box-shadow .12s, border-color .12s;
 }
 .input:focus {
   border-color: var(--primary);
   box-shadow: 0 0 0 6px rgba(6,178,178,0.06);
 }
-.input:focus-visible {
-  outline: 2px solid var(--primary);
-}
 .input.error {
   border-color: #b00020;
-  box-shadow: 0 0 0 6px rgba(176, 0, 32, 0.08);
+  box-shadow: 0 0 0 6px rgba(176,0,32,0.08);
 }
 
-.toggle {
-  position: absolute;
-  right: 8px;
-  top: 50%;
-  transform: translateY(-50%);
-  border: none;
-  background: rgba(6,178,178,0.08);
-  padding: 6px 10px;
-  border-radius: 8px;
-  cursor: pointer;
+/* Password toggle */
+.input-group, .password-group { position: relative; }
+.toggle-password {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  height: 32px; width: 36px;
+  display: flex; align-items: center; justify-content: center;
+  border: none; background: transparent; cursor: pointer;
+  color: #556b6b; border-radius: 8px;
 }
+.toggle-password:hover { color: var(--primary); background: rgba(5,156,160,0.06); }
 
+/* Helper row */
 .helper-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
+  display: flex; justify-content: space-between; align-items: center;
+  margin-top: 6px;
 }
 .help-link {
-  color: #3d6666;
-  font-size: 13px;
-  text-decoration: none;
+  font-size: 13px; color: var(--primary);
+  text-decoration: none; cursor: pointer;
 }
+.help-link:hover { text-decoration: underline; }
 
+/* Button */
 .button {
-  min-width: 140px;
-  height: 44px;
-  border: none;
-  border-radius: 10px;
+  min-width: 140px; height: 44px;
+  border: none; border-radius: 10px;
   background: linear-gradient(135deg,var(--primary),var(--primary-hover));
-  color: #fff;
-  font-weight: 700;
-  cursor: pointer;
+  color: #fff; font-weight: 700; cursor: pointer;
   position: relative;
 }
-.button:hover {
-  filter: brightness(1.04);
-  transform: translateY(-1px);
-}
-.button.loading {
-  pointer-events: none;
-  opacity: 0.7;
-}
+.button:hover { filter: brightness(1.04); transform: translateY(-1px); }
+.button.loading { pointer-events: none; opacity: .7; }
 .button.loading::after {
-  content: "";
-  position: absolute;
-  right: 16px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 16px;
-  height: 16px;
-  border: 2px solid #fff;
-  border-top-color: transparent;
-  border-radius: 50%;
-  animation: spin 0.6s linear infinite;
+  content: ""; position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
+  width: 16px; height: 16px;
+  border: 2px solid #fff; border-top-color: transparent;
+  border-radius: 50%; animation: spin .6s linear infinite;
 }
-@keyframes spin {
-  to { transform: rotate(360deg); }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Notes & errors */
+.note { margin-top: 12px; font-size: 12px; color: #083737; text-align: center; }
+.error {
+  margin-top: 6px; font-size: 13px; color: #b00020;
+  background: #fff5f5; padding: 6px 10px; border-radius: 8px;
 }
 
-.note {
-  margin-top: 12px;
-  font-size: 12px;
-  color: #083737;
-  text-align: center;
+/* Support note */
+.support-note {
+  margin-top: 16px; font-size: 13px; color: #083737; text-align: center;
+  background: #f5fafa; padding: 8px 12px; border-radius: 8px;
+  border: 1px solid rgba(0,0,0,0.06);
 }
-.error {
-  margin-top: 6px;
-  font-size: 13px;
-  color: #b00020;
-  background: #fff5f5;
-  padding: 6px 10px;
-  border-radius: 8px;
-}
+.support-note strong, .support-note a { color: var(--primary); }
+.support-note a:hover { text-decoration: underline; }
 
 /* Responsive */
 @media (max-width: 880px) {
   .brand-logo { height: 56px; }
   .login-card {
-    position: static;
-    margin: 18px auto;
-    width: calc(100% - 36px);
-    max-width: 520px;
+    position: static; margin: 18px auto;
+    width: calc(100% - 36px); max-width: 520px;
     box-shadow: 0 14px 30px rgba(2,12,22,0.14);
   }
   .hero-bg { background-position: center; }
 }
+@media (max-width: 480px) {
+  .login-card {
+    margin: 20px auto; padding: 16px;
+    max-width: 90%; position: relative;
+  }
+  .helper-row { flex-direction: column; align-items: flex-start; gap: 6px; }
+  .button { width: 100%; }
+}
 @media (max-width: 360px) {
   .brand-logo { height: 44px; }
   .login-card { padding: 16px; }
-}
-.password-group {
-  position: relative;
-}
-
-.toggle-password {
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  padding: 4px;
-  color: #555;
-}
-
-.toggle-password:hover {
-  color: var(--primary);
 }

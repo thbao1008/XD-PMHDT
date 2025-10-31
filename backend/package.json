@@ -1,11 +1,20 @@
-﻿{
-  "name": "aesp-backend",
+{
+  "name": "backend",
   "version": "1.0.0",
-  "main": "src/server.js",
   "type": "module",
-  "scripts": { "start": "node src/server.js" },
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "nodemon src/server.js"
+  },
   "dependencies": {
-    "express": "^4.19.2",
-    "cors": "^2.8.5"
+    "bcryptjs": "^3.0.2",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.11.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.0"
   }
 }
