@@ -29,7 +29,7 @@ export default function ProfilePage() {
     }
   }
 
-  function handleChangePassword(e) {
+  async function handleChangePassword(e) {
     e.preventDefault();
     setMessage("");
 
@@ -41,16 +41,35 @@ export default function ProfilePage() {
       setMessage("Mật khẩu mới và xác nhận không khớp.");
       return;
     }
-    if (currentPassword !== "password") {
-      setMessage("Mật khẩu hiện tại không đúng (mock).");
-      return;
-    }
 
-    setMessage("Đổi mật khẩu thành công ✅ (mock).");
-    setShowChangePassword(false);
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
+    try {
+      const res = await fetch("http://localhost:4002/api/auth/change-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${auth.token}`,
+        },
+        body: JSON.stringify({
+          oldPassword: currentPassword,
+          newPassword: newPassword,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setMessage(data.message || "Đổi mật khẩu thất bại");
+        return;
+      }
+
+      setMessage("Đổi mật khẩu thành công ✅");
+      setShowChangePassword(false);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err) {
+      console.error(err);
+      setMessage("Lỗi kết nối server");
+    }
   }
 
   return (
@@ -73,6 +92,10 @@ export default function ProfilePage() {
           <div className="info-row"><strong>Email:</strong> {user.email}</div>
           <div className="info-row"><strong>Số điện thoại:</strong> {user.phone}</div>
           <div className="info-row"><strong>Vai trò:</strong> {user.role}</div>
+          <div className="info-row">
+            <strong>Ngày sinh:</strong>{" "}
+            {user.dob ? new Date(user.dob).toLocaleDateString("vi-VN") : "Chưa cập nhật"}
+          </div>
 
           {/* Nếu là learner thì hiển thị thêm gói học */}
           {user.role === "learner" && (
@@ -82,25 +105,54 @@ export default function ProfilePage() {
             </>
           )}
 
-          {/* Nút đổi mật khẩu */}
+          {/* Đổi mật khẩu */}
           {!showChangePassword && (
-            <button className="btn-link" onClick={() => setShowChangePassword(true)}> Đổi mật khẩu</button>
+            <button className="btn-link" onClick={() => setShowChangePassword(true)}>
+              Đổi mật khẩu
+            </button>
           )}
 
           {showChangePassword && (
-            <div className="change-password">
-              <h3>Đổi mật khẩu</h3>
-              <form onSubmit={handleChangePassword}>
-                <input type="password" placeholder="Mật khẩu hiện tại" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
-                <input type="password" placeholder="Mật khẩu mới" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
-                <input type="password" placeholder="Xác nhận mật khẩu mới" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
-                <div style={{ display: "flex", gap: "12px" }}>
-                  <button type="submit" className="btn-primary">Cập nhật</button>
-                  <button type="button" className="btn-secondary" onClick={() => setShowChangePassword(false)}>Hủy</button>
-                </div>
-              </form>
-              {message && <p className="message">{message}</p>}
-            </div>
+            user.role === "admin" ? (
+              <p style={{ color: "red", marginTop: "12px" }}>
+                Liên hệ DEV để thay đổi mật khẩu
+              </p>
+            ) : (
+              <div className="change-password">
+                <h3>Đổi mật khẩu</h3>
+                <form onSubmit={handleChangePassword}>
+                  <input
+                    type="password"
+                    placeholder="Mật khẩu hiện tại"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                  />
+                  <input
+                    type="password"
+                    placeholder="Mật khẩu mới"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                  />
+                  <input
+                    type="password"
+                    placeholder="Xác nhận mật khẩu mới"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                  />
+                  <div style={{ display: "flex", gap: "12px" }}>
+                    <button type="submit" className="btn-primary">Cập nhật</button>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => setShowChangePassword(false)}
+                    >
+                      Hủy
+                    </button>
+                  </div>
+                </form>
+                {message && <p className="message">{message}</p>}
+              </div>
+            )
           )}
         </div>
       </div>

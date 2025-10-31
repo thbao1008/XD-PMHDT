@@ -1,21 +1,27 @@
 ﻿import pkg from "pg";
 import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
+import { dirname } from "path";
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const envPath = path.resolve(__dirname, "../../.env");
+dotenv.config({ path: envPath });
+
 const { Pool } = pkg;
 
 const pool = new Pool({
   user: process.env.DB_USER,
   host: process.env.DB_HOST,
   database: process.env.DB_NAME,
-  password: process.env.DB_PASSWORD,   // phải là string
-  port: process.env.DB_PORT,
+  password: process.env.DB_PASSWORD,
+  port: parseInt(process.env.DB_PORT) || 5432,
 });
 
-
-// Test kết nối
 pool.connect()
-  .then(() => console.log("✅ Connected to PostgreSQL - db.js:18"))
-  .catch(err => console.error("❌ DB connection error: - db.js:19", err));
+  .then(() => console.log("✅ Connected to PostgreSQL - db.js:24"))
+  .catch(err => console.error("❌ DB connection error - db.js:25", err));
 
 export default pool;
