@@ -1,72 +1,66 @@
-﻿// src/components/admin/AdminSidebar.jsx
-import React from "react";
+﻿import React, { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
-import { MENU } from "../../config/menu.jsx";
-import { getAuth } from "../../utils/auth";
+import {
+  FiHome, FiUsers, FiUser, FiPackage,
+  FiShoppingBag, FiBarChart2, FiLifeBuoy
+} from "react-icons/fi";
 
-export default function AdminSidebar({ basePath = "/admin", roleOverride = null, collapsed = false }) {
-  const auth = getAuth();
-  const role = roleOverride || auth?.user?.role || "guest";
+export default function AdminSidebar({ collapsed = false }) {
+  const [stats, setStats] = useState({ traffic: 0, online: 0 });
 
-  const menuArray = Array.isArray(MENU) ? MENU : [];
-
-  const filtered = React.useMemo(() => {
-    return menuArray.filter((m) => {
-      if (!m) return false;
-      if (!m.role) return true;
-      if (Array.isArray(m.role)) return m.role.includes(role);
-      return String(m.role) === String(role);
-    });
-  }, [menuArray, role]);
-
-  function buildTo(raw = "/") {
-    if (typeof raw !== "string") return basePath;
-    if (/^https?:\/\//.test(raw)) return raw;
-    const normalized = raw.startsWith("/") ? raw : `/${raw}`;
-    if (normalized === "/") return basePath;
-    return normalized.startsWith(basePath) ? normalized : `${basePath}${normalized}`;
+  // mock random dữ liệu
+  function mockStats() {
+    const randomTraffic = Math.floor (5000); // 5k - 25k
+    const randomOnline = Math.floor(Math.random() * 500) + 50;      // 50 - 550
+    setStats({ traffic: randomTraffic, online: randomOnline });
   }
 
+  useEffect(() => {
+    mockStats(); // gọi lần đầu
+    const interval = setInterval(mockStats, 30000); // 30s refresh
+    return () => clearInterval(interval);
+  }, []);
+
+  const menu = [
+    { id: "dashboard", label: "Dashboard", icon: <FiHome />, to: "/admin" },
+    { id: "users", label: "Users", icon: <FiUsers />, to: "/admin/users" },
+    { id: "mentors", label: "Mentors", icon: <FiUser />, to: "/admin/mentors" },
+    { id: "packages", label: "Packages", icon: <FiPackage />, to: "/admin/packages" },
+    { id: "purchases", label: "Purchases", icon: <FiShoppingBag />, to: "/admin/purchases" },
+    { id: "reports", label: "Reports", icon: <FiBarChart2 />, to: "/admin/reports" },
+    { id: "support", label: "Support", icon: <FiLifeBuoy />, to: "/admin/support" }
+  ];
+
   return (
-    <aside className={`shell-sidebar${collapsed ? " collapsed" : ""}`} role="navigation" aria-label="Admin sidebar">
-      <nav className="sidebar-nav" aria-label="Main navigation">
-        {filtered.length === 0 && (
-          <div className="muted" style={{ padding: 12 }}>No menu items available</div>
-        )}
-
-        {filtered.map((item) => {
-          const to = buildTo(item.path);
-          const key = item.id ?? item.label ?? to;
-          const isExternal = typeof to === "string" && /^https?:\/\//.test(to);
-
-          if (isExternal) {
-            return (
-              <a
-                key={key}
-                href={to}
-                className="sidebar-link"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <span className="link-icon" aria-hidden>{item.icon ?? "🔗"}</span>
-                <span className="link-label">{item.label}</span>
-              </a>
-            );
-          }
-
-          return (
-            <NavLink
-              key={key}
-              to={to}
-              end={to === basePath}
-              className={({ isActive }) => `sidebar-link${isActive ? " active" : ""}`}
-            >
-              <span className="link-icon" aria-hidden>{item.icon ?? "📁"}</span>
-              <span className="link-label">{item.label}</span>
-            </NavLink>
-          );
-        })}
+    <aside className={`shell-sidebar${collapsed ? " collapsed" : ""}`}>
+      <nav className="sidebar-nav">
+        {menu.map((item) => (
+          <NavLink
+            key={item.id}
+            to={item.to}
+            className={({ isActive }) => `sidebar-link${isActive ? " active" : ""}`}
+          >
+            <span className="link-icon">{item.icon}</span>
+            {!collapsed && <span className="link-label">{item.label}</span>}
+          </NavLink>
+        ))}
       </nav>
+
+      {/* Block thống kê */}
+      <div className="sidebar-stats">
+        <div className="stat-item">
+          <span className="stat-label">Lưu lượng</span>
+          <span className="stat-value">{stats.traffic.toLocaleString()}</span>
+        </div>
+        <div className="stat-item">
+          <span className="stat-label">Đang online</span>
+          <span className="stat-value">{stats.online}</span>
+        </div>
+      </div>
+
+      <div className="sidebar-footer">
+        {!collapsed && <span>© 2025 AESP Admin</span>}
+      </div>
     </aside>
   );
 }

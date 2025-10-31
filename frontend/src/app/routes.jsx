@@ -1,13 +1,12 @@
-﻿// src/app/routes.jsx
-import React from "react";
+﻿import React from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 
 import Login from "../pages/Login";
-import Dashboard from "../components/admin/Dashboard";
 import Profile from "../pages/Profile";
 import NotFound from "../pages/NotFound";
 
 import AdminLayout from "../components/admin/AdminLayout";
+import Dashboard from "../components/admin/Dashboard";
 import ReportsPage from "../components/admin/ReportsPage";
 
 import LearnerLayout from "../components/learner/LearnerLayout";
@@ -21,48 +20,21 @@ import AssessmentPanel from "../components/mentor/AssessmentPanel";
 import FeedbackPanel from "../components/mentor/FeedbackPanel";
 import TopicManager from "../components/mentor/TopicManager";
 
-import { getAuth } from "../utils/auth";
-
-/* Bọc route cần đăng nhập cho admin */
-function RequireAdmin({ children }) {
-  const auth = getAuth();
-  if (!auth?.token || auth?.user?.role !== "admin") {
-    return <Navigate to="/login" replace />;
-  }
-  return children;
-}
-
-/* Bọc route cần đăng nhập cho learner */
-function RequireLearner({ children }) {
-  const auth = getAuth();
-  if (!auth?.token || auth?.user?.role !== "learner") {
-    return <Navigate to="/login" replace />;
-  }
-  return children;
-}
-
-/* Bọc route cần đăng nhập cho mentor */
-function RequireMentor({ children }) {
-  const auth = getAuth();
-  if (!auth?.token || auth?.user?.role !== "mentor") {
-    return <Navigate to="/login" replace />;
-  }
-  return children;
-}
+import ProtectedRoute from "../components/ProtectedRoute";
 
 export default function AppRoutes() {
   return (
     <Routes>
-      {/* Route không cần đăng nhập */}
+      {/* Public */}
       <Route path="/login" element={<Login />} />
 
       {/* Admin */}
       <Route
         path="/admin"
         element={
-          <RequireAdmin>
+          <ProtectedRoute requiredRole="admin">
             <AdminLayout />
-          </RequireAdmin>
+          </ProtectedRoute>
         }
       >
         <Route index element={<Dashboard />} />
@@ -77,9 +49,9 @@ export default function AppRoutes() {
       <Route
         path="/learn"
         element={
-          <RequireLearner>
+          <ProtectedRoute requiredRole="learner">
             <LearnerLayout />
-          </RequireLearner>
+          </ProtectedRoute>
         }
       >
         <Route index element={<PackageCatalog />} />
@@ -93,9 +65,9 @@ export default function AppRoutes() {
       <Route
         path="/mentor"
         element={
-          <RequireMentor>
+          <ProtectedRoute requiredRole="mentor">
             <MentorLayout />
-          </RequireMentor>
+          </ProtectedRoute>
         }
       >
         <Route index element={<AssessmentPanel />} />
@@ -104,9 +76,9 @@ export default function AppRoutes() {
         <Route path="topics" element={<TopicManager />} />
       </Route>
 
-      {/* Fallback root */}
-      <Route path="/" element={<Navigate to="/admin" replace />} />
-      <Route path="*" element={<Navigate to="/admin/404" replace />} />
+      {/* Fallback */}
+      <Route path="/" element={<Navigate to="/login" replace />} />
+      <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );
 }
