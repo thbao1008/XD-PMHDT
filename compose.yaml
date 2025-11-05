@@ -1,10 +1,40 @@
-  services:
+version: "3.8"
+
+services:
+  # 1. Your Node.js App
   aesp:
-    image: aesp
     build:
       context: .
       dockerfile: ./Dockerfile
-    environment:
-      NODE_ENV: production
     ports:
-      - 3000:3000
+      # Maps your PC's port 3000 to the container's port 4001
+      - "3000:4001"
+    environment:
+      # Pass the environment variables from your .env file
+      - DATABASE_URL=postgres://postgres:password@auth-db:5432/authdb
+      - REDIS_URL=redis://redis:6379
+      - PORT=4001
+      - JWT_SECRET=${JWT_SECRET} # This reads the secret from your local .env file
+    depends_on:
+      # Tells your app to wait for the database and redis to start
+      - auth-db
+      - redis
+
+  # 2. The PostgreSQL Database Service
+  auth-db:
+    image: postgres:16-alpine
+    environment:
+      # These MUST match your DATABASE_URL
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: authdb
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # 3. The Redis Service
+  redis:
+    image: redis:7-alpine
+
+# This volume saves your database data
+volumes:
+  postgres_data:
