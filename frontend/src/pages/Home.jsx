@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { FaChalkboardTeacher, FaBookOpen, FaAward, FaLaptopCode } from "react-icons/fa";
 import logo from "../assets/images/logo.png";
@@ -13,11 +13,16 @@ export default function Home() {
   const [packages, setPackages] = useState([]);
   const [teachers, setTeachers] = useState([]);
   const [partners, setPartners] = useState([]);
+  const introRef = useRef(null);
+  const [introVisible, setIntroVisible] = useState(false);
 
   useEffect(() => {
-    fetch("/api/admin/packages")
+    fetch("/api/packages/public")
       .then(res => res.json())
-      .then(data => setPackages(data.packages || []));
+      .then(data => {
+        const sorted = (data || []).sort((a, b) => a.price - b.price);
+        setPackages(sorted);
+      });
 
     fetch("/api/admin/users")
       .then(res => res.json())
@@ -29,6 +34,21 @@ export default function Home() {
     fetch("/api/partners")
       .then(res => res.json())
       .then(data => setPartners(data.partners || []));
+  }, []);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setIntroVisible(true);
+        }
+      },
+      { threshold: 0.2 }
+    );
+    if (introRef.current) observer.observe(introRef.current);
+    return () => {
+      if (introRef.current) observer.unobserve(introRef.current);
+    };
   }, []);
 
   return (
@@ -85,6 +105,31 @@ export default function Home() {
         </div>
       </section>
 
+      {/* INTRODUCTION */}
+      <section
+        ref={introRef}
+        className={`introduction ${introVisible ? "visible" : ""}`}
+        id="about"
+      >
+        <h2>Về AESP</h2>
+        <p>
+          AESP mang đến ứng dụng học tiếng Anh được hỗ trợ bởi AI, giúp học viên luyện nói
+          trong môi trường thoải mái, không bị đánh giá. AI đóng vai trò như một trợ lý hội thoại,
+          cung cấp từ vựng, ví dụ, phản hồi phát âm tức thì và lộ trình học tập thích ứng
+          cho nhiều tình huống: công việc, du lịch, hay cuộc sống hàng ngày.
+        </p>
+        <p>
+          Ngay từ bài kiểm tra nói ban đầu, hệ thống đánh giá trình độ và xây dựng lộ trình phù hợp:
+          học viên mới sẽ nhận gợi ý câu đầy đủ, trong khi học viên nâng cao chỉ nhận cụm từ chính.
+          AI theo dõi tiến trình, tinh chỉnh bài học và hỗ trợ cải thiện phát âm theo thời gian thực.
+        </p>
+        <p>
+          Ứng dụng phục vụ <strong>Học viên</strong> – truy cập bài tập cá nhân hóa, theo dõi tiến độ,
+          và <strong>Quản trị viên</strong> – quản lý tài khoản, kiểm duyệt nội dung, xử lý thanh toán
+          và theo dõi hiệu suất.
+        </p>
+      </section>
+
       {/* FEATURES */}
       <section className="features">
         <div className="feature">
@@ -125,6 +170,15 @@ export default function Home() {
       {/* PACKAGES */}
       <section id="packages" className="packages">
         <h2>Các gói học</h2>
+
+        {/* Mô tả chung */}
+        <p className="packages-desc">
+          Truy cập toàn bộ khóa học và tài liệu học tập. <br />
+          Sử dụng không giới hạn tất cả tính năng luyện nói với AI. <br />
+          Nhận phản hồi phát âm tức thì và lộ trình học tập cá nhân hóa. <br />
+          Có sự hỗ trợ từ giảng viên hướng dẫn tận tình, chuyên nghiệp.
+        </p>
+
         <div className="package-list">
           {packages.map((pkg) => (
             <div
@@ -132,12 +186,16 @@ export default function Home() {
               className={`card package-card ${pkg.featured ? "featured" : ""}`}
             >
               <h3>{pkg.name}</h3>
-              <p className="price">{pkg.price} VND / tháng</p>
-              <ul>
-                {pkg.features?.map((f, i) => (
-                  <li key={i}>{f}</li>
-                ))}
-              </ul>
+              <div className="price-block">
+                {pkg.original_price && (
+                  <div className="original">
+                    {pkg.original_price.toLocaleString()} đ
+                  </div>
+                )}
+                <div className="current">
+                  {pkg.price.toLocaleString()} đ / {pkg.duration_days} ngày
+                </div>
+              </div>
               <button
                 className="btn btn-primary"
                 onClick={() =>
@@ -146,7 +204,7 @@ export default function Home() {
                     .scrollIntoView({ behavior: "smooth" })
                 }
               >
-                Đăng ký ngay
+                Đăng ký ngay để nhận ưu đãi
               </button>
             </div>
           ))}
@@ -165,8 +223,8 @@ export default function Home() {
           </button>
         </form>
       </section>
-
-      {/* PARTNERS */}
+      
+              {/* PARTNERS */}
       <section className="partners">
         <h2>Đối tác tin cậy</h2>
         <div className="partner-list">

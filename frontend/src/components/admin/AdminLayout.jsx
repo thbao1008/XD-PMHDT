@@ -5,30 +5,19 @@ import AdminSidebar from "./AdminSidebar";
 
 export default function AdminLayout({ children }) {
   return (
-    <div className="admin-layout">
-      {/* Sidebar */}
-      <AdminSidebar />
+    <div className="shell-root theme-admin">
+      <AdminSidebar className="shell-sidebar" />
       <div className="shell-main">
-  <div className="shell-content">
-    <Outlet />
-  </div>
-</div>
-
-      {/* Main */}
-      <div className="admin-main">
-        <AdminHeader />
+        <AdminHeader className="shell-header" />
 
         {/* Breadcrumbs */}
-        <div className="admin-breadcrumbs">
-          {/* Breadcrumbs hiển thị đường dẫn */}
-        </div>
+        <div className="admin-breadcrumbs"></div>
 
-        {/* Content */}
-        <main className="admin-content">
+        <main className="shell-content">
           {children || <Outlet />}
         </main>
-    
       </div>
     </div>
   );
 }
+  

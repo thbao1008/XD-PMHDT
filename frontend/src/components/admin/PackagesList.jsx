@@ -10,7 +10,8 @@ export default function PackagesList() {
 
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
-  const [duration, setDuration] = useState("");
+  const [originalPrice, setOriginalPrice] = useState("");
+  const [durationDays, setDurationDays] = useState("");
 
   useEffect(() => {
     loadPackages();
@@ -19,21 +20,32 @@ export default function PackagesList() {
   const loadPackages = async () => {
     try {
       const res = await api.get("/admin/packages");
-      setPackages(res.data.packages || []);
+      setPackages(Array.isArray(res.data) ? res.data : res.data.packages || []);
     } catch (err) {
       console.error("❌ Lỗi load packages:", err);
     }
   };
 
   const resetForm = () => {
-    setName(""); setPrice(""); setDuration("");
+    setName(""); setPrice(""); setOriginalPrice(""); setDurationDays("");
     setEditing(null);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const payload = {
+      name: String(name).trim(),
+      price: Number(price),
+      originalPrice: Number(originalPrice),
+      durationDays: Number(durationDays)
+    };
+
+    if (!payload.name || !payload.price || !payload.durationDays) {
+      alert("Vui lòng nhập đủ thông tin gói học.");
+      return;
+    }
+
     try {
-      const payload = { name, price: Number(price), duration };
       if (editing) {
         await api.put(`/admin/packages/${editing.id}`, payload);
       } else {
@@ -69,32 +81,35 @@ export default function PackagesList() {
           <tr>
             <th>STT</th>
             <th>Tên gói</th>
-            <th>Giá</th>
-            <th>Thời hạn</th>
+            <th>Giá gốc</th>
+            <th>Giá bán</th>
+            <th>Thời hạn (ngày)</th>
             <th>Thao tác</th>
           </tr>
         </thead>
         <tbody>
           {packages.length === 0 ? (
-            <tr><td colSpan="5">Chưa có gói học nào.</td></tr>
+            <tr><td colSpan="6">Chưa có gói học nào.</td></tr>
           ) : (
             packages.map((pkg, i) => (
               <tr key={pkg.id}>
                 <td>{i + 1}</td>
                 <td>{pkg.name}</td>
+                <td>{pkg.original_price ? pkg.original_price.toLocaleString() + " đ" : "-"}</td>
                 <td>{pkg.price.toLocaleString()} đ</td>
-                <td>{pkg.duration}</td>
+                <td>{pkg.duration_days}</td>
                 <td>
-                  <button className="btn-action" onClick={() => { 
+                  <button className="btn-action" onClick={() => {
                     setEditing(pkg);
                     setName(pkg.name);
                     setPrice(pkg.price);
-                    setDuration(pkg.duration);
+                    setOriginalPrice(pkg.original_price);
+                    setDurationDays(pkg.duration_days);
                     setShowModal(true);
                   }}>
                     <FiEdit />
                   </button>
-                  <button className="btn-action" onClick={() => handleDelete(pkg.id)}>
+                  <button className="btn-action delete" onClick={() => handleDelete(pkg.id)}>
                     <FiTrash2 />
                   </button>
                 </td>
@@ -112,12 +127,16 @@ export default function PackagesList() {
               <input value={name} onChange={(e) => setName(e.target.value)} required />
             </div>
             <div className="form-group">
-              <label>Giá (VNĐ)</label>
+              <label>Giá gốc (VNĐ)</label>
+              <input type="number" value={originalPrice} onChange={(e) => setOriginalPrice(e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label>Giá bán (VNĐ)</label>
               <input type="number" value={price} onChange={(e) => setPrice(e.target.value)} required />
             </div>
             <div className="form-group">
-              <label>Thời hạn</label>
-              <input value={duration} onChange={(e) => setDuration(e.target.value)} required />
+              <label>Thời hạn (ngày)</label>
+              <input type="number" value={durationDays} onChange={(e) => setDurationDays(e.target.value)} required />
             </div>
             <div className="form-actions">
               <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Hủy</button>
