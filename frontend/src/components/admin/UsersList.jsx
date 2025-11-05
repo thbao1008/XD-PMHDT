@@ -1,88 +1,223 @@
-﻿import React, { useState, useEffect } from "react";
+﻿import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import api from "../../api";
 import Modal from "../common/Modal.jsx";
+import { useExistenceCheck } from "../../hooks/useExistenceCheck";
+import {
+  FiUser, FiMail, FiLock, FiPhone, FiCalendar, FiUsers, FiPackage,
+  FiTrash2, FiPlus, FiLoader, FiAlertTriangle, FiCheckCircle
+} from "react-icons/fi";
 
-const MOCK_USERS = Array.from({ length: 42 }, (_, i) => ({
-  id: i + 1,
-  name: `Người dùng ${i + 1}`,
-  email: `user${i + 1}@example.com`,
-  role: i % 3 === 0 ? "admin" : i % 2 === 0 ? "mentor" : "learner",
-}));
+import thumucIcon from "../../assets/icons/thumuc.png";
+import usersIcon from "../../assets/icons/users.png";
 
 export default function UsersList() {
   const [users, setUsers] = useState([]);
   const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
   const [page, setPage] = useState(1);
   const [perPage] = useState(10);
   const [selectedUser, setSelectedUser] = useState(null);
 
-  useEffect(() => {
-    const filtered = MOCK_USERS.filter(
-      (u) =>
-        u.name.toLowerCase().includes(search.toLowerCase()) ||
-        u.email.toLowerCase().includes(search.toLowerCase())
-    );
-    const start = (page - 1) * perPage;
-    const end = start + perPage;
-    setUsers(filtered.slice(start, end));
-  }, [search, page, perPage]);
+  const [showCreate, setShowCreate] = useState(false);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [phone, setPhone] = useState("");
+  const [dob, setDob] = useState("");
+  const [role, setRole] = useState("LEARNER");
+  const [packageId, setPackageId] = useState("");
 
-  const totalPages = Math.ceil(
-    MOCK_USERS.filter(
-      (u) =>
-        u.name.toLowerCase().includes(search.toLowerCase()) ||
-        u.email.toLowerCase().includes(search.toLowerCase())
-    ).length / perPage
-  );
+  const [emailError, setEmailError] = useState("");
+  const [phoneError, setPhoneError] = useState("");
+
+  const emailCheck = useExistenceCheck("email", email);
+  const phoneCheck = useExistenceCheck("phone", phone);
+
+  const navigate = useNavigate();
+
+  // Helpers
+  function capitalizeWords(str) {
+    return (str || "")
+      .toLowerCase()
+      .split(" ")
+      .filter(Boolean)
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ");
+  }
+  function validateEmail(v) {
+    const re = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+    return re.test(String(v).toLowerCase());
+  }
+  function sanitizePhone(input) {
+    return (input || "").replace(/\D/g, "");
+  }
+  function validateVNPhone(digits) {
+    return /^0\d{9}$/.test(digits);
+  }
+
+  function getAvatar(user) {
+    if (user.avatarUrl) return user.avatarUrl;
+    const role = (user.role || "").toUpperCase();
+    if (role === "LEARNER") return thumucIcon;
+    if (role === "MENTOR") return usersIcon;
+    return "/default-avatar.png";
+  }
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const res = await api.get("/admin/users");
+        setUsers(res.data.users || []);
+      } catch (err) {
+        console.error("❌ Lỗi khi load users:", err);
+      }
+    };
+    fetchUsers();
+  }, []);
+
+  const filtered = users.filter((u) => {
+    const roleUpper = (u.role || "").toUpperCase();
+    const matchesRole = roleFilter === "" || roleUpper === roleFilter;
+    const q = search.toLowerCase();
+    const matchesSearch =
+      ((u.name || "").toLowerCase().includes(q)) ||
+      ((u.email || "").toLowerCase().includes(q));
+    return matchesRole && matchesSearch;
+  });
+  const start = (page - 1) * perPage;
+  const paginated = filtered.slice(start, start + perPage);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
+
+  const deleteUser = async (id) => {
+    if (!window.confirm("Bạn có chắc muốn xóa user này?")) return;
+    try {
+      const res = await api.delete(`/admin/users/${id}`);
+      if (res.data?.success || res.status === 204) {
+        setUsers((prev) => prev.filter((u) => u.id !== id));
+      }
+    } catch (err) {
+      console.error("❌ Lỗi xóa user:", err);
+    }
+  };
+
+  const toggleStatus = async (id, currentStatus) => {
+    const next = currentStatus === "active" ? "banned" : "active";
+    try {
+      const res = await api.patch(`/admin/users/${id}/status`, { status: next });
+      if (res.data?.user) {
+        setUsers((prev) => prev.map((u) => (u.id === id ? res.data.user : u)));
+      } else {
+        setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, status: next } : u)));
+      }
+    } catch (err) {
+      console.error("❌ Lỗi cập nhật trạng thái:", err);
+    }
+  };
+
+  const resetForm = () => {
+    setName(""); setEmail(""); setPassword("");
+    setPhone(""); setDob(""); setRole("LEARNER"); setPackageId("");
+    setEmailError(""); setPhoneError("");
+  };
+
+  const handleCreate = async (e) => {
+    e.preventDefault();
+    const emailOk = validateEmail(email);
+    const phoneDigits = sanitizePhone(phone);
+    const phoneOk = phone === "" || validateVNPhone(phoneDigits);
+    if (!emailOk) { setEmailError("Email không đúng định dạng"); return; }
+    if (!phoneOk) { setPhoneError("SĐT phải 10 số, bắt đầu bằng 0"); return; }
+
+    try {
+      const payload = {
+        name: capitalizeWords(name),
+        email: email.toLowerCase(),
+        password,
+        phone: phone ? phoneDigits : "",
+        dob,
+        role: role.toUpperCase(),
+        packageId: role === "LEARNER" ? (packageId || null) : null,
+      };
+      const res = await api.post("/admin/users", payload);
+      const created = res.data.user || res.data;
+      setUsers((prev) => [...prev, created]);
+      setShowCreate(false);
+      resetForm();
+    } catch (err) {
+      console.error("❌ Lỗi tạo user:", err);
+    }
+  };
 
   return (
     <>
       <div className="panel">
         <h2>Danh sách Người dùng</h2>
 
+        {/* Toolbar */}
         <div className="toolbar">
           <input
             type="text"
-            className="input"
-            placeholder="Tìm theo tên hoặc email..."
+            className="input search-input"
+            placeholder="Tìm theo tên / email..."
             value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           />
+          <select
+            className="input filter-select"
+            value={roleFilter}
+            onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}
+          >
+            <option value="">Tất cả</option>
+            <option value="LEARNER">Learner</option>
+            <option value="MENTOR">Mentor</option>
+            <option value="ADMIN">Admin</option>
+          </select>
+          <button
+            type="button"   // ✅ fix: tránh submit form
+            className="btn btn-primary"
+            onClick={() => setShowCreate(true)}
+          >
+            <FiPlus /> Thêm User
+          </button>
         </div>
 
+        {/* Table */}
         <table className="table">
           <thead>
             <tr>
-              <th>ID</th>
+              <th>STT</th>
               <th>Tên</th>
+              <th>Số điện thoại</th>
               <th>Email</th>
               <th>Vai trò</th>
               <th>Thao tác</th>
             </tr>
           </thead>
           <tbody>
-            {users.length === 0 ? (
-              <tr>
-                <td colSpan="5">Không tìm thấy người dùng nào.</td>
-              </tr>
+            {paginated.length === 0 ? (
+              <tr><td colSpan="6">Không tìm thấy người dùng nào.</td></tr>
             ) : (
-              users.map((user) => (
-                <tr key={user.id}>
-                  <td>{user.id}</td>
-                  <td>{user.name}</td>
+              paginated.map((user, index) => (
+                <tr key={user.id} onClick={() => setSelectedUser(user)} style={{cursor:"pointer"}}>
+                  <td>{start + index + 1}</td>
+                  <td>{capitalizeWords(user.name)}</td>
+                  <td>{user.phone}</td>
                   <td>{user.email}</td>
-                  <td>{user.role}</td>
+                  <td>{capitalizeWords(user.role)}</td>
                   <td>
                     <button
                       className="btn-action"
-                      onClick={() => setSelectedUser(user)}
+                      onClick={(e) => { e.stopPropagation(); toggleStatus(user.id, user.status); }}
                     >
-                      👁️
+                      {user.status === "active" ? "Ban" : "Unban"}
                     </button>
-                    <button className="btn-action">✏️</button>
-                    <button className="btn-action">🗑️</button>
+                    <button
+                      className="btn-action"
+                      onClick={(e) => { e.stopPropagation(); deleteUser(user.id); }}
+                    >
+                      Xóa
+                    </button>
                   </td>
                 </tr>
               ))
@@ -90,19 +225,18 @@ export default function UsersList() {
           </tbody>
         </table>
 
+                {/* Pagination */}
         <div className="pagination">
           <button
-            className="page-btn"
+            className="page-btn btn btn-secondary btn-small"
             disabled={page === 1}
             onClick={() => setPage((p) => p - 1)}
           >
             ←
           </button>
-          <span>
-            Trang {page} / {totalPages}
-          </span>
+          <span>Trang {page} / {totalPages}</span>
           <button
-            className="page-btn"
+            className="page-btn btn btn-secondary btn-small"
             disabled={page === totalPages}
             onClick={() => setPage((p) => p + 1)}
           >
@@ -111,14 +245,203 @@ export default function UsersList() {
         </div>
       </div>
 
+      {/* Modal xem thông tin cơ bản */}
       {selectedUser && (
-        <Modal title="Thông tin người dùng" onClose={() => setSelectedUser(null)}>
-          <p><strong>ID:</strong> {selectedUser.id}</p>
-          <p><strong>Tên:</strong> {selectedUser.name}</p>
-          <p><strong>Email:</strong> {selectedUser.email}</p>
-          <p><strong>Vai trò:</strong> {selectedUser.role}</p>
+        <Modal title="Thông tin cơ bản" onClose={() => setSelectedUser(null)}>
+          <div style={{ display: "flex", gap: 16 }}>
+            <div style={{ flex: 1 }}>
+              <div><strong>Tên:</strong> {capitalizeWords(selectedUser.name)}</div>
+              <div><strong>Ngày sinh:</strong> {selectedUser.dob ? new Date(selectedUser.dob).toLocaleDateString("vi-VN") : "-"}</div>
+              <div><strong>SĐT:</strong> {selectedUser.phone}</div>
+              <div><strong>Email:</strong> {selectedUser.email}</div>
+              <div><strong>Vai trò:</strong> {capitalizeWords(selectedUser.role)}</div>
+              {selectedUser.packageId && <div><strong>Gói học:</strong> {selectedUser.packageId}</div>}
+              {selectedUser.role?.toUpperCase() === "LEARNER" && (
+                <div><strong>ID Code:</strong> L{selectedUser.id}</div>
+              )}
+              <button
+                className="btn btn-primary"
+                onClick={() => navigate(`/users/${selectedUser.id}`)}
+              >
+                Xem chi tiết
+              </button>
+            </div>
+            <div style={{ width: 120 }}>
+              <img
+                src={getAvatar(selectedUser)}
+                alt="Avatar"
+                style={{ width: 120, height: 120, borderRadius: "50%", objectFit: "cover", background: "#eee" }}
+              />
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Modal tạo user */}
+      {showCreate && (
+        <Modal title="Tạo User mới" onClose={() => setShowCreate(false)}>
+          <form className="create-user-form" onSubmit={handleCreate}>
+            <div className="form-grid">
+              {/* Họ và tên */}
+              <div className="form-group">
+                <label>Họ và tên</label>
+                <div className="input-with-icon">
+                  <FiUser className="icon" />
+                  <input
+                    type="text"
+                    placeholder="Ví dụ: Nguyễn Văn A"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Email */}
+              <div className="form-group">
+                <label>Email</label>
+                <div className="input-with-icon">
+                  <FiMail className="icon" />
+                  <input
+                    type="email"
+                    placeholder="email@domain.com"
+                    value={email}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setEmail(v);
+                      if (v === "") setEmailError("Email không được để trống");
+                      else if (!validateEmail(v)) setEmailError("Email không đúng định dạng");
+                      else setEmailError("");
+                    }}
+                    required
+                  />
+                </div>
+                {emailError && <span className="input-error row"><FiAlertTriangle /> {emailError}</span>}
+                {!emailError && emailCheck.loading && <span className="muted row"><FiLoader /> Đang kiểm tra...</span>}
+                {!emailError && emailCheck.valid === false && <span className="input-error row"><FiAlertTriangle /> {emailCheck.message}</span>}
+                {!emailError && emailCheck.valid === true && <span className="row" style={{ color: "#166534", fontSize: 12 }}><FiCheckCircle /> {emailCheck.message}</span>}
+              </div>
+
+              {/* Mật khẩu */}
+              <div className="form-group">
+                <label>Mật khẩu</label>
+                <div className="input-with-icon">
+                  <FiLock className="icon" />
+                  <input
+                    type="password"
+                    placeholder="Tối thiểu 6 ký tự"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Số điện thoại */}
+              <div className="form-group">
+                <label>Số điện thoại</label>
+                <div className="input-with-icon">
+                  <FiPhone className="icon" />
+                  <input
+                    type="tel"
+                    placeholder="Ví dụ: 0901234567"
+                    value={phone}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      const digits = sanitizePhone(raw);
+                      setPhone(raw);
+                      if (raw === "") setPhoneError("");
+                      else if (!validateVNPhone(digits)) setPhoneError("SĐT phải 10 số, bắt đầu bằng 0");
+                      else setPhoneError("");
+                    }}
+                    inputMode="numeric"
+                    pattern="0[0-9]{9}"
+                  />
+                </div>
+                {phoneError && <span className="input-error row"><FiAlertTriangle /> {phoneError}</span>}
+                {phone && !phoneError && phoneCheck.loading && <span className="muted row"><FiLoader /> Đang kiểm tra...</span>}
+                {phone && !phoneError && phoneCheck.valid === false && <span className="input-error row"><FiAlertTriangle /> {phoneCheck.message}</span>}
+                {phone && !phoneError && phoneCheck.valid === true && <span className="row" style={{ color: "#166534", fontSize: 12 }}><FiCheckCircle /> {phoneCheck.message}</span>}
+              </div>
+
+              {/* Ngày sinh */}
+              <div className="form-group">
+                <label>Ngày sinh</label>
+                <div className="input-with-icon">
+                  <FiCalendar className="icon" />
+                  <input
+                    type="date"
+                    value={dob}
+                    onChange={(e) => setDob(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Vai trò */}
+              <div className="form-group">
+                <label>Vai trò</label>
+                <div className="input-with-icon">
+                  <FiUsers className="icon" />
+                  <select
+                    value={role}
+                    onChange={(e) => setRole(e.target.value.toUpperCase())}
+                  >
+                    <option value="LEARNER">Learner</option>
+                    <option value="MENTOR">Mentor</option>
+                    <option value="ADMIN">Admin</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Gói học */}
+              {role === "LEARNER" && (
+                <div className="form-group">
+                  <label>Gói học</label>
+                  <div className="input-with-icon">
+                    <FiPackage className="icon" />
+                    <select
+                      value={packageId}
+                      onChange={(e) => setPackageId(e.target.value)}
+                    >
+                      <option value="">-- Chọn gói học --</option>
+                      <option value="basic">Gói học Basic</option>
+                      <option value="pro">Gói học Pro</option>
+                      <option value="vip">Gói học VIP</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Nút hành động */}
+            <div className="form-actions">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => { setShowCreate(false); resetForm(); }}
+              >
+                Hủy
+              </button>
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={
+                  email === "" ||
+                  !!emailError ||
+                  emailCheck.valid === false ||
+                  (!!phone && !!phoneError) ||
+                  (phone && phoneCheck.valid === false) ||
+                  dob === ""
+                }
+              >
+                Tạo
+              </button>
+            </div>
+          </form>
         </Modal>
       )}
     </>
   );
 }
+

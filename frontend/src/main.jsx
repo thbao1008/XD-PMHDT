@@ -10,7 +10,6 @@ import { getAuth } from "./utils/auth";
 
 const auth = getAuth();
 if (auth?.user?.role) {
-  // getAuth already applies theme, but ensure class is set before render
   try {
     document.body.classList.add(`theme-${auth.user.role}`);
   } catch (e) {}

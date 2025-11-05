@@ -1,5 +1,4 @@
-﻿// src/routes/adminUsersRoutes.js
-import express from "express";
+﻿import express from "express";
 import { authGuard } from "../middleware/authGuard.js";
 import { adminGuard } from "../middleware/adminGuard.js";
 import {
@@ -8,16 +7,36 @@ import {
   createUser,
   updateUser,
   deleteUser,
-  toggleUserStatus
+  toggleUserStatus,
 } from "../controllers/adminController.js";
+import { findUserByIdentifier } from "../models/userModel.js";
 
 const router = express.Router();
 
-// Áp dụng middleware cho tất cả route
+// Áp dụng middleware cho tất cả route trong nhóm này
 router.use(authGuard);
 router.use(adminGuard);
 
-// Định nghĩa các route quản lý người dùng
+// Check trùng email/phone (đặt trước :id để không bị nuốt route)
+router.get("/check", async (req, res) => {
+  try {
+    const { email, phone } = req.query;
+    if (!email && !phone) return res.json({ exists: false });
+
+    const identifier = email || phone;
+    const user = await findUserByIdentifier(identifier);
+
+    if (email && user?.email === email) return res.json({ exists: true });
+    if (phone && user?.phone === phone) return res.json({ exists: true });
+
+    return res.json({ exists: false });
+  } catch (err) {
+    console.error("check route error - adminUsersRoutes.js:34", err);
+    return res.status(500).json({ exists: false });
+  }
+});
+
+// Các route quản lý người dùng
 router.get("/", listUsers);
 router.get("/:id", getUser);
 router.post("/", createUser);
@@ -25,5 +44,4 @@ router.put("/:id", updateUser);
 router.delete("/:id", deleteUser);
 router.patch("/:id/status", toggleUserStatus);
 
-// Export duy nhất
 export default router;

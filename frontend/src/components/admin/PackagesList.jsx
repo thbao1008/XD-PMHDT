@@ -1,95 +1,131 @@
-﻿// src/components/admin/PackagesList.jsx
-import React, { useState, useEffect } from "react";
-import { listPackages, createPackage, updatePackage, deletePackage } from "../../services/packageService";
-import PackageEditor from "./PackageEditor.jsx";
+﻿import React, { useEffect, useState } from "react";
+import api from "../../api";
+import Modal from "../common/Modal.jsx";
+import { FiPlus, FiTrash2, FiEdit } from "react-icons/fi";
 
 export default function PackagesList() {
   const [packages, setPackages] = useState([]);
-  const [q, setQ] = useState("");
-  const [editorOpen, setEditorOpen] = useState(false);
+  const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
 
-  async function load() {
-    const all = await listPackages();
-    setPackages(all);
-  }
+  const [name, setName] = useState("");
+  const [price, setPrice] = useState("");
+  const [duration, setDuration] = useState("");
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    loadPackages();
+  }, []);
 
-  const filtered = packages.filter(p => p.name.toLowerCase().includes(q.toLowerCase()) || p.description.toLowerCase().includes(q.toLowerCase()));
+  const loadPackages = async () => {
+    try {
+      const res = await api.get("/admin/packages");
+      setPackages(res.data.packages || []);
+    } catch (err) {
+      console.error("❌ Lỗi load packages:", err);
+    }
+  };
 
-  async function handleCreate(payload) {
-    await createPackage(payload);
-    setEditorOpen(false);
-    load();
-  }
-
-  async function handleUpdate(payload) {
-    await updatePackage(editing.id, payload);
+  const resetForm = () => {
+    setName(""); setPrice(""); setDuration("");
     setEditing(null);
-    setEditorOpen(false);
-    load();
-  }
+  };
 
-  async function handleDelete(id) {
-    if (!confirm("Xác nhận xóa gói?")) return;
-    await deletePackage(id);
-    load();
-  }
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const payload = { name, price: Number(price), duration };
+      if (editing) {
+        await api.put(`/admin/packages/${editing.id}`, payload);
+      } else {
+        await api.post("/admin/packages", payload);
+      }
+      setShowModal(false);
+      resetForm();
+      loadPackages();
+    } catch (err) {
+      console.error("❌ Lỗi lưu package:", err);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Bạn có chắc muốn xóa gói học này?")) return;
+    try {
+      await api.delete(`/admin/packages/${id}`);
+      setPackages((prev) => prev.filter((p) => p.id !== id));
+    } catch (err) {
+      console.error("❌ Lỗi xóa package:", err);
+    }
+  };
 
   return (
-    <>
-      <div className="panel">
-        <h2>Danh sách Gói học</h2>
+    <div className="panel">
+      <h2>Danh sách Gói học</h2>
+      <button className="btn btn-primary" onClick={() => { setShowModal(true); resetForm(); }}>
+        <FiPlus /> Thêm gói học
+      </button>
 
-        <div className="toolbar">
-          <input className="input" placeholder="Tìm theo tên hoặc mô tả..." value={q} onChange={(e) => setQ(e.target.value)} />
-          <div>
-            <button className="btn btn-primary btn-small" onClick={() => { setEditing(null); setEditorOpen(true); }}>➕ Tạo gói mới</button>
-          </div>
-        </div>
+      <table className="table">
+        <thead>
+          <tr>
+            <th>STT</th>
+            <th>Tên gói</th>
+            <th>Giá</th>
+            <th>Thời hạn</th>
+            <th>Thao tác</th>
+          </tr>
+        </thead>
+        <tbody>
+          {packages.length === 0 ? (
+            <tr><td colSpan="5">Chưa có gói học nào.</td></tr>
+          ) : (
+            packages.map((pkg, i) => (
+              <tr key={pkg.id}>
+                <td>{i + 1}</td>
+                <td>{pkg.name}</td>
+                <td>{pkg.price.toLocaleString()} đ</td>
+                <td>{pkg.duration}</td>
+                <td>
+                  <button className="btn-action" onClick={() => { 
+                    setEditing(pkg);
+                    setName(pkg.name);
+                    setPrice(pkg.price);
+                    setDuration(pkg.duration);
+                    setShowModal(true);
+                  }}>
+                    <FiEdit />
+                  </button>
+                  <button className="btn-action" onClick={() => handleDelete(pkg.id)}>
+                    <FiTrash2 />
+                  </button>
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
 
-        <table className="table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Tên gói</th>
-              <th>Mô tả</th>
-              <th>Giá</th>
-              <th>Thời hạn</th>
-              <th>Trạng thái</th>
-              <th>Thao tác</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 ? (
-              <tr><td colSpan="7">Không tìm thấy gói học nào.</td></tr>
-            ) : (
-              filtered.map(pkg => (
-                <tr key={pkg.id}>
-                  <td>{pkg.id}</td>
-                  <td>{pkg.name}</td>
-                  <td>{pkg.description}</td>
-                  <td>{Number(pkg.price).toLocaleString()}₫</td>
-                  <td>{pkg.durationMonths} tháng</td>
-                  <td>{pkg.active ? "✅" : "❌"}</td>
-                  <td>
-                    <button className="btn btn-ghost btn-small" onClick={() => { setEditing(pkg); setEditorOpen(true); }}>✏️</button>
-                    <button className="btn btn-ghost btn-small" onClick={() => handleDelete(pkg.id)}>🗑️</button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      <PackageEditor
-        open={editorOpen}
-        onClose={() => { setEditorOpen(false); setEditing(null); }}
-        initial={editing}
-        onSaved={editing ? handleUpdate : handleCreate}
-      />
-    </>
+      {showModal && (
+        <Modal title={editing ? "Sửa gói học" : "Tạo gói học"} onClose={() => setShowModal(false)}>
+          <form onSubmit={handleSubmit} className="form-grid">
+            <div className="form-group">
+              <label>Tên gói</label>
+              <input value={name} onChange={(e) => setName(e.target.value)} required />
+            </div>
+            <div className="form-group">
+              <label>Giá (VNĐ)</label>
+              <input type="number" value={price} onChange={(e) => setPrice(e.target.value)} required />
+            </div>
+            <div className="form-group">
+              <label>Thời hạn</label>
+              <input value={duration} onChange={(e) => setDuration(e.target.value)} required />
+            </div>
+            <div className="form-actions">
+              <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Hủy</button>
+              <button type="submit" className="btn btn-primary">{editing ? "Cập nhật" : "Tạo"}</button>
+            </div>
+          </form>
+        </Modal>
+      )}
+    </div>
   );
 }
