@@ -35,7 +35,7 @@
     "@vitejs/plugin-react": "^4.0.0",
     "concurrently": "^8.2.2",
     "cross-port-killer": "^1.4.0",
-    "nodemon": "^3.0.0",
-    "vite": "^5.0.0"
+    "nodemon": "^3.1.10",
+    "vite": "^5.4.21"
   }
 }
