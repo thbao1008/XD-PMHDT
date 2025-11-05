@@ -15,4 +15,7 @@ Lưu ý:
 
 # XD-PMHDT
 
-npm run seed:admin --prefix backend(cập nhập admin)
+debug 
+npm run dev:all
+netstat -ano | findstr :4002
+taskkill /PID <PID> /F

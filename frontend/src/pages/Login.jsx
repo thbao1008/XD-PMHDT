@@ -118,10 +118,14 @@ export default function Login({ onLogin }) {
         style={{ backgroundImage: `url(${bg})` }}
       />
 
-      {/* Logo */}
-      <div className="brand">
-        <img src={logo} alt="AESP Logo" className="brand-logo" />
-      </div>
+          {/* Logo  */}
+      <div
+  className="brand cursor-pointer transition-transform duration-200 hover:scale-105 hover:opacity-90"
+  onClick={() => navigate("/")}
+>
+  <img src={logo} alt="AESP Logo" className="brand-logo" />
+</div>
+
 
       {/* Card */}
       <div className="login-card">
@@ -297,3 +301,4 @@ export default function Login({ onLogin }) {
     </div>
   </div>)
 }
+  

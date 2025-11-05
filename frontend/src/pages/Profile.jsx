@@ -1,31 +1,94 @@
-// src/pages/Profile.jsx
-import React, { useState } from "react";
-import { getAuth, saveAuth } from "../utils/auth";
+import React, { useState, useCallback } from "react";
+import { Navigate, useNavigate } from "react-router-dom";
+import { getAuth, saveAuth, clearAuth } from "../utils/auth";
 import userAvatar from "../assets/icons/users.png";
 import "../styles/profile.css";
+import Cropper from "react-easy-crop";
+import Modal from "react-modal";
 
 export default function ProfilePage() {
   const auth = getAuth();
   const user = auth?.user;
-  const [preview, setPreview] = useState(user?.avatar || null);
+  const navigate = useNavigate();
+  const [preview, setPreview] = useState(user?.avatar_url || null);
 
+  // cropper state
+  const [showCropper, setShowCropper] = useState(false);
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
+
+  // password state
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [message, setMessage] = useState("");
 
-  if (!user) return <div className="card">Bạn chưa đăng nhập.</div>;
+  // 👉 Nếu chưa login thì redirect
+  if (!user) return <Navigate to="/login" replace />;
 
   function handleFileChange(e) {
     const file = e.target.files[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPreview(reader.result);
-        saveAuth({ ...auth, user: { ...auth.user, avatar: reader.result } });
-      };
-      reader.readAsDataURL(file);
+      setSelectedImage(URL.createObjectURL(file));
+      setShowCropper(true);
+    }
+  }
+
+  const onCropComplete = useCallback((_, croppedAreaPixels) => {
+    setCroppedAreaPixels(croppedAreaPixels);
+  }, []);
+
+  async function getCroppedImg(imageSrc, crop) {
+    const image = new Image();
+    image.src = imageSrc;
+    await new Promise((resolve) => (image.onload = resolve));
+
+    const canvas = document.createElement("canvas");
+    canvas.width = crop.width;
+    canvas.height = crop.height;
+    const ctx = canvas.getContext("2d");
+
+    ctx.drawImage(
+      image,
+      crop.x,
+      crop.y,
+      crop.width,
+      crop.height,
+      0,
+      0,
+      crop.width,
+      crop.height
+    );
+
+    return new Promise((resolve) => {
+      canvas.toBlob((blob) => resolve(blob), "image/jpeg");
+    });
+  }
+
+  async function handleConfirm() {
+    try {
+      const blob = await getCroppedImg(selectedImage, croppedAreaPixels);
+      const formData = new FormData();
+      formData.append("avatar", blob, "avatar.jpg");
+
+      const res = await fetch(`/api/users/${user.id}/avatar`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${auth.token}` },
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message);
+
+      setPreview(data.user.avatar_url);
+      saveAuth({ ...auth, user: data.user });
+      setShowCropper(false);
+    } catch (err) {
+      console.error(err);
+      alert("Lỗi khi cập nhật ảnh");
     }
   }
 
@@ -43,11 +106,11 @@ export default function ProfilePage() {
     }
 
     try {
-      const res = await fetch("http://localhost:4002/api/auth/change-password", {
+      const res = await fetch("/api/auth/change-password", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${auth.token}`,
+          Authorization: `Bearer ${auth.token}`,
         },
         body: JSON.stringify({
           oldPassword: currentPassword,
@@ -72,6 +135,12 @@ export default function ProfilePage() {
     }
   }
 
+  // 👉 Hàm logout
+  function handleLogout() {
+    clearAuth();
+    navigate("/login");
+  }
+
   return (
     <div className="profile-fullscreen">
       <h2>Thông tin cá nhân</h2>
@@ -82,9 +151,28 @@ export default function ProfilePage() {
           <img src={preview || userAvatar} alt={user.name} />
           <label className="upload-btn">
             Cập nhật ảnh
-            <input type="file" accept="image/*" onChange={handleFileChange} style={{ display: "none" }} />
+            <input type="file" onChange={handleFileChange} />
           </label>
         </div>
+
+        {/* Modal cropper */}
+        <Modal isOpen={showCropper} onRequestClose={() => setShowCropper(false)}>
+          <div className="cropper-container">
+            <Cropper
+              image={selectedImage}
+              crop={crop}
+              zoom={zoom}
+              aspect={1}
+              onCropChange={setCrop}
+              onZoomChange={setZoom}
+              onCropComplete={onCropComplete}
+            />
+          </div>
+          <div className="modal-actions">
+            <button className="btn-primary" onClick={handleConfirm}>Xác nhận</button>
+            <button className="btn-secondary" onClick={() => setShowCropper(false)}>Hủy</button>
+          </div>
+        </Modal>
 
         {/* Thông tin chi tiết */}
         <div className="profile-details">
@@ -97,15 +185,6 @@ export default function ProfilePage() {
             {user.dob ? new Date(user.dob).toLocaleDateString("vi-VN") : "Chưa cập nhật"}
           </div>
 
-          {/* Nếu là learner thì hiển thị thêm gói học */}
-          {user.role === "learner" && (
-            <>
-              <div className="info-row"><strong>Gói học:</strong> {user.packageName || "Chưa đăng ký"}</div>
-              <div className="info-row"><strong>Kết thúc:</strong> {user.packageEnd || "N/A"}</div>
-            </>
-          )}
-
-          {/* Đổi mật khẩu */}
           {!showChangePassword && (
             <button className="btn-link" onClick={() => setShowChangePassword(true)}>
               Đổi mật khẩu
@@ -121,33 +200,16 @@ export default function ProfilePage() {
               <div className="change-password">
                 <h3>Đổi mật khẩu</h3>
                 <form onSubmit={handleChangePassword}>
-                  <input
-                    type="password"
-                    placeholder="Mật khẩu hiện tại"
-                    value={currentPassword}
-                    onChange={(e) => setCurrentPassword(e.target.value)}
-                  />
-                  <input
-                    type="password"
-                    placeholder="Mật khẩu mới"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                  />
-                  <input
-                    type="password"
-                    placeholder="Xác nhận mật khẩu mới"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                  />
-                  <div style={{ display: "flex", gap: "12px" }}>
+                  <input type="password" placeholder="Mật khẩu hiện tại"
+                    value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
+                  <input type="password" placeholder="Mật khẩu mới"
+                    value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+                  <input type="password" placeholder="Xác nhận mật khẩu mới"
+                    value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+                  <div className="form-actions">
                     <button type="submit" className="btn-primary">Cập nhật</button>
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      onClick={() => setShowChangePassword(false)}
-                    >
-                      Hủy
-                    </button>
+                    <button type="button" className="btn-secondary"
+                      onClick={() => setShowChangePassword(false)}>Hủy</button>
                   </div>
                 </form>
                 {message && <p className="message">{message}</p>}

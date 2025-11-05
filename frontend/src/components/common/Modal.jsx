@@ -1,16 +1,32 @@
-﻿// src/components/common/Modal.jsx
-import React from "react";
-import ReactDOM from "react-dom";
+﻿import React from "react";
+import { createPortal } from "react-dom";
+import "./modal.css";
 
-export default function Modal({ title, children, onClose, size = "md" }) {
-  return ReactDOM.createPortal(
-    <div className="modal-overlay" role="dialog" aria-modal="true" onClick={onClose}>
+export default function Modal({ title, children, onClose }) {
+  return createPortal(
+    <div
+      className="modal-overlay"
+      onClick={(e) => {
+        // chỉ đóng khi click đúng overlay
+        if (e.target.classList.contains("modal-overlay")) {
+          onClose();
+        }
+      }}
+    >
       <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-        {title && <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12}}>
-          <h3 style={{margin:0}}>{title}</h3>
-          <button onClick={onClose} className="btn btn-ghost btn-small" aria-label="Close">✕</button>
-        </div>}
-        <div>{children}</div>
+        {title && (
+          <div className="modal-header">
+            <h3>{title}</h3>
+            <button
+              className="btn-close"
+              onClick={onClose}
+              aria-label="Đóng"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+        <div className="modal-body">{children}</div>
       </div>
     </div>,
     document.body

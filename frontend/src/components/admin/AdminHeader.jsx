@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { clearAuth, getAuth } from "../../utils/auth";
 import logo from "../../assets/images/logo.png";
 import userAvatar from "../../assets/icons/users.png";
+import "../../styles/theme.css";
 
 export default function AdminHeader() {
   const navigate = useNavigate();
@@ -61,7 +62,7 @@ export default function AdminHeader() {
 
       {/* User dropdown */}
       <div className="header-right">
-        <div style={{ position: "relative" }}>
+        <div className="dropdown-wrapper">
           <button
             ref={buttonRef}
             className="user-dropdown-toggle"
@@ -74,8 +75,6 @@ export default function AdminHeader() {
               alt="User avatar"
               className="user-avatar"
             />
-            <span className="user-name">{userName}</span>
-            <span className="dropdown-icon">▾</span>
           </button>
 
           {open && (
