@@ -88,7 +88,7 @@ export default function AdminHeader() {
                 onClick={() => {
                   navigate("/admin/profile");
                   setOpen(false);
-                }}
+                }}  
               >
                 Thông tin cá nhân
               </button>

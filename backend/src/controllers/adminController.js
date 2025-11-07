@@ -1,4 +1,5 @@
 ﻿import bcrypt from "bcryptjs";
+import pool from "../config/db.js";
 import {
   getAllUsers,
   findUserById,
@@ -16,7 +17,7 @@ export async function listUsers(req, res) {
     const safe = users.map(({ password, ...rest }) => rest);
     return res.json({ success: true, users: safe });
   } catch (err) {
-    console.error("listUsers error - adminController.js:19", err);
+    console.error("listUsers error - adminController.js:20", err);
     return res.status(500).json({ success: false, message: "Server error" });
   }
 }
@@ -29,7 +30,7 @@ export async function getUser(req, res) {
     const { password, ...safe } = user;
     return res.json({ success: true, user: safe });
   } catch (err) {
-    console.error("getUser error - adminController.js:32", err);
+    console.error("getUser error - adminController.js:33", err);
     return res.status(500).json({ success: false, message: "Server error" });
   }
 }
@@ -38,11 +39,11 @@ export async function getUser(req, res) {
 export async function createUser(req, res) {
   try {
     const { name, email, phone, dob, role, password, packageId } = req.body;
-    
+
     if (!name || !email || !password || !role) {
       return res.status(400).json({ success: false, message: "Thiếu dữ liệu bắt buộc" });
     }
-    if (role === "admin") {
+    if (role.toLowerCase() === "admin") {
       return res.status(403).json({ success: false, message: "Không được tạo admin từ giao diện" });
     }
 
@@ -63,63 +64,67 @@ export async function createUser(req, res) {
 
     const hashed = await bcrypt.hash(password, 10);
 
+    let packagePrice = null;
+    let durationDays = null;
+    let packageStart = null;
+
+    if (role.toLowerCase() === "learner" && packageId) {
+      const pkgRes = await pool.query(
+        "SELECT price, duration_days FROM packages WHERE id=$1",
+        [packageId]
+      );
+      if (pkgRes.rows.length === 0) {
+        return res.status(400).json({ success: false, message: "Package not found" });
+      }
+      packagePrice = pkgRes.rows[0].price;
+      durationDays = pkgRes.rows[0].duration_days;
+      packageStart = new Date();
+    }
+
     const newUser = await createUserInDb({
       name,
       email,
       phone: phone || null,
       dob: dob || null,
-      role: (role || "learner").toLowerCase(), // ép lowercase
+      role: (role || "learner").toLowerCase(),
       password: hashed,
       status: "active",
-      package_id: role === "learner" ? (packageId || null) : null,
+      package_id: role.toLowerCase() === "learner" ? (packageId || null) : null,
+      package_price: packagePrice,
+      package_duration_days: durationDays,
+      package_start: packageStart,
     });
-
 
     const { password: _, ...safe } = newUser;
     return res.status(201).json({ success: true, user: safe });
   } catch (err) {
-  if (err.code === "23505") {
-    return res.status(409).json({ success: false, message: "Email hoặc SĐT đã tồn tại" });
+    if (err.code === "23505") {
+      return res.status(409).json({ success: false, message: "Email hoặc SĐT đã tồn tại" });
+    }
+    console.error("createUser error - adminController.js:104", err);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
-  console.error("createUser error: - adminController.js:84", err);
-  return res.status(500).json({ success: false, message: "Server error" });
-}
 }
 
-// Cập nhật user
+// Cập nhật user (chỉ đổi mật khẩu learner)
 export async function updateUser(req, res) {
   try {
     const { id } = req.params;
-    const updates = { ...req.body };
+    const { password } = req.body;
 
-    if (updates.role === "admin") {
-      return res.status(403).json({ success: false, message: "Không được cập nhật role thành admin" });
+    if (!password) {
+      return res.status(400).json({ success: false, message: "Chỉ được phép thay đổi mật khẩu" });
     }
 
-    if (updates.email) {
-      const existingEmail = await findUserByIdentifier(updates.email);
-      if (existingEmail && existingEmail.email === updates.email && existingEmail.id !== Number(id)) {
-        return res.status(409).json({ success: false, message: "Email đã tồn tại" });
-      }
-    }
-    if (updates.phone) {
-      const existingPhone = await findUserByIdentifier(updates.phone);
-      if (existingPhone && existingPhone.phone === updates.phone && existingPhone.id !== Number(id)) {
-        return res.status(409).json({ success: false, message: "Số điện thoại đã tồn tại" });
-      }
-    }
+    const hashed = await bcrypt.hash(password, 10);
 
-    if (updates.password) {
-      updates.password = await bcrypt.hash(updates.password, 10);
-    }
-
-    const updated = await updateUserInDb(id, updates);
+    const updated = await updateUserInDb(id, { password: hashed });
     if (!updated) return res.status(404).json({ success: false, message: "Not found" });
 
-    const { password, ...safe } = updated;
+    const { password: _, ...safe } = updated;
     return res.json({ success: true, user: safe });
   } catch (err) {
-    console.error("updateUser error - adminController.js:122", err);
+    console.error("updateUser error - adminController.js:127", err);
     return res.status(500).json({ success: false, message: "Server error" });
   }
 }
@@ -131,7 +136,7 @@ export async function deleteUser(req, res) {
     if (!deleted) return res.status(404).json({ success: false, message: "Not found" });
     return res.json({ success: true });
   } catch (err) {
-    console.error("deleteUser error - adminController.js:134", err);
+    console.error("deleteUser error - adminController.js:139", err);
     return res.status(500).json({ success: false, message: "Server error" });
   }
 }
@@ -146,7 +151,7 @@ export async function toggleUserStatus(req, res) {
     const { password, ...safe } = updated;
     return res.json({ success: true, user: safe });
   } catch (err) {
-    console.error("toggleUserStatus error - adminController.js:149", err);
+    console.error("toggleUserStatus error - adminController.js:154", err);
     return res.status(500).json({ success: false, message: "Server error" });
   }
 }

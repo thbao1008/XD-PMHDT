@@ -4,9 +4,9 @@ import ProtectedRoute from "../components/ProtectedRoute";
 import GuestRoute from "../components/GuestRoute";
 
 // Pages
-import Home from "../pages/Home";       
+import Home from "../pages/Home";            
 import Login from "../pages/Login";
-import Profile from "../pages/Profile";
+import ProfilePage from "../pages/Profile"; 
 import NotFound from "../pages/NotFound";
 
 // Admin
@@ -35,13 +35,23 @@ export default function AppRoutes() {
   return (
     <Routes>
       {/* Public */}
-      <Route path="/" element={<Home />} />   
+      <Route path="/" element={<Home />} />
       <Route
         path="/login"
         element={
           <GuestRoute>
             <Login />
           </GuestRoute>
+        }
+      />
+
+      {/* Profile chung cho tất cả role */}
+      <Route
+        path="/profile/:id"
+        element={
+          <ProtectedRoute>
+            <ProfilePage />
+          </ProtectedRoute>
         }
       />
 
@@ -61,7 +71,6 @@ export default function AppRoutes() {
         <Route path="purchases" element={<PurchasesList />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="support" element={<SupportTickets />} />
-        <Route path="profile" element={<Profile />} />
         {/* fallback riêng cho admin */}
         <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
       </Route>
