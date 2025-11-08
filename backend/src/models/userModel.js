@@ -48,15 +48,22 @@ export async function findUserByIdentifier(identifier) {
 }
 
 // Tạo user mới
-export async function createUserInDb({ name, email, phone, dob, role, password, status, package_id }) {
-  const q = `
-    INSERT INTO users (name, email, phone, dob, role, password, status, package_id)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-    RETURNING *`;
-  const values = [name, email, phone, dob, role, password, status || "active", package_id || null];
-  const { rows } = await pool.query(q, values);
-  console.log("Insert values: - userModel.js:58", values);
-  return rows[0];
+export async function createUserInDb(user) {
+  const result = await pool.query(
+    `INSERT INTO users (name, email, phone, dob, role, password, status)
+     VALUES ($1,$2,$3,$4,$5,$6,$7)
+     RETURNING *`,
+    [
+      user.name,
+      user.email,
+      user.phone,
+      user.dob,
+      user.role,
+      user.password,
+      user.status
+    ]
+  );
+  return result.rows[0];
 }
 
 // Update user (general)

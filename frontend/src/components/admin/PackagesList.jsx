@@ -27,7 +27,10 @@ export default function PackagesList() {
   };
 
   const resetForm = () => {
-    setName(""); setPrice(""); setOriginalPrice(""); setDurationDays("");
+    setName("");
+    setPrice("");
+    setOriginalPrice("");
+    setDurationDays("");
     setEditing(null);
   };
 
@@ -36,11 +39,11 @@ export default function PackagesList() {
     const payload = {
       name: String(name).trim(),
       price: Number(price),
-      originalPrice: Number(originalPrice),
-      durationDays: Number(durationDays)
+      original_price: Number(originalPrice),
+      duration_days: Number(durationDays)
     };
 
-    if (!payload.name || !payload.price || !payload.durationDays) {
+    if (!payload.name || !payload.price || !payload.duration_days) {
       alert("Vui lòng nhập đủ thông tin gói học.");
       return;
     }
@@ -72,7 +75,13 @@ export default function PackagesList() {
   return (
     <div className="panel">
       <h2>Danh sách Gói học</h2>
-      <button className="btn btn-primary" onClick={() => { setShowModal(true); resetForm(); }}>
+      <button
+        className="btn btn-primary"
+        onClick={() => {
+          setShowModal(true);
+          resetForm();
+        }}
+      >
         <FiPlus /> Thêm gói học
       </button>
 
@@ -89,27 +98,39 @@ export default function PackagesList() {
         </thead>
         <tbody>
           {packages.length === 0 ? (
-            <tr><td colSpan="6">Chưa có gói học nào.</td></tr>
+            <tr>
+              <td colSpan="6">Chưa có gói học nào.</td>
+            </tr>
           ) : (
             packages.map((pkg, i) => (
               <tr key={pkg.id}>
                 <td>{i + 1}</td>
                 <td>{pkg.name}</td>
-                <td>{pkg.original_price ? pkg.original_price.toLocaleString() + " đ" : "-"}</td>
+                <td>
+                  {pkg.original_price
+                    ? pkg.original_price.toLocaleString() + " đ"
+                    : "-"}
+                </td>
                 <td>{pkg.price.toLocaleString()} đ</td>
                 <td>{pkg.duration_days}</td>
                 <td>
-                  <button className="btn-action" onClick={() => {
-                    setEditing(pkg);
-                    setName(pkg.name);
-                    setPrice(pkg.price);
-                    setOriginalPrice(pkg.original_price);
-                    setDurationDays(pkg.duration_days);
-                    setShowModal(true);
-                  }}>
+                  <button
+                    className="btn-action"
+                    onClick={() => {
+                      setEditing(pkg);
+                      setName(pkg.name);
+                      setPrice(pkg.price);
+                      setOriginalPrice(pkg.original_price);
+                      setDurationDays(pkg.duration_days);
+                      setShowModal(true);
+                    }}
+                  >
                     <FiEdit />
                   </button>
-                  <button className="btn-action delete" onClick={() => handleDelete(pkg.id)}>
+                  <button
+                    className="btn-action delete"
+                    onClick={() => handleDelete(pkg.id)}
+                  >
                     <FiTrash2 />
                   </button>
                 </td>
@@ -120,27 +141,56 @@ export default function PackagesList() {
       </table>
 
       {showModal && (
-        <Modal title={editing ? "Sửa gói học" : "Tạo gói học"} onClose={() => setShowModal(false)}>
+        <Modal
+          title={editing ? "Sửa gói học" : "Tạo gói học"}
+          onClose={() => setShowModal(false)}
+        >
           <form onSubmit={handleSubmit} className="form-grid">
             <div className="form-group">
               <label>Tên gói</label>
-              <input value={name} onChange={(e) => setName(e.target.value)} required />
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
             </div>
             <div className="form-group">
               <label>Giá gốc (VNĐ)</label>
-              <input type="number" value={originalPrice} onChange={(e) => setOriginalPrice(e.target.value)} />
+              <input
+                type="number"
+                value={originalPrice}
+                onChange={(e) => setOriginalPrice(e.target.value)}
+              />
             </div>
             <div className="form-group">
               <label>Giá bán (VNĐ)</label>
-              <input type="number" value={price} onChange={(e) => setPrice(e.target.value)} required />
+              <input
+                type="number"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                required
+              />
             </div>
             <div className="form-group">
               <label>Thời hạn (ngày)</label>
-              <input type="number" value={durationDays} onChange={(e) => setDurationDays(e.target.value)} required />
+              <input
+                type="number"
+                value={durationDays}
+                onChange={(e) => setDurationDays(e.target.value)}
+                required
+              />
             </div>
             <div className="form-actions">
-              <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Hủy</button>
-              <button type="submit" className="btn btn-primary">{editing ? "Cập nhật" : "Tạo"}</button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setShowModal(false)}
+              >
+                Hủy
+              </button>
+              <button type="submit" className="btn btn-primary">
+                {editing ? "Cập nhật" : "Tạo"}
+              </button>
             </div>
           </form>
         </Modal>

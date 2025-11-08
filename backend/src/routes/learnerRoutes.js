@@ -1,15 +1,14 @@
 import express from "express";
-import { learnerController } from "../controllers/learnerController.js";
+import { getAll, getById, getPurchases, create, update, remove,getLatestPurchase  } 
+  from "../controllers/learnerController.js";
 
 const router = express.Router();
 
-router.get("/", learnerController.getAll);
-router.get("/:id", learnerController.getById);
-router.post("/", learnerController.create);
-router.put("/:id", learnerController.update);
-router.delete("/:id", learnerController.delete);
-
-// ✅ Thêm route lấy toàn bộ lịch sử mua
-router.get("/:id/purchases", learnerController.getPurchases);
-
+router.get("/", getAll);
+router.get("/:id", getById);
+router.get("/:id/purchases", getPurchases);
+router.post("/", create);
+router.put("/:id", update);
+router.delete("/:id", remove);
+router.get("/:id/latest-purchase", getLatestPurchase);
 export default router;

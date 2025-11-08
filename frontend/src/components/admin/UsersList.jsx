@@ -37,7 +37,7 @@ export default function UsersList() {
   const phoneCheck = useExistenceCheck("phone", phone);
 
   const navigate = useNavigate();
-
+  const [latestPurchase, setLatestPurchase] = useState(null);
   // Helpers
   function capitalizeWords(str) {
     return (str || "")
@@ -102,6 +102,17 @@ export default function UsersList() {
   fetchPackages();
 }, []);
 
+useEffect(() => {
+  if (selectedUser && selectedUser.role?.toUpperCase() === "LEARNER") {
+    const learnerId = selectedUser.learner_id;
+    if (!learnerId) return;
+    api.get(`/admin/learners/${learnerId}/latest-purchase`)
+      .then(res => setLatestPurchase(res.data.purchase || null))
+      .catch(err => console.error("❌ Lỗi load latest purchase:", err));
+  }
+}, [selectedUser]);
+
+
   const filtered = users.filter((u) => {
     const roleUpper = (u.role || "").toUpperCase();
     const matchesRole = roleUpper === roleFilter;
@@ -160,7 +171,7 @@ export default function UsersList() {
 
     try {
       const payload = {
-        name: capitalizeWords(name),
+        name: capitalizeWords(name),  
         email: email.toLowerCase(),
         password,
         phone: phone ? phoneDigits : "",
@@ -290,59 +301,55 @@ export default function UsersList() {
         </div>
       </div>
 
-{selectedUser && (
-  <Modal title="Thông tin người dùng" onClose={() => setSelectedUser(null)}>
-    <div style={{ display: "flex", gap: 16 }}>
-      <div style={{ flex: 1 }}>
-        <p><strong>Tên:</strong> {capitalizeWords(selectedUser.name)}</p>
-        <p><strong>Email:</strong> {selectedUser.email}</p>
-        <p><strong>SĐT:</strong> {selectedUser.phone || "-"}</p>
-        <p><strong>Ngày sinh:</strong> {selectedUser.dob ? new Date(selectedUser.dob).toLocaleDateString("vi-VN") : "-"}</p>
-        <p><strong>Vai trò:</strong> {capitalizeWords(selectedUser.role)}</p>
+        {selectedUser && (
+          <Modal title="Thông tin người dùng" onClose={() => setSelectedUser(null)}>
+            <div style={{ display: "flex", gap: 16 }}>
+              <div style={{ flex: 1 }}>
+                <p><strong>Tên:</strong> {capitalizeWords(selectedUser.name)}</p>
+                <p><strong>Email:</strong> {selectedUser.email}</p>
+                <p><strong>SĐT:</strong> {selectedUser.phone || "-"}</p>
+                <p><strong>Ngày sinh:</strong> {selectedUser.dob ? new Date(selectedUser.dob).toLocaleDateString("vi-VN") : "-"}</p>
+                <p><strong>Vai trò:</strong> {capitalizeWords(selectedUser.role)}</p>
 
-        {selectedUser.role?.toUpperCase() === "LEARNER" && selectedUser.latest_purchase_id && (
-          <div style={{ marginTop: "1rem" }}>
-            <h4>Lịch sử mua (mới nhất)</h4>
-            <p>
-              <strong>Gói học:</strong> {selectedUser.latest_package_name}{" "}
-              <span style={{ color: selectedUser.remaining_days <= 0 ? "red" : "green" }}>
-                {selectedUser.remaining_days <= 0 ? "Hết hạn" : "Còn hạn"}
-              </span>
-            </p>
+               
+                {selectedUser.role?.toUpperCase() === "LEARNER" && (
+  <div style={{ marginTop: "1rem" }}>
+    <h4>Gói học đã đăng ký</h4>
 
-            {selectedUser.remaining_days <= 0 ? (
-              <button
-                className="btn btn-primary"
-                onClick={() =>
-                  api.patch(`/admin/purchases/${selectedUser.latest_purchase_id}/renew`, { extraDays: 30 })
-                }
-              >
-                Gia hạn
-              </button>
-            ) : (
-              <p>⏳ Gói còn hạn</p>
-            )}
+    {latestPurchase ? (
+      <>
+        <p>
+          <strong>Tên gói:</strong> {latestPurchase.package_name}{" "}
+          <span style={{ color: latestPurchase.remaining_days > 0 ? "green" : "red" }}>
+            {latestPurchase.remaining_days > 0 ? "Còn hạn" : "Hết hạn"}
+          </span>
+        </p>
+      </>
+    ) : (
+      <p className="muted">Chưa có gói học nào</p>
+    )}
 
-            <button
-              className="btn btn-secondary"
-              onClick={() => navigate(`/purchases/${selectedUser.id}`)}
-            >
-              Xem chi tiết lịch sử
-            </button>
-          </div>
-        )}
-      </div>
-
-      <div style={{ width: 120 }}>
-        <img
-          src={getAvatar(selectedUser)}
-          alt="Avatar"
-          style={{ width: 120, height: 120, borderRadius: "50%", objectFit: "cover", background: "#eee" }}
-        />
-      </div>
-    </div>
-  </Modal>
+    <button
+      className="btn btn-secondary"
+      onClick={() => navigate(`/admin/learners/${selectedUser.learner_id}/purchases`)}
+    >
+      Xem chi tiết lịch sử
+    </button>
+  </div>
 )}
+              </div>
+
+              <div style={{ width: 120 }}>
+                <img
+                  src={getAvatar(selectedUser)}
+                  alt="Avatar"
+                  style={{ width: 120, height: 120, borderRadius: "50%", objectFit: "cover", background: "#eee" }}
+                />
+              </div>
+            </div>
+          </Modal>
+        )}
+
 
 
       {/* Modal tạo user */}

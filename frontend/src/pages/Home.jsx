@@ -18,6 +18,7 @@ import vibLogo from "../assets/partners/VIB.jpg";
 import oxfordLogo from "../assets/partners/oxford.jpg";
 import ieltsLogo from "../assets/partners/ielts.png";
 import vnairlineLogo from "../assets/partners/vnairline.png";
+import api from "../api";
 
 // ===== Partners mẫu =====
 const samplePartners = [
@@ -37,14 +38,14 @@ export default function Home() {
   const [packages, setPackages] = useState([]);
 
   // Lấy packages từ API
-  useEffect(() => {
-    fetch("/api/packages/public")
-      .then((res) => res.json())
-      .then((data) => {
-        const sorted = (data || []).sort((a, b) => a.price - b.price);
-        setPackages(sorted);
-      });
-  }, []);
+ useEffect(() => {
+  api.get("/packages/public")
+    .then((res) => {
+      const sorted = (res.data.packages || []).sort((a, b) => a.price - b.price);
+      setPackages(sorted);
+    })
+    .catch((err) => console.error("❌ Lỗi khi load packages:", err));
+}, []);
 
   // Hàm xử lý đăng ký
   const handleRegister = async (e) => {

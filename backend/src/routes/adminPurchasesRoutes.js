@@ -1,7 +1,8 @@
-﻿import express from "express";
+﻿// adminPurchasesRoutes.js
+import express from "express";
 import {
-  listPurchases,
-  listUserPurchases,
+  getAllPurchases,
+  listLearnerPurchases,
   createNewPurchase,
   renewPurchaseController,
   changePackageController
@@ -9,10 +10,10 @@ import {
 
 const router = express.Router();
 
-// ================== Admin ==================
-router.get("/", listPurchases);
-router.get("/:userId", listUserPurchases);
-router.post("/", createNewPurchase);
+// ================== Admin Purchases ==================
+router.get("/", getAllPurchases);                  // /api/admin/purchases
+router.get("/:learnerId", listLearnerPurchases);   // /api/admin/purchases/:learnerId
+router.post("/", createNewPurchase);               // tạo purchase mới
 router.patch("/:id/renew", renewPurchaseController);
 router.patch("/:id/change-package", changePackageController);
 

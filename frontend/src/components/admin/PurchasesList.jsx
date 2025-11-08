@@ -1,130 +1,85 @@
 ﻿import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import api from "../../api";
-import Modal from "../common/Modal.jsx";
 
-export default function PurchasesList() {
+export default function PurchasesList({ learnerId }) {
   const [purchases, setPurchases] = useState([]);
-  const [selectedPurchase, setSelectedPurchase] = useState(null);
-  const [showCreate, setShowCreate] = useState(false);
-  const [userId, setUserId] = useState("");
-  const [packageId, setPackageId] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [searchPhone, setSearchPhone] = useState("");
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchPurchases = async () => {
       try {
-        const res = await api.get("/admin/purchases");
+        let res;
+        if (learnerId) {
+          res = await api.get(`/admin/learners/${learnerId}/purchases`);
+        } else {
+          res = await api.get("/admin/purchases");
+        }
         setPurchases(res.data.purchases || []);
       } catch (err) {
         console.error("❌ Lỗi khi load purchases:", err);
+      } finally {
+        setLoading(false);
       }
     };
     fetchPurchases();
-  }, []);
+  }, [learnerId]);
+
+  const handleSearch = async () => {
+    if (!searchPhone.trim()) return;
+    try {
+      const res = await api.get(`/admin/purchases?phone=${searchPhone}`);
+      setPurchases(res.data.purchases || []);
+    } catch (err) {
+      console.error("❌ Lỗi tìm kiếm:", err);
+    }
+  };
+
+  if (loading) return <p>Đang tải dữ liệu...</p>;
 
   return (
     <div className="panel">
-      <h2>Lịch sử mua hàng</h2>
-
-      {/* ✅ Nút tạo gói mới */}
-      <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
-        + Tạo gói mới
-      </button>
-
+      <h2>{learnerId ? `Danh sách Purchases của Learner #${learnerId}` : "Danh sách tất cả Purchases"}</h2>
+      {!learnerId && (
+        <div className="toolbar">
+          <input value={searchPhone} onChange={(e) => setSearchPhone(e.target.value)} />
+          <button onClick={handleSearch}>Tìm kiếm</button>
+        </div>
+      )}
       <table className="table">
         <thead>
           <tr>
+            <th>STT</th>
+            <th>Gói học</th>
             <th>Tên</th>
             <th>SĐT</th>
-            <th>Gói học</th>
-            <th>Trạng thái</th>
             <th>Ngày mua</th>
+            <th>Tình trạng</th>
+            <th>Còn lại (ngày)</th>
+            <th>Giá</th>
             <th>Thao tác</th>
           </tr>
         </thead>
         <tbody>
-          {purchases.map((p) => (
-            <tr key={p.id}>
-              <td>{p.user_name}</td>
-              <td>{p.user_phone}</td>
+          {purchases.map((p, idx) => (
+            <tr key={p.purchase_id}>
+              <td>{idx + 1}</td>
               <td>{p.package_name}</td>
-              <td style={{ color: p.remaining_days <= 0 ? "red" : "green" }}>
-                {p.remaining_days <= 0 ? "Hết hạn" : "Còn hạn"}
-              </td>
-              <td>{new Date(p.created_at).toLocaleString("vi-VN")}</td>
+              <td>{p.learner_name}</td>
+              <td>{p.learner_phone}</td>
+              <td>{new Date(p.created_at).toLocaleDateString("vi-VN")}</td>
+              <td>{p.status}</td>
+              <td>{p.remaining_days}</td>
+              <td>{p.package_price ? p.package_price.toLocaleString("vi-VN", { style: "currency", currency: "VND" }) : "-"}</td>
               <td>
-                <button onClick={() => setSelectedPurchase(p)}>
-                  Xem chi tiết
-                </button>
+                <button onClick={() => navigate(`/admin/learners/${p.learner_id}/purchases`)}>Xem</button>
               </td>
             </tr>
           ))}
         </tbody>
       </table>
-
-      {/* ✅ Modal chi tiết đơn hàng */}
-      {selectedPurchase && (
-        <Modal title="Chi tiết đơn hàng" onClose={() => setSelectedPurchase(null)}>
-          <p><strong>Tên:</strong> {selectedPurchase.user_name}</p>
-          <p><strong>SĐT:</strong> {selectedPurchase.user_phone}</p>
-          <p><strong>Gói hiện tại:</strong> {selectedPurchase.package_name}</p>
-          <p>
-            <strong>Trạng thái:</strong>{" "}
-            <span style={{ color: selectedPurchase.remaining_days <= 0 ? "red" : "green" }}>
-              {selectedPurchase.remaining_days <= 0 ? "Hết hạn" : "Còn hạn"}
-            </span>
-          </p>
-          <p><strong>Ngày mua:</strong> {new Date(selectedPurchase.created_at).toLocaleString("vi-VN")}</p>
-
-          {/* ✅ Thao tác */}
-          {selectedPurchase.remaining_days <= 0 ? (
-            <div>
-              <button
-                className="btn btn-primary"
-                onClick={async () => {
-                  await api.patch(`/admin/purchases/${selectedPurchase.id}/renew`, { extraDays: 30 });
-                  alert("Gia hạn thành công!");
-                }}
-              >
-                Gia hạn thêm 30 ngày
-              </button>
-
-              <button
-                className="btn btn-secondary"
-                onClick={async () => {
-                  await api.patch(`/admin/purchases/${selectedPurchase.id}/change-package`, { newPackageId: 2 });
-                  alert("Đổi gói thành công!");
-                }}
-              >
-                Đổi sang gói khác
-              </button>
-            </div>
-          ) : (
-            <p>⏳ Gói còn hạn, chưa thao tác được</p>
-          )}
-        </Modal>
-      )}
-
-      {/* ✅ Modal tạo gói mới */}
-      {showCreate && (
-        <Modal title="Tạo gói mới" onClose={() => setShowCreate(false)}>
-          <form
-            onSubmit={async (e) => {
-              e.preventDefault();
-              await api.post("/admin/purchases", { userId, packageId });
-              alert("Tạo gói mới thành công!");
-              setShowCreate(false);
-            }}
-          >
-            <label>User ID</label>
-            <input value={userId} onChange={(e) => setUserId(e.target.value)} />
-
-            <label>Package ID</label>
-            <input value={packageId} onChange={(e) => setPackageId(e.target.value)} />
-
-            <button type="submit" className="btn btn-primary">Tạo</button>
-          </form>
-        </Modal>
-      )}
     </div>
   );
 }
