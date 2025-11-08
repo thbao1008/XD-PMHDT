@@ -4,9 +4,9 @@ import ProtectedRoute from "../components/ProtectedRoute";
 import GuestRoute from "../components/GuestRoute";
 
 // Pages
-import Home from "../pages/Home";            
+import Home from "../pages/Home";
 import Login from "../pages/Login";
-import ProfilePage from "../pages/Profile"; 
+import ProfilePage from "../pages/Profile";
 import NotFound from "../pages/NotFound";
 
 // Admin
@@ -16,6 +16,7 @@ import ReportsPage from "../components/admin/ReportsPage";
 import UsersList from "../components/admin/UsersList";
 import PackagesList from "../components/admin/PackagesList";
 import PurchasesList from "../components/admin/PurchasesList";
+import PurchasesPage from "../components/admin/PurchasesPage";
 import SupportTickets from "../components/admin/SupportTickets";
 
 // Learner
@@ -69,9 +70,9 @@ export default function AppRoutes() {
         <Route path="users" element={<UsersList />} />
         <Route path="packages" element={<PackagesList />} />
         <Route path="purchases" element={<PurchasesList />} />
+        <Route path="learners/:id/purchases" element={<PurchasesPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="support" element={<SupportTickets />} />
-        {/* fallback riêng cho admin */}
         <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
       </Route>
 
@@ -110,6 +111,8 @@ export default function AppRoutes() {
 
       {/* Fallback chung */}
       <Route path="*" element={<NotFound />} />
+      <Route path="/admin/learners/:id/purchases" element={<PurchasesPage />} />
+
     </Routes>
   );
 }

@@ -21,17 +21,23 @@ router.use(adminGuard);
 router.get("/check", async (req, res) => {
   try {
     const { email, phone } = req.query;
-    if (!email && !phone) return res.json({ exists: false });
+    if (!email && !phone) {
+      return res.json({ exists: false });
+    }
 
     const identifier = email || phone;
     const user = await findUserByIdentifier(identifier);
 
-    if (email && user?.email === email) return res.json({ exists: true });
-    if (phone && user?.phone === phone) return res.json({ exists: true });
+    if (email && user && user.email === email) {
+      return res.json({ exists: true });
+    }
+    if (phone && user && user.phone === phone) {
+      return res.json({ exists: true });
+    }
 
     return res.json({ exists: false });
   } catch (err) {
-    console.error("check route error - adminUsersRoutes.js:34", err);
+    console.error("❌ check route error - adminUsersRoutes.js:40", err);
     return res.status(500).json({ exists: false });
   }
 });

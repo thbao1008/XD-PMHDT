@@ -1,89 +1,124 @@
 import pool from "../config/db.js";
 
-// ================== Lấy tất cả đơn hàng ==================
-export async function listPurchases(req, res) {
+export async function getAllPurchases(req, res) {
   try {
-    const result = await pool.query(
-      `SELECT p.id, p.user_id, p.package_id, p.status, p.created_at,
-              u.name AS user_name, u.phone AS user_phone,
-              pk.name AS package_name, pk.duration_days,
-              GREATEST(pk.duration_days - EXTRACT(DAY FROM (NOW() - p.created_at)), 0) AS remaining_days
-       FROM purchases p
-       JOIN users u ON p.user_id = u.id
-       JOIN packages pk ON p.package_id = pk.id
-       ORDER BY p.created_at DESC`
-    );
-    res.json({ purchases: result.rows });
+    const { phone } = req.query; // lấy query param phone
+    let result;
+    if (phone) {
+      result = await pool.query(
+        "SELECT * FROM purchase_details WHERE learner_phone = $1 ORDER BY created_at DESC",
+        [phone]
+      );
+    } else {
+      result = await pool.query(
+        "SELECT * FROM purchase_details ORDER BY created_at DESC"
+      );
+    }
+    res.json({ purchases: result.rows }); 
   } catch (err) {
-    console.error("❌ Lỗi listPurchases: - purchaseController.js:18", err);
+    console.error("Error getAllPurchases: - purchaseController.js:19", err);
     res.status(500).json({ message: "Server error" });
   }
 }
 
-// ================== Lấy đơn hàng theo userId ==================
-export async function listUserPurchases(req, res) {
-  const { userId } = req.params;
+// ===== Lấy đơn hàng theo learnerId =====
+export async function listLearnerPurchases(req, res) {
+  const { learnerId } = req.params;
   try {
     const result = await pool.query(
-      `SELECT p.id, p.user_id, p.package_id, p.status, p.created_at,
-              pk.name AS package_name, pk.duration_days,
-              GREATEST(pk.duration_days - EXTRACT(DAY FROM (NOW() - p.created_at)), 0) AS remaining_days
-       FROM purchases p
-       JOIN packages pk ON p.package_id = pk.id
-       WHERE p.user_id=$1
-       ORDER BY p.created_at DESC`,
-      [userId]
+      "SELECT * FROM purchase_details WHERE learner_id = $1 ORDER BY created_at DESC",
+      [learnerId]
     );
     res.json({ purchases: result.rows });
   } catch (err) {
-    console.error("❌ Lỗi listUserPurchases: - purchaseController.js:39", err);
+    console.error("Error listLearnerPurchases: - purchaseController.js:34", err);
     res.status(500).json({ message: "Server error" });
   }
 }
 
-// ================== Tạo purchase mới ==================
+// ===== Tạo purchase mới =====
 export async function createNewPurchase(req, res) {
-  const { userId, packageId } = req.body;
+  const { learnerId, packageId } = req.body;
   try {
-    const result = await pool.query(
-      "INSERT INTO purchases (user_id, package_id, status, created_at) VALUES ($1,$2,'completed',NOW()) RETURNING *",
-      [userId, packageId]
+    // Lấy duration_days từ gói
+    const pkg = await pool.query(
+      "SELECT duration_days FROM packages WHERE id=$1",
+      [packageId]
     );
-    res.status(201).json({ purchase: result.rows[0] });
+    const duration = pkg.rows[0].duration_days;
+
+    // Insert purchase với expired_at
+    const result = await pool.query(
+      `
+      INSERT INTO purchases (learner_id, package_id, status, created_at, expired_at, extra_days)
+      VALUES ($1, $2, 'active', NOW(), NOW() + $3 * INTERVAL '1 day', 0)
+      RETURNING id
+      `,
+      [learnerId, packageId, duration]
+    );
+
+    const purchaseId = result.rows[0].id;
+    const detail = await pool.query(
+      "SELECT * FROM purchase_details WHERE purchase_id=$1",
+      [purchaseId]
+    );
+
+    res.status(201).json({ purchase: detail.rows[0] });
   } catch (err) {
-    console.error("❌ Lỗi createNewPurchase: - purchaseController.js:54", err);
+    console.error("Error createNewPurchase: - purchaseController.js:68", err);
     res.status(500).json({ message: "Server error" });
   }
 }
 
-// ================== Gia hạn ==================
+// ===== Gia hạn =====
 export async function renewPurchaseController(req, res) {
   const { id } = req.params;
-  const { extraDays } = req.body; // số ngày gia hạn thêm
+  const { extraDays } = req.body;
   try {
     await pool.query(
-      "UPDATE purchases SET renewed_at=NOW(), status='renewed' WHERE id=$1",
-      [id]
+      `
+      UPDATE purchases
+      SET renewed_at = NOW(),
+          status = 'renewed',
+          expired_at = expired_at + $2 * INTERVAL '1 day'
+      WHERE id = $1
+    `,
+      [id, extraDays]
     );
+
     res.json({ message: "Gia hạn thành công" });
   } catch (err) {
-    console.error("❌ Lỗi renew: - purchaseController.js:70", err);
+    console.error("Error renew: - purchaseController.js:91", err);
     res.status(500).json({ message: "Server error" });
   }
 }
 
-// ================== Đổi gói ==================
+// ===== Đổi gói =====
 export async function changePackageController(req, res) {
   const { id } = req.params;
   const { newPackageId } = req.body;
   try {
-    await pool.query(
-      "UPDATE purchases SET package_id=$1, changed_at=NOW(), status='changed' WHERE id=$2",
-      [newPackageId, id]
+    const pkg = await pool.query(
+      "SELECT duration_days FROM packages WHERE id=$1",
+      [newPackageId]
     );
+    const duration = pkg.rows[0].duration_days;
+
+    await pool.query(
+      `
+      UPDATE purchases
+      SET package_id = $1,
+          changed_at = NOW(),
+          status = 'changed',
+          expired_at = NOW() + $2 * INTERVAL '1 day'
+      WHERE id = $3
+    `,
+      [newPackageId, duration, id]
+    );
+
     res.json({ message: "Đổi gói thành công" });
   } catch (err) {
-    console.error("❌ Lỗi changePackage: - purchaseController.js:86", err);
+    console.error("Error changePackage: - purchaseController.js:121", err);
     res.status(500).json({ message: "Server error" });
   }
 }

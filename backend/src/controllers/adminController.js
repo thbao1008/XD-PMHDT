@@ -10,17 +10,28 @@ import {
   toggleUserStatusInDb
 } from "../models/userModel.js";
 
-// Lấy danh sách user
+// Lấy danh sách user (JOIN với learners để có learner_id)
 export async function listUsers(req, res) {
   try {
-    const users = await getAllUsers();
-    const safe = users.map(({ password, ...rest }) => rest);
+    const result = await pool.query(`
+      SELECT 
+        u.id, u.name, u.email, u.phone, u.dob, u.role, u.status, u.created_at,
+        l.id AS learner_id
+      FROM users u
+      LEFT JOIN learners l ON l.user_id = u.id
+      ORDER BY u.id DESC
+    `);
+
+    // loại bỏ password nếu có
+    const safe = result.rows.map(({ password, ...rest }) => rest);
+
     return res.json({ success: true, users: safe });
   } catch (err) {
-    console.error("listUsers error - adminController.js:20", err);
+    console.error("listUsers error - adminController.js:30", err);
     return res.status(500).json({ success: false, message: "Server error" });
   }
 }
+
 
 // Lấy user theo id
 export async function getUser(req, res) {
@@ -30,7 +41,7 @@ export async function getUser(req, res) {
     const { password, ...safe } = user;
     return res.json({ success: true, user: safe });
   } catch (err) {
-    console.error("getUser error - adminController.js:33", err);
+    console.error("getUser error - adminController.js:44", err);
     return res.status(500).json({ success: false, message: "Server error" });
   }
 }
@@ -47,14 +58,12 @@ export async function createUser(req, res) {
       return res.status(403).json({ success: false, message: "Không được tạo admin từ giao diện" });
     }
 
-    // Check trùng email
     if (email) {
       const existingEmail = await findUserByIdentifier(email);
       if (existingEmail?.email === email) {
         return res.status(409).json({ success: false, message: "Email đã tồn tại" });
       }
     }
-    // Check trùng phone
     if (phone) {
       const existingPhone = await findUserByIdentifier(phone);
       if (existingPhone?.phone === phone) {
@@ -64,44 +73,41 @@ export async function createUser(req, res) {
 
     const hashed = await bcrypt.hash(password, 10);
 
-    let packagePrice = null;
-    let durationDays = null;
-    let packageStart = null;
-
-    if (role.toLowerCase() === "learner" && packageId) {
-      const pkgRes = await pool.query(
-        "SELECT price, duration_days FROM packages WHERE id=$1",
-        [packageId]
-      );
-      if (pkgRes.rows.length === 0) {
-        return res.status(400).json({ success: false, message: "Package not found" });
-      }
-      packagePrice = pkgRes.rows[0].price;
-      durationDays = pkgRes.rows[0].duration_days;
-      packageStart = new Date();
-    }
-
     const newUser = await createUserInDb({
       name,
       email,
       phone: phone || null,
       dob: dob || null,
-      role: (role || "learner").toLowerCase(),
+      role: role.toLowerCase(),
       password: hashed,
-      status: "active",
-      package_id: role.toLowerCase() === "learner" ? (packageId || null) : null,
-      package_price: packagePrice,
-      package_duration_days: durationDays,
-      package_start: packageStart,
+      status: "active"
     });
 
+    let learnerId = null;
+
+    if (role.toLowerCase() === "learner") {
+      const lrRes = await pool.query(
+        `INSERT INTO learners (user_id, start_date) VALUES ($1, NOW()) RETURNING id`,
+        [newUser.id]
+      );
+      learnerId = lrRes.rows[0].id;
+
+      if (packageId) {
+        await pool.query(
+          `INSERT INTO purchases (learner_id, package_id, status, created_at, extra_days)
+           VALUES ($1,$2,'active',NOW(),0)`,
+          [learnerId, packageId]
+        );
+      }
+    }
+
     const { password: _, ...safe } = newUser;
-    return res.status(201).json({ success: true, user: safe });
+    return res.status(201).json({ success: true, user: safe, learnerId });
   } catch (err) {
     if (err.code === "23505") {
       return res.status(409).json({ success: false, message: "Email hoặc SĐT đã tồn tại" });
     }
-    console.error("createUser error - adminController.js:104", err);
+    console.error("createUser error - adminController.js:110", err);
     return res.status(500).json({ success: false, message: "Server error" });
   }
 }
@@ -124,7 +130,7 @@ export async function updateUser(req, res) {
     const { password: _, ...safe } = updated;
     return res.json({ success: true, user: safe });
   } catch (err) {
-    console.error("updateUser error - adminController.js:127", err);
+    console.error("updateUser error - adminController.js:133", err);
     return res.status(500).json({ success: false, message: "Server error" });
   }
 }
@@ -136,7 +142,7 @@ export async function deleteUser(req, res) {
     if (!deleted) return res.status(404).json({ success: false, message: "Not found" });
     return res.json({ success: true });
   } catch (err) {
-    console.error("deleteUser error - adminController.js:139", err);
+    console.error("deleteUser error - adminController.js:145", err);
     return res.status(500).json({ success: false, message: "Server error" });
   }
 }
@@ -151,7 +157,7 @@ export async function toggleUserStatus(req, res) {
     const { password, ...safe } = updated;
     return res.json({ success: true, user: safe });
   } catch (err) {
-    console.error("toggleUserStatus error - adminController.js:154", err);
+    console.error("toggleUserStatus error - adminController.js:160", err);
     return res.status(500).json({ success: false, message: "Server error" });
   }
 }
