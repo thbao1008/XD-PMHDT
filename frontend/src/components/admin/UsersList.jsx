@@ -243,7 +243,7 @@ useEffect(() => {
               <th>Số điện thoại</th>
               <th>Email</th>
               <th>Vai trò</th>
-              {roleFilter === "LEARNER" && <th>Thời hạn còn lại</th>}
+              {roleFilter === "LEARNER" && <th>Tình trạng gói</th>}
               <th>Thao tác</th>
             </tr>
           </thead>
@@ -259,7 +259,12 @@ useEffect(() => {
                   <td>{user.email}</td>
                   <td>{capitalizeWords(user.role)}</td>
                   {roleFilter === "LEARNER" && (
-                    <td>{getRemainingDays(user)} ngày</td>
+                    <td>
+  {user.package_status 
+    ? (user.package_status === "active" ? "Còn hạn" : "Hết hạn") 
+    : "Chưa có"}
+</td>
+
                   )}
                   <td>
                     <button

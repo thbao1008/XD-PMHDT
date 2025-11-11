@@ -22,30 +22,6 @@ export default function PurchasesPage() {
     fetchPurchases();
   }, [id]);
 
-  const handleRenew = async (purchaseId) => {
-    try {
-      await api.patch(`/admin/purchases/${purchaseId}/renew`, { extraDays: 30 });
-      alert("✅ Gia hạn thành công");
-      const res = await api.get(`/admin/learners/${id}/purchases`);
-      setPurchases(res.data.purchases || []);
-    } catch (err) {
-      console.error("❌ Lỗi gia hạn:", err);
-    }
-  };
-
-  const handleChangePackage = async (purchaseId) => {
-    const newPackageId = prompt("Nhập ID gói mới:");
-    if (!newPackageId) return;
-    try {
-      await api.patch(`/admin/purchases/${purchaseId}/change-package`, { newPackageId });
-      alert("✅ Đổi gói thành công");
-      const res = await api.get(`/admin/learners/${id}/purchases`);
-      setPurchases(res.data.purchases || []);
-    } catch (err) {
-      console.error("❌ Lỗi đổi gói:", err);
-    }
-  };
-
   if (loading) return <p>Đang tải dữ liệu...</p>;
 
 
@@ -53,7 +29,7 @@ export default function PurchasesPage() {
 
   return (
     <div className="panel">
-      <h2>Lịch sử Purchases của {learnerName}</h2>
+      <h2>Lịch sử Purchases của {learnerName}</h2> 
       <table className="table">
         <thead>
           <tr>

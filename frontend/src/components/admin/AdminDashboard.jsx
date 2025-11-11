@@ -1,7 +1,7 @@
 ﻿// src/components/admin/Dashboard.jsx
 import React from "react";
 import { Pie, Line, Bar } from "react-chartjs-2";
-import "../../lib/chartSetup.js"; // đã có file setup đk các phần ChartJS
+import "../../lib/chartSetup.js"; 
 import KpiCard from "../common/KpiCard.jsx";
 
 export default function Dashboard() {

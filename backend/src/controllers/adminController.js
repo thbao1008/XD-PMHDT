@@ -1,7 +1,6 @@
 ﻿import bcrypt from "bcryptjs";
 import pool from "../config/db.js";
 import {
-  getAllUsers,
   findUserById,
   findUserByIdentifier,
   createUserInDb,
@@ -10,28 +9,30 @@ import {
   toggleUserStatusInDb
 } from "../models/userModel.js";
 
-// Lấy danh sách user (JOIN với learners để có learner_id)
+// Lấy danh sách user (JOIN với learners + view để có learner_id và tình trạng gói)
 export async function listUsers(req, res) {
   try {
     const result = await pool.query(`
       SELECT 
         u.id, u.name, u.email, u.phone, u.dob, u.role, u.status, u.created_at,
-        l.id AS learner_id
+        l.id AS learner_id,
+        lp.package_name,
+        lp.status AS package_status,
+        lp.expiry_date,
+        lp.days_left
       FROM users u
       LEFT JOIN learners l ON l.user_id = u.id
+      LEFT JOIN learner_package_view lp ON lp.learner_id = l.id
       ORDER BY u.id DESC
     `);
 
-    // loại bỏ password nếu có
     const safe = result.rows.map(({ password, ...rest }) => rest);
-
     return res.json({ success: true, users: safe });
   } catch (err) {
-    console.error("listUsers error - adminController.js:30", err);
+    console.error("listUsers error - adminController.js:32", err);
     return res.status(500).json({ success: false, message: "Server error" });
   }
 }
-
 
 // Lấy user theo id
 export async function getUser(req, res) {
@@ -41,7 +42,7 @@ export async function getUser(req, res) {
     const { password, ...safe } = user;
     return res.json({ success: true, user: safe });
   } catch (err) {
-    console.error("getUser error - adminController.js:44", err);
+    console.error("getUser error - adminController.js:45", err);
     return res.status(500).json({ success: false, message: "Server error" });
   }
 }
@@ -107,7 +108,7 @@ export async function createUser(req, res) {
     if (err.code === "23505") {
       return res.status(409).json({ success: false, message: "Email hoặc SĐT đã tồn tại" });
     }
-    console.error("createUser error - adminController.js:110", err);
+    console.error("createUser error - adminController.js:111", err);
     return res.status(500).json({ success: false, message: "Server error" });
   }
 }
@@ -130,7 +131,7 @@ export async function updateUser(req, res) {
     const { password: _, ...safe } = updated;
     return res.json({ success: true, user: safe });
   } catch (err) {
-    console.error("updateUser error - adminController.js:133", err);
+    console.error("updateUser error - adminController.js:134", err);
     return res.status(500).json({ success: false, message: "Server error" });
   }
 }
@@ -142,7 +143,7 @@ export async function deleteUser(req, res) {
     if (!deleted) return res.status(404).json({ success: false, message: "Not found" });
     return res.json({ success: true });
   } catch (err) {
-    console.error("deleteUser error - adminController.js:145", err);
+    console.error("deleteUser error - adminController.js:146", err);
     return res.status(500).json({ success: false, message: "Server error" });
   }
 }
@@ -157,7 +158,7 @@ export async function toggleUserStatus(req, res) {
     const { password, ...safe } = updated;
     return res.json({ success: true, user: safe });
   } catch (err) {
-    console.error("toggleUserStatus error - adminController.js:160", err);
+    console.error("toggleUserStatus error - adminController.js:161", err);
     return res.status(500).json({ success: false, message: "Server error" });
   }
 }

@@ -1,6 +1,6 @@
 ﻿import React from "react";
 import { createPortal } from "react-dom";
-import "./modal.css";
+import "../../styles/modal.css";
 
 export default function Modal({ title, children, onClose }) {
   return createPortal(
