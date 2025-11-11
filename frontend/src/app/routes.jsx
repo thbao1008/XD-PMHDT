@@ -3,7 +3,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import ProtectedRoute from "../components/ProtectedRoute";
 import GuestRoute from "../components/GuestRoute";
 
-// Pages
+// Pages chung
 import Home from "../pages/Home";
 import Login from "../pages/Login";
 import ProfilePage from "../pages/Profile";
@@ -11,7 +11,7 @@ import NotFound from "../pages/NotFound";
 
 // Admin
 import AdminLayout from "../components/admin/AdminLayout";
-import Dashboard from "../components/admin/Dashboard";
+import AdminDashboard from "../components/admin/AdminDashboard";
 import ReportsPage from "../components/admin/ReportsPage";
 import UsersList from "../components/admin/UsersList";
 import PackagesList from "../components/admin/PackagesList";
@@ -21,21 +21,25 @@ import SupportTickets from "../components/admin/SupportTickets";
 
 // Learner
 import LearnerLayout from "../components/learner/LearnerLayout";
-import SpeakingPractice from "../components/learner/SpeakingPractice";
-import ProgressAnalytics from "../components/learner/ProgressAnalytics";
-import Challenges from "../components/learner/Challenges";
 import PackageCatalog from "../components/learner/PackageCatalog";
+import SpeakingPractice from "../components/learner/SpeakingPractice";
+import Challenges from "../components/learner/Challenges";
+import ProgressAnalytics from "../components/learner/ProgressAnalytics";
 
 // Mentor
 import MentorLayout from "../components/mentor/MentorLayout";
+import MentorDashboard from "../components/mentor/MentorDashboard";
 import AssessmentPanel from "../components/mentor/AssessmentPanel";
 import FeedbackPanel from "../components/mentor/FeedbackPanel";
 import TopicManager from "../components/mentor/TopicManager";
+import MentorSessions from "../components/mentor/MentorSessions";
+import MentorLearners from "../components/mentor/MentorLearners";
+import MentorResources from "../components/mentor/MentorResources";
 
 export default function AppRoutes() {
   return (
     <Routes>
-      {/* Public */}
+      {/* Public routes */}
       <Route path="/" element={<Home />} />
       <Route
         path="/login"
@@ -56,7 +60,7 @@ export default function AppRoutes() {
         }
       />
 
-      {/* Admin */}
+      {/* Admin routes */}
       <Route
         path="/admin"
         element={
@@ -65,8 +69,8 @@ export default function AppRoutes() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<Dashboard />} />
-        <Route path="dashboard" element={<Dashboard />} />
+        <Route index element={<AdminDashboard />} />
+        <Route path="dashboard" element={<AdminDashboard />} />
         <Route path="users" element={<UsersList />} />
         <Route path="packages" element={<PackagesList />} />
         <Route path="purchases" element={<PurchasesList />} />
@@ -76,7 +80,7 @@ export default function AppRoutes() {
         <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
       </Route>
 
-      {/* Learner */}
+      {/* Learner routes */}
       <Route
         path="/learn"
         element={
@@ -93,7 +97,7 @@ export default function AppRoutes() {
         <Route path="*" element={<Navigate to="/learn/catalog" replace />} />
       </Route>
 
-      {/* Mentor */}
+      {/* Mentor routes */}
       <Route
         path="/mentor"
         element={
@@ -102,17 +106,19 @@ export default function AppRoutes() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<AssessmentPanel />} />
+        <Route index element={<MentorDashboard />} />
+        <Route path="dashboard" element={<MentorDashboard />} />
         <Route path="assessment" element={<AssessmentPanel />} />
         <Route path="feedback" element={<FeedbackPanel />} />
         <Route path="topics" element={<TopicManager />} />
-        <Route path="*" element={<Navigate to="/mentor/assessment" replace />} />
+        <Route path="sessions" element={<MentorSessions />} />
+        <Route path="learners" element={<MentorLearners />} />
+        <Route path="resources" element={<MentorResources />} />
+        <Route path="*" element={<Navigate to="/mentor/dashboard" replace />} />
       </Route>
 
       {/* Fallback chung */}
       <Route path="*" element={<NotFound />} />
-      <Route path="/admin/learners/:id/purchases" element={<PurchasesPage />} />
-
     </Routes>
   );
 }

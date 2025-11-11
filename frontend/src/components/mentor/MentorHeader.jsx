@@ -1,9 +1,9 @@
-// src/components/mentor/MentorHeader.jsx
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { clearAuth, getAuth } from "../../utils/auth";
 import logo from "../../assets/images/logo.png";
 import userAvatar from "../../assets/icons/users.png";
+import "../../styles/theme.css";
 
 export default function MentorHeader() {
   const navigate = useNavigate();
@@ -46,18 +46,23 @@ export default function MentorHeader() {
 
   return (
     <header className="shell-header" role="banner">
+      {/* Logo */}
       <div className="header-left">
-        <img src={logo} alt="Logo" className="header-mark" />
-      </div>
-
-      <div className="header-center">
-        <div className="welcome-text">
-          Welcome, <strong>{userName}!</strong>
+        <div className="brand-block">
+          <img src={logo} alt="AESP logo" className="header-logo" />
         </div>
       </div>
 
+      {/* Welcome text */}
+      <div className="header-center">
+        <div className="welcome-text">
+          Welcome Mentor, <strong>{userName}!</strong>
+        </div>
+      </div>
+
+      {/* User dropdown */}
       <div className="header-right">
-        <div className="user-menu">
+        <div className="dropdown-wrapper">
           <button
             ref={buttonRef}
             className="user-dropdown-toggle"
@@ -70,12 +75,14 @@ export default function MentorHeader() {
               alt="User avatar"
               className="user-avatar"
             />
-            <span className="user-name">{userName}</span>
-            <span className="dropdown-icon">▾</span>
           </button>
 
           {open && (
-            <div ref={dropdownRef} className="dropdown-menu" role="menu">
+            <div
+              ref={dropdownRef}
+              className="dropdown-menu dropdown-elevated"
+              role="menu"
+            >
               <button
                 className="dropdown-item"
                 onClick={() => {
@@ -84,24 +91,6 @@ export default function MentorHeader() {
                 }}
               >
                 Thông tin cá nhân
-              </button>
-              <button
-                className="dropdown-item"
-                onClick={() => {
-                  navigate("/mentor/assessment");
-                  setOpen(false);
-                }}
-              >
-                Assessment Panel
-              </button>
-              <button
-                className="dropdown-item"
-                onClick={() => {
-                  navigate("/mentor/topics");
-                  setOpen(false);
-                }}
-              >
-                Topic Manager
               </button>
               <div className="divider-hr" />
               <button className="dropdown-item danger" onClick={handleLogout}>

@@ -41,7 +41,7 @@ export default function PurchasesList({ learnerId }) {
 
   return (
     <div className="panel">
-      <h2>{learnerId ? `Danh sách Purchases của Learner #${learnerId}` : "Danh sách tất cả Purchases"}</h2>
+      <h2>{"Danh sách gói học được đăng kí"}</h2>
       {!learnerId && (
         <div className="toolbar">
           <input value={searchPhone} onChange={(e) => setSearchPhone(e.target.value)} />
