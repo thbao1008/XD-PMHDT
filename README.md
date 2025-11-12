@@ -14,8 +14,7 @@ Lưu ý:
 - Mỗi service cần code trong services/<service>/src, file entry chạy server tại src/server.js
 
 # XD-PMHDT
+Hiện tại source chưa hoàn thiện nên
+debug với
+"npm run dev:all"
 
-debug 
-npm run dev:all
-netstat -ano | findstr :4002
-taskkill /PID <PID> /F
