@@ -1,27 +1,31 @@
 ﻿import express from "express";
 import {
-  createReport,         
-  getReportSummary,   
+  createReport,
+  getReportSummary,
   getReports,
   searchLearnerProgress,
-  updateReportStatus
+  updateReportStatus,
+  updateLearnerNote
 } from "../controllers/reportController.js";
 
 const router = express.Router();
 
 // Mentor/Learner tạo report
-router.post("/reports", createReport);
+router.post("/", createReport);
 
 // Thống kê số lượng học viên, mentor, report theo thời gian
-router.get("/reports/summary", getReportSummary);
+router.get("/summary", getReportSummary);
 
 // Admin lấy danh sách report
-router.get("/reports", getReports);
+router.get("/", getReports);
 
 // Tìm kiếm tiến độ đào tạo học viên
-router.get("/reports/learner-progress", searchLearnerProgress);
+router.get("/learner-progress", searchLearnerProgress);
 
-// PUT /api/reports/:id/status
-router.put("/reports/:id/status", updateReportStatus);
+// Cập nhật trạng thái report
+router.patch("/:id/status", updateReportStatus);
+
+// Cập nhật ghi chú learner
+router.put("/learner/:id/note", updateLearnerNote);
 
 export default router;

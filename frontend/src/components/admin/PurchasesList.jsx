@@ -41,10 +41,14 @@ export default function PurchasesList({ learnerId }) {
 
   return (
     <div className="panel">
-      <h2>{"Danh sách gói học được đăng kí"}</h2>
+      <h2>Danh sách gói học được đăng kí</h2>
       {!learnerId && (
         <div className="toolbar">
-          <input value={searchPhone} onChange={(e) => setSearchPhone(e.target.value)} />
+          <input
+            value={searchPhone}
+            onChange={(e) => setSearchPhone(e.target.value)}
+            placeholder="Nhập số điện thoại"
+          />
           <button onClick={handleSearch}>Tìm kiếm</button>
         </div>
       )}
@@ -68,13 +72,32 @@ export default function PurchasesList({ learnerId }) {
               <td>{idx + 1}</td>
               <td>{p.package_name}</td>
               <td>{p.learner_name}</td>
-              <td>{p.learner_phone}</td>
+              <td>{p.phone}</td>
               <td>{new Date(p.created_at).toLocaleDateString("vi-VN")}</td>
-              <td>{p.status}</td>
-              <td>{p.remaining_days}</td>
-              <td>{p.package_price ? p.package_price.toLocaleString("vi-VN", { style: "currency", currency: "VND" }) : "-"}</td>
               <td>
-                <button onClick={() => navigate(`/admin/learners/${p.learner_id}/purchases`)}>Xem</button>
+                {p.status === "active"
+                  ? "Còn hạn"
+                  : p.status === "paused"
+                    ? "Tạm ngưng"
+                    : "Hết hạn"}
+              </td>
+              <td>{p.status === "paused" ? "-" : p.days_left}</td>
+              <td>
+                {p.price
+                  ? p.price.toLocaleString("vi-VN", {
+                      style: "currency",
+                      currency: "VND",
+                    })
+                  : "-"}
+              </td>
+              <td>
+                <button
+                  onClick={() =>
+                    navigate(`/admin/learners/${p.learner_id}/purchases`)
+                  }
+                >
+                  Xem
+                </button>
               </td>
             </tr>
           ))}

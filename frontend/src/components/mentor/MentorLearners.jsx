@@ -26,7 +26,13 @@ export default function MentorLearners() {
         setMentorId(mid);
 
         const learnersRes = await api.get(`/mentors/${mid}/learners`);
-        setLearners(learnersRes.data.learners);
+        setLearners(
+          learnersRes.data.learners.map(l => ({
+            ...l,
+            report: l.report || null,
+            report_reply: l.report_reply || null, // lấy đúng field từ BE
+          }))
+        );
       } catch (err) {
         console.error("❌ Error fetching learners:", err);
       } finally {
@@ -42,18 +48,19 @@ export default function MentorLearners() {
   // mở modal ghi chú
   const openNoteModal = (learner) => {
     setSelectedLearner(learner);
-    setNoteInput(learner.note || "");
+    setNoteInput("");
     setShowNoteModal(true);
   };
 
   const saveNote = async () => {
     try {
-      await api.put(`/mentors/learners/${selectedLearner.learner_id}/note`, {
+      const res = await api.put(`/mentors/learners/${selectedLearner.learner_id}/note`, {
         note: noteInput,
       });
+      const updatedLearner = res.data.learner;
       setLearners(prev =>
         prev.map(l =>
-          l.learner_id === selectedLearner.learner_id ? { ...l, note: noteInput } : l
+          l.learner_id === selectedLearner.learner_id ? { ...l, note: updatedLearner.note } : l
         )
       );
     } catch (err) {
@@ -71,38 +78,32 @@ export default function MentorLearners() {
   };
 
   const saveReport = async () => {
-  try {
-    // Khai báo biến ngay đầu hàm
-    const reporterId = auth?.user?.id;          // user_id của người gửi
-    const targetId = selectedLearner?.user_id;  // user_id của người bị tố cáo
-    console.log("selectedLearner:", selectedLearner);
-    console.log("Payload gửi lên:", {
-      reporter_id: reporterId,
-      target_id: targetId,
-      content: reportInput,
-    });
+    try {
+      const reporterId = auth?.user?._id || auth?.user?.id || auth?.user?.user_id;
+      const targetId = selectedLearner?.user_id;
 
-    await api.post("/reports", {
-      reporter_id: reporterId,
-      target_id: targetId,
-      content: reportInput,
-      status: "pending",
-    });
+      console.log("reporterId:", reporterId, "targetId:", targetId, "content:", reportInput);
 
-    setLearners(prev =>
-      prev.map(l =>
-        l.learner_id === selectedLearner.learner_id
-          ? { ...l, report: reportInput }
-          : l
-      )
-    );
-  } catch (err) {
-    console.error("❌ Error saving report:", err);
-  } finally {
-    setShowReportModal(false);
-  }
-};
+      await api.post("/admin/reports", {
+        reporter_id: reporterId,
+        target_id: targetId,
+        content: reportInput,
+        status: "pending",
+      });
 
+      setLearners(prev =>
+        prev.map(l =>
+          l.learner_id === selectedLearner.learner_id
+            ? { ...l, report: reportInput }
+            : l
+        )
+      );
+    } catch (err) {
+      console.error("❌ Error saving report:", err);
+    } finally {
+      setShowReportModal(false);
+    }
+  };
 
   return (
     <div className="mentor-learners">
@@ -118,7 +119,6 @@ export default function MentorLearners() {
             <th>Tình trạng gói</th>
             <th>Ghi chú</th>
             <th>Report</th>
-            <th>Hành động</th>
           </tr>
         </thead>
         <tbody>
@@ -128,18 +128,52 @@ export default function MentorLearners() {
               <td>{l.learner_name}</td>
               <td>{l.email}</td>
               <td>{l.phone}</td>
-              <td>{l.dob}</td>
+              <td>{l.dob ? new Date(l.dob).toLocaleDateString("vi-VN") : "—"}</td>
               <td>{l.package_status || "Chưa có"}</td>
-              <td>{l.note || "—"}</td>
-              <td>{l.report || "—"}</td>
-              <td>
-                <button className="note-btn" onClick={() => openNoteModal(l)}>
-                  Ghi chú
-                </button>
-                <button className="report-btn" onClick={() => openReportModal(l)}>
-                  Report
-                </button>
+              <td
+                className="note-cell"
+                style={{ whiteSpace: "pre-line" }}
+                onClick={() => openNoteModal(l)}
+              >
+                {l.note || <span className="placeholder">Nhấn để ghi chú</span>}
               </td>
+              <td>
+  {l.report ? (
+    <>
+      <span
+        className="reported-label clickable"
+        onClick={() => {
+          setSelectedLearner(l);
+          setReportInput(l.report);
+          setShowReportModal(true);
+        }}
+      >
+        Đã gửi báo cáo (xem nội dung)
+      </span>
+      {l.report_reply && (
+        <div className="admin-reply">
+          <small>{l.report_reply}</small>
+        </div>
+      )}
+      {l.report_status === "dismissed" && (
+        <button
+          className="report-btn"
+          onClick={() => openReportModal(l)}
+          style={{ marginTop: "5px" }}
+        >
+          Gửi lại Report
+        </button>
+      )}
+    </>
+  ) : (
+    <button
+      className="report-btn"
+      onClick={() => openReportModal(l)}
+    >
+      Report
+    </button>
+  )}
+</td>
             </tr>
           ))}
         </tbody>
@@ -156,6 +190,7 @@ export default function MentorLearners() {
             onChange={(e) => setNoteInput(e.target.value)}
             rows="5"
             style={{ width: "100%" }}
+            placeholder="Nhập ghi chú..."
           />
           <div className="modal-actions">
             <button className="save-btn" onClick={saveNote}>Lưu</button>
@@ -165,24 +200,60 @@ export default function MentorLearners() {
       )}
 
       {/* Modal report */}
+          
       {showReportModal && (
-        <Modal
-          title={`Report học viên ${selectedLearner.learner_name}`}
-          onClose={() => setShowReportModal(false)}
-        >
-          <textarea
-            value={reportInput}
-            onChange={(e) => setReportInput(e.target.value)}
-            rows="5"
-            style={{ width: "100%" }}
-            placeholder="Nhập lý do báo cáo..."
-          />
-          <div className="modal-actions">
-            <button className="save-btn" onClick={saveReport}>Gửi Report</button>
-            <button className="cancel-btn" onClick={() => setShowReportModal(false)}>Hủy</button>
+  <Modal
+    title={`Report học viên ${selectedLearner.learner_name}`}
+    onClose={() => setShowReportModal(false)}
+  >
+    {selectedLearner.report ? (
+      <div>
+        <p><strong>Nội dung report đã gửi:</strong></p>
+        <p style={{ whiteSpace: "pre-line" }}>{selectedLearner.report}</p>
+
+        {selectedLearner.report_reply && (
+          <div style={{ marginTop: "10px" }}>
+            <p><strong>Thông báo từ admin:</strong></p>
+            <p style={{ whiteSpace: "pre-line" }}>{selectedLearner.report_reply}</p>
           </div>
-        </Modal>
-      )}
+        )}
+
+        {/* Nếu report bị từ chối thì cho nhập lại */}
+        {selectedLearner.report_status === "dismissed" && (
+          <>
+            <hr />
+            <p><strong>Gửi lại report:</strong></p>
+            <textarea
+              value={reportInput}
+              onChange={(e) => setReportInput(e.target.value)}
+              rows="5"
+              style={{ width: "100%" }}
+              placeholder="Nhập lý do báo cáo bổ sung..."
+            />
+            <div className="modal-actions">
+              <button className="save-btn" onClick={saveReport}>Gửi lại Report</button>
+              <button className="cancel-btn" onClick={() => setShowReportModal(false)}>Hủy</button>
+            </div>
+          </>
+        )}
+      </div>
+    ) : (
+      <>
+        <textarea
+          value={reportInput}
+          onChange={(e) => setReportInput(e.target.value)}
+          rows="5"
+          style={{ width: "100%" }}
+          placeholder="Nhập lý do báo cáo..."
+        />
+        <div className="modal-actions">
+          <button className="save-btn" onClick={saveReport}>Gửi Report</button>
+          <button className="cancel-btn" onClick={() => setShowReportModal(false)}>Hủy</button>
+        </div>
+      </>
+    )}
+  </Modal>
+)}
+
     </div>
-  );
-}
+  );}

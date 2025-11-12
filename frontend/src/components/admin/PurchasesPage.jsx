@@ -11,7 +11,7 @@ export default function PurchasesPage() {
     const fetchPurchases = async () => {
       if (!id) return;
       try {
-        const res = await api.get(`/admin/learners/${id}/purchases`);
+        const res = await api.get(`/admin/purchases/${id}`);
         setPurchases(res.data.purchases || []);
       } catch (err) {
         console.error("❌ Lỗi khi load purchases:", err);
@@ -24,12 +24,28 @@ export default function PurchasesPage() {
 
   if (loading) return <p>Đang tải dữ liệu...</p>;
 
+  const learnerName =
+    purchases.length > 0 ? purchases[0].learner_name : `Learner #${id}`;
 
-  const learnerName = purchases.length > 0 ? purchases[0].learner_name : `Learner #${id}`;
+  const handleRenewClick = (purchase) => {
+    if (purchase.remaining_days > 0) {
+      alert("❗Gói học vẫn chưa kết thúc, thử lại sau khi hết thời hạn của gói❗");
+    } else {
+      handleRenew(purchase.id);
+    }
+  };
 
   return (
     <div className="panel">
-      <h2>Lịch sử Purchases của {learnerName}</h2> 
+      <h2>Lịch sử Purchases của {learnerName}</h2>
+
+      {/* Nút đổi gói toàn cục */}
+      <div
+        style={{ display: "flex", justifyContent: "flex-end", marginBottom: "10px" }}
+      >
+        <button onClick={() => handleChangePackageGlobal(id)}>Đổi gói</button>
+      </div>
+
       <table className="table">
         <thead>
           <tr>
@@ -47,32 +63,18 @@ export default function PurchasesPage() {
               <td colSpan="6">Không có purchase nào</td>
             </tr>
           ) : (
-            purchases.map((p, idx) => {
-              const expired = !p.remaining_days || p.remaining_days <= 0;
-              const isLatest = idx === 0;
-              return (
-                <tr key={p.purchase_id}>
-                  <td>{idx + 1}</td>
-                  <td>{p.package_name}</td>
-                  <td>{new Date(p.created_at).toLocaleDateString("vi-VN")}</td>
-                  <td>{p.status}</td>
-                  <td>{p.remaining_days ?? "-"}</td>
-                  <td>
-                    {isLatest && expired && (
-                      <button onClick={() => handleRenew(p.purchase_id)}>Gia hạn</button>
-                    )}
-                    {isLatest && (
-                      <button
-                        disabled={!expired}
-                        onClick={() => handleChangePackage(p.purchase_id)}
-                      >
-                        Đổi gói
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              );
-            })
+            purchases.map((p, idx) => (
+              <tr key={p.id}>
+                <td>{idx + 1}</td>
+                <td>{p.package_name}</td>
+                <td>{new Date(p.created_at).toLocaleDateString("vi-VN")}</td>
+                <td>{p.status}</td>
+                <td>{p.remaining_days ?? "-"}</td>
+                <td>
+                  <button onClick={() => handleRenewClick(p)}>Gia hạn</button>
+                </td>
+              </tr>
+            ))
           )}
         </tbody>
       </table>

@@ -13,6 +13,10 @@ import adminPurchasesRoutes from "./routes/adminPurchasesRoutes.js";
 import learnerRoutes from "./routes/learnerRoutes.js";
 import mentorRoutes from "./routes/mentorRoutes.js";
 import adminReportRoutes from "./routes/adminReportsRoutes.js";
+
+// Controllers
+import { getLearnersByMentor } from "./controllers/mentorController.js";
+
 // Middleware
 import { errorHandler } from "./middleware/errorHandler.js";
 import { requestLogger } from "./middleware/requestLogger.js";
@@ -36,29 +40,35 @@ app.use("/api/admin/support", adminSupportRoutes);
 app.use("/api/admin/packages", adminPackagesRoutes);
 app.use("/api/admin/purchases", adminPurchasesRoutes);
 app.use("/api/admin/reports", adminReportRoutes);
-// mount đúng prefix cho admin
-app.use("/api/admin", adminReportRoutes);
-// Learner routes (dùng learner_id)
+
+// Learner routes
 app.use("/api/learners", learnerRoutes);
 
-// Mentor routes (dùng mentor_id)
+// Mentor routes
 app.use("/api/mentors", mentorRoutes);
 
-// Public packages (nếu cần)
+// Public packages
 app.use("/api/packages", adminPackagesRoutes);
-app.use("/api/admin/learners", learnerRoutes);
+
+// Endpoint: learners của mentor
+app.get("/api/admin/mentors/:id/learners", getLearnersByMentor);
+
 // Error handler cuối cùng
 app.use(errorHandler);
-// report cho cả mentor và learner
-app.use("/api", adminReportRoutes);
+// Middleware log request
+app.use((req, res, next) => {
+  console.log("Incoming: - server.js:60", req.method, req.url);
+  next();
+});
+
 // Start server sau khi seed admin
 seedAdmins()
   .then(() => {
     app.listen(PORT, () => {
-      console.log(`✅ Server running on http://localhost:${PORT} - server.js:58`);
+      console.log(`✅ Server running on http://localhost:${PORT} - server.js:68`);
     });
   })
   .catch((err) => {
-    console.error("❌ Seed admin error: - server.js:62", err);
+    console.error("❌ Seed admin error: - server.js:72", err);
     process.exit(1);
   });

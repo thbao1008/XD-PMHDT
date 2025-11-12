@@ -1,5 +1,11 @@
 ﻿import pool from "../config/db.js";
-import { createReport } from "./reportController.js"; 
+import {
+  getMentorSessions,
+  upsertDraft,
+  deleteDraftById,
+  finalizeDraft
+} from "../services/mentorService.js";
+// ================== CRUD Mentor ==================
 
 // Tạo mentor mới
 export async function createMentor(req, res) {
@@ -24,7 +30,7 @@ export async function createMentor(req, res) {
       userId
     });
   } catch (err) {
-    console.error("Error createMentor: - mentorController.js:27", err);
+    console.error("Error createMentor: - mentorController.js:33", err);
     res.status(500).json({ message: "Server error" });
   }
 }
@@ -43,7 +49,7 @@ export async function getAllMentors(req, res) {
     `);
     res.json({ mentors: result.rows });
   } catch (err) {
-    console.error("Error getAllMentors: - mentorController.js:46", err);
+    console.error("Error getAllMentors: - mentorController.js:52", err);
     res.status(500).json({ message: "Server error" });
   }
 }
@@ -65,7 +71,7 @@ export async function getMentorById(req, res) {
     if (!result.rows[0]) return res.status(404).json({ message: "Mentor not found" });
     res.json(result.rows[0]);
   } catch (err) {
-    console.error("Error getMentorById: - mentorController.js:68", err);
+    console.error("Error getMentorById: - mentorController.js:74", err);
     res.status(500).json({ message: "Server error" });
   }
 }
@@ -101,7 +107,7 @@ export async function updateMentor(req, res) {
 
     res.json({ message: "Mentor updated" });
   } catch (err) {
-    console.error("Error updateMentor: - mentorController.js:104", err);
+    console.error("Error updateMentor: - mentorController.js:110", err);
     res.status(500).json({ message: "Server error" });
   }
 }
@@ -113,12 +119,12 @@ export async function removeMentor(req, res) {
     await pool.query("DELETE FROM mentors WHERE id=$1", [id]);
     res.json({ message: "Mentor deleted" });
   } catch (err) {
-    console.error("Error removeMentor: - mentorController.js:116", err);
+    console.error("Error removeMentor: - mentorController.js:122", err);
     res.status(500).json({ message: "Server error" });
   }
 }
 
-// Learners của mentor (dùng view để lấy tình trạng gói)
+// ================== Learners của mentor ==================
 export async function getLearnersByMentor(req, res) {
   const { id } = req.params; // mentor_id
   try {
@@ -136,19 +142,31 @@ export async function getLearnersByMentor(req, res) {
              lp.status AS package_status,
              lp.expiry_date,
              lp.days_left,
-             l.user_id              -- lấy user_id từ bảng learners
+             l.user_id,
+             r.id            AS report_id,
+             r.content       AS report,
+             r.status        AS report_status,
+             r.reply         AS report_reply,
+             r.reply_by,
+             r.reply_at
       FROM learner_package_view lp
       JOIN learners l ON lp.learner_id = l.id
+      LEFT JOIN reports r 
+             ON r.target_id = l.user_id 
+            AND r.reporter_id = (
+              SELECT user_id FROM mentors WHERE id = $1
+            )
       WHERE lp.mentor_id = $1
       ORDER BY lp.learner_id DESC
     `, [id]);
 
     res.json({ learners: result.rows });
   } catch (err) {
-    console.error("Error getLearnersByMentor: - mentorController.js:148", err);
+    console.error("Error getLearnersByMentor: - mentorController.js:165", err);
     res.status(500).json({ message: "Server error" });
   }
 }
+
 // Map user -> mentor
 export async function getMentorByUserId(req, res) {
   const { userId } = req.params;
@@ -168,17 +186,33 @@ export async function getMentorByUserId(req, res) {
     }
     res.json(result.rows[0]);
   } catch (err) {
-    console.error("Error getMentorByUserId: - mentorController.js:171", err);
+    console.error("Error getMentorByUserId: - mentorController.js:189", err);
     res.status(500).json({ message: "Server error" });
   }
 }
 
-// Mentor tạo report
+// ================== Report ==================
 export async function mentorCreateReport(req, res) {
-  return createReport(req, res);
+  const { reporter_id, target_id, content } = req.body;
+  try {
+    const result = await pool.query(`
+      INSERT INTO reports (reporter_id, target_id, content, status, created_at)
+      VALUES ($1, $2, $3, 'pending', NOW())
+      RETURNING *
+    `, [reporter_id, target_id, content]);
+
+    res.json({ success: true, report: result.rows[0] });
+  } catch (err) {
+    if (err.code === '23505') {
+      // unique_violation
+      return res.status(400).json({ success: false, message: "Bạn đã report học viên này rồi" });
+    }
+    console.error("Error mentorCreateReport: - mentorController.js:210", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
 }
 
-// Cập nhật ghi chú learner
+// ================== Note ==================
 export async function updateLearnerNote(req, res) {
   const { learnerId } = req.params;
   const { note } = req.body;
@@ -194,7 +228,62 @@ export async function updateLearnerNote(req, res) {
 
     res.json({ success: true, learner: result.rows[0] });
   } catch (err) {
-    console.error("Error updateLearnerNote: - mentorController.js:197", err);
+    console.error("Error updateLearnerNote: - mentorController.js:231", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+}
+// Chức năng chính của mentor (mentorservvice)
+// Cập nhập lịch mentor
+
+
+
+
+
+export async function getSessions(req, res) {
+  try {
+    const mentorId = req.params.id;
+    const { status } = req.query;
+    const sessions = await getMentorSessions(mentorId, status);
+    res.json({ success: true, sessions });
+  } catch (err) {
+    console.error("Error getSessions: - mentorController.js:249", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+}
+
+// Lưu/ghi đè draft
+export async function upsertDraftSessions(req, res) {
+  try {
+    const mentorId = req.params.id;
+    const { sessions } = req.body;
+    const draft = await upsertDraft(mentorId, sessions);
+    res.json({ success: true, draft });
+  } catch (err) {
+    console.error("Error upsertDraftSessions: - mentorController.js:262", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+}
+
+export async function deleteDraftSession(req, res) {
+  try {
+    const { id: mentorId, sessionId } = req.params;
+    await deleteDraftById(mentorId, sessionId);
+    const draft = await getMentorSessions(mentorId, "draft");
+    res.json({ success: true, draft });
+  } catch (err) {
+    console.error("Error deleteDraftSession: - mentorController.js:274", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+}
+
+export async function finalizeSchedule(req, res) {
+  try {
+    const mentorId = req.params.id;
+    const { sessions } = req.body;
+    const final = await finalizeDraft(mentorId, sessions);
+    res.json({ success: true, final });
+  } catch (err) {
+    console.error("Error finalizeSchedule: - mentorController.js:286", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 }

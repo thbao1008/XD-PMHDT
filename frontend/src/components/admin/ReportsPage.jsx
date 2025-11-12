@@ -1,20 +1,18 @@
 ﻿import React, { useEffect, useState } from "react";
-import api from "../../api";
-import { 
-  FaUserGraduate, 
-  FaChalkboardTeacher, 
-  FaCommentDots, 
-  FaSearch 
-} from "react-icons/fa";
+import api from "../../api.js";
+import { FaUserGraduate, FaChalkboardTeacher, FaCommentDots, FaSearch } from "react-icons/fa";
 import "../../styles/reportpage.css";
+import UserForPage from "../admin/UserForPage.jsx";
 
-export default function ReportPage() {
-  const [filters, setFilters] = useState({ from: "", to: "", status: "" });
+export default function ReportsPage() {
+  const [filters, setFilters] = useState({ from: "", to: "", status: "pending" });
   const [summary, setSummary] = useState({ total_learners: 0, total_mentors: 0, total_reports: 0 });
   const [feedbacks, setFeedbacks] = useState([]);
   const [progress, setProgress] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedUserId, setSelectedUserId] = useState(null);
 
+  // Load summary
   const fetchSummary = async () => {
     try {
       const params = {};
@@ -29,10 +27,12 @@ export default function ReportPage() {
     }
   };
 
-  const fetchReports = async () => {
+  // Load reports
+  const fetchReports = async (status) => {
     try {
       const params = {};
-      if (filters.status) params.status = filters.status;
+      if (status) params.status = status;
+      else if (filters.status) params.status = filters.status;
       const fb = await api.get("/admin/reports", { params });
       setFeedbacks(fb.data.reports || []);
     } catch (err) {
@@ -40,6 +40,7 @@ export default function ReportPage() {
     }
   };
 
+  // Load learner progress
   const fetchProgress = async () => {
     try {
       if (!searchQuery) return;
@@ -50,10 +51,20 @@ export default function ReportPage() {
     }
   };
 
-  const changeStatus = async (id, newStatus) => {
+  // Change report status
+  const changeStatus = async (reportId, newStatus) => {
     try {
-      await api.put(`/admin/reports/${id}/status`, { status: newStatus });
-      fetchReports(); // reload lại danh sách sau khi cập nhật
+      const res = await api.patch(`/admin/reports/${reportId}/status`, {
+        status: newStatus,
+        replyContent: newStatus === "resolved" ? "Học viên đã được xử lý theo quy định." : "",
+        actorRole: "admin"
+      });
+      console.log("✅ Report updated:", res.data.report);
+
+      // cập nhật lại state FE
+      setFeedbacks(prev =>
+        prev.map(r => r.report_id === reportId ? res.data.report : r)
+      );
     } catch (err) {
       console.error("❌ Lỗi cập nhật trạng thái:", err);
     }
@@ -61,41 +72,43 @@ export default function ReportPage() {
 
   useEffect(() => {
     fetchSummary();
-    fetchReports();
+    fetchReports(filters.status);
   }, []);
 
   return (
     <div className="report-page">
-      <h1>📊 Báo cáo học viên, giảng viên & feedback</h1>
+      <h1>Báo cáo học viên, giảng viên & feedback</h1>
 
       {/* Bộ lọc thời gian */}
-      <div className="filters">
-        <label>Từ ngày:
-          <input type="date" value={filters.from} onChange={e => setFilters({ ...filters, from: e.target.value })} />
-        </label>
-        <label>Đến ngày:
-          <input type="date" value={filters.to} onChange={e => setFilters({ ...filters, to: e.target.value })} />
-        </label>
-        <button onClick={fetchSummary}>Áp dụng</button>
-      </div>
+<div className="filters">
+  <label>Từ ngày:
+    <input
+      type="date"
+      value={filters.from}
+      onChange={e => setFilters({ ...filters, from: e.target.value })}
+    />
+  </label>
+  <label>Đến ngày:
+    <input
+      type="date"
+      value={filters.to}
+      onChange={e => {
+        const newFilters = { ...filters, to: e.target.value };
+        setFilters(newFilters);
+        // Khi chọn ngày đến thì tự động load summary
+        if (newFilters.from && newFilters.to) {
+          fetchSummary();
+        }
+      }}
+    />
+  </label>
+</div>
 
       {/* Cards tổng quan */}
       <div className="summary-cards" style={{ display: "flex", gap: "20px", margin: "20px 0" }}>
-        <div className="card">
-          <FaUserGraduate size={30} color="blue" />
-          <p>Học viên</p>
-          <h3>{summary.total_learners}</h3>
-        </div>
-        <div className="card">
-          <FaChalkboardTeacher size={30} color="green" />
-          <p>Mentor</p>
-          <h3>{summary.total_mentors}</h3>
-        </div>
-        <div className="card">
-          <FaCommentDots size={30} color="orange" />
-          <p>Tố cáo</p>
-          <h3>{summary.total_reports}</h3>
-        </div>
+        <div className="card"><FaUserGraduate size={30} color="blue" /><p>Học viên</p><h3>{summary.total_learners}</h3></div>
+        <div className="card"><FaChalkboardTeacher size={30} color="green" /><p>Mentor</p><h3>{summary.total_mentors}</h3></div>
+        <div className="card"><FaCommentDots size={30} color="orange" /><p>Tố cáo</p><h3>{summary.total_reports}</h3></div>
       </div>
 
       {/* Tiến độ đào tạo */}
@@ -143,56 +156,75 @@ export default function ReportPage() {
         <h2>Phản hồi & Tố cáo</h2>
         <div className="filters">
           <select
-          name="status-select"
-          value={filters.status}
-          onChange={e => {
-            const newStatus = e.target.value;
-            setFilters({ ...filters, status: newStatus });
-            fetchReports(); // tự gọi lại khi đổi trạng thái
-          }}
-        >
-          <option value="">Tất cả</option>
-          <option value="pending">Pending</option>
-          <option value="resolved">Resolved</option>
-          <option value="dismissed">Dismissed</option>
-        </select>
+            name="status-select"
+            value={filters.status}
+            onChange={e => {
+              const newStatus = e.target.value;
+              setFilters({ ...filters, status: newStatus });
+              fetchReports(newStatus);
+            }}
+          >
+            <option value="pending">Pending</option>
+            <option value="resolved">Resolved</option>
+            <option value="dismissed">Dismissed</option>
+          </select>
         </div>
 
         <table className="table">
           <thead>
             <tr>
-              <th>User</th>
+              <th>Người dùng</th>
               <th>Nội dung</th>
               <th>Trạng thái</th>
               <th>Ngày gửi</th>
+              <th>Phản hồi admin</th>
             </tr>
           </thead>
           <tbody>
             {feedbacks.map(f => (
               <tr key={f.report_id}>
                 <td className="sender-target">
-  <strong>Reporter:</strong> {f.reporter_name} <br />
-  <strong>Target:</strong> {f.target_name}
-</td>
+                  <strong>Reporter:</strong>{" "}
+                  <span className="clickable" onClick={() => setSelectedUserId(f.reporter_id)}>
+                    {f.reporter_name} - {f.reporter_role}
+                  </span>
+                  <br />
+                  <strong>Target:</strong>{" "}
+                  <span className="clickable" onClick={() => setSelectedUserId(f.target_id)}>
+                    {f.target_name} - {f.target_role}
+                  </span>
+                </td>
 
-                <td>{f.content}</td>
+                <td style={{ whiteSpace: "pre-line" }}>{f.content}</td>
                 <td>
                   <select
                     value={f.status}
                     onChange={e => changeStatus(f.report_id, e.target.value)}
                     style={{ padding: "4px", borderRadius: "4px" }}
+                    disabled={f.status !== "pending"}
                   >
                     <option value="pending">Pending</option>
                     <option value="resolved">Resolved</option>
                     <option value="dismissed">Dismissed</option>
                   </select>
                 </td>
-                <td>{new Date(f.created_at).toLocaleDateString("vi-VN")}</td>
+                <td>{new Date(f.created_at).toLocaleString("vi-VN")}</td>
+                <td style={{ whiteSpace: "pre-line" }}>
+                  {f.reply ? f.reply : <span className="placeholder">Chưa có phản hồi</span>}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </section>
+
+      {/* Modal hiển thị thông tin user qua UserForPage */}
+      {selectedUserId && (
+        <UserForPage
+          userId={selectedUserId}
+          onClose={() => setSelectedUserId(null)}
+        />
+      )}
     </div>
   );
 }

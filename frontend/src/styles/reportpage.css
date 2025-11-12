@@ -1,20 +1,22 @@
+/* Layout chính */
 .report-page {
   padding: 20px;
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-  background: #f5f7fa;
+  background-color: #f5f7fa;
   min-height: 100vh;
+  color: #333;
 }
 
 .report-page h1 {
   font-size: 28px;
   margin-bottom: 20px;
-  color: #333;
 }
 
+/* Bộ lọc */
 .filters {
   display: flex;
-  gap: 15px;
   align-items: center;
+  gap: 15px;
   background: #fff;
   padding: 15px;
   border-radius: 8px;
@@ -29,7 +31,8 @@
   color: #555;
 }
 
-.filters input, .filters select {
+.filters input,
+.filters select {
   padding: 6px 10px;
   border: 1px solid #ccc;
   border-radius: 6px;
@@ -49,6 +52,7 @@
   background: #005fa3;
 }
 
+/* Cards tổng quan */
 .summary-cards {
   display: flex;
   gap: 20px;
@@ -80,6 +84,7 @@
   color: #222;
 }
 
+/* Section */
 section {
   background: #fff;
   padding: 20px;
@@ -91,15 +96,16 @@ section {
 section h2 {
   margin-bottom: 15px;
   font-size: 20px;
-  color: #333;
 }
 
+/* Table */
 .table {
   width: 100%;
   border-collapse: collapse;
 }
 
-.table th, .table td {
+.table th,
+.table td {
   padding: 10px;
   border-bottom: 1px solid #eee;
   text-align: left;
@@ -112,4 +118,38 @@ section h2 {
 
 .table tr:hover {
   background: #fafafa;
+}
+
+/* Thêm style cho ô người gửi/người nhận và trạng thái */
+.sender-target {
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+  color: #444;
+}
+
+.sender-target strong {
+  color: #0078d4;
+}
+
+.status-select {
+  padding: 6px 10px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.status-select:hover {
+  border-color: #0078d4;
+}
+.reported-label {
+  color: green;
+  font-weight: bold;
+}
+
+.reported-label.clickable {
+  cursor: pointer;
+  text-decoration: underline;
 }

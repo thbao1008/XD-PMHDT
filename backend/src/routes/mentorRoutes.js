@@ -2,18 +2,22 @@ import express from "express";
 import {
   createMentor,
   getAllMentors,
-  getMentorById,   
+  getMentorById,
   updateMentor,
   removeMentor,
   getLearnersByMentor,
   getMentorByUserId,
-  updateLearnerNote
+  updateLearnerNote,
+  getSessions,
+  upsertDraftSessions,
+  deleteDraftSession,
+  finalizeSchedule,
+  mentorCreateReport
 } from "../controllers/mentorController.js";
-
-import { createReport } from "../controllers/reportController.js"; 
 
 const router = express.Router();
 
+// Mentor CRUD
 router.post("/", createMentor);
 router.get("/", getAllMentors);
 router.get("/:id", getMentorById);
@@ -22,11 +26,16 @@ router.delete("/:id", removeMentor);
 router.get("/:id/learners", getLearnersByMentor);
 router.get("/by-user/:userId", getMentorByUserId);
 
-// Mentor cập nhật ghi chú cho learner
+// Sessions
+router.get("/:id/sessions", getSessions); // ?status=draft|final
+router.post("/:id/sessions/draft", upsertDraftSessions); // ghi đè toàn bộ draft
+router.delete("/:id/sessions/draft/:sessionId", deleteDraftSession); // xóa draft theo id
+router.post("/:id/sessions/finalize", finalizeSchedule); // chốt lịch
+
+// Note
 router.put("/learners/:learnerId/note", updateLearnerNote);
 
-// Mentor gửi report về learner
-router.post("/", createReport);
-export default router;
+// Report
+router.post("/reports", mentorCreateReport);
 
-  
+export default router;

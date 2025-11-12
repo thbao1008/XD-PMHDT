@@ -157,21 +157,29 @@ export async function remove(req, res) {
 
 // Lấy gói gần nhất
 export async function getLatestPurchase(req, res) {
-  const { id } = req.params;
   try {
-    const result = await pool.query(`
-      SELECT *
-      FROM purchase_details
-      WHERE learner_id = $1
-      ORDER BY created_at DESC
-      LIMIT 1
-    `, [id]);
-    res.json({ purchase: result.rows[0] || null });
+    const { id } = req.params; 
+    const result = await pool.query(
+      `SELECT *
+       FROM learner_package_view
+       WHERE learner_id = $1
+       ORDER BY purchase_id DESC
+       LIMIT 1`,
+      [id]
+    );
+
+    // Nếu không có purchase thì trả về null thay vì 404
+    if (!result.rows[0]) {
+      return res.json({ success: true, purchase: null });
+    }
+
+    res.json({ success: true, purchase: result.rows[0] });
   } catch (err) {
-    console.error("Error learnerController.getLatestPurchase: - learnerController.js:171", err);
-    res.status(500).json({ message: "Server error" });
+    console.error("Error learnerController.getLatestPurchase: - learnerController.js:178", err);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 }
+
 // Cập nhật ghi chú cho learner
 export async function updateLearnerNote(req, res) {
   const { learnerId } = req.params;
@@ -183,7 +191,7 @@ export async function updateLearnerNote(req, res) {
     );
     res.json({ success: true, learner: result.rows[0] });
   } catch (err) {
-    console.error("Error updateLearnerNote:  mentorController.js - learnerController.js:186", err);
+    console.error("Error updateLearnerNote:  mentorController.js - learnerController.js:194", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 }
@@ -200,7 +208,7 @@ export async function createReport(req, res) {
     );
     res.status(201).json({ success: true, report: result.rows[0] });
   } catch (err) {
-    console.error("Error createReport:  mentorController.js - learnerController.js:203", err);
+    console.error("Error createReport:  mentorController.js - learnerController.js:211", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 }
