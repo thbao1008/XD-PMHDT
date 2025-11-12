@@ -1,7 +1,6 @@
 ﻿import bcrypt from "bcryptjs";
 import pool from "../config/db.js";
 import {
-  findUserById,
   findUserByIdentifier,
   createUserInDb,
   updateUserInDb,
@@ -9,40 +8,63 @@ import {
   toggleUserStatusInDb
 } from "../models/userModel.js";
 
-// Lấy danh sách user (JOIN với learners + view để có learner_id và tình trạng gói)
+// Lấy danh sách user (JOIN learners + view + mentor)
 export async function listUsers(req, res) {
   try {
     const result = await pool.query(`
       SELECT 
-        u.id, u.name, u.email, u.phone, u.dob, u.role, u.status, u.created_at,
-        l.id AS learner_id,
-        lp.package_name,
-        lp.status AS package_status,
-        lp.expiry_date,
-        lp.days_left
-      FROM users u
-      LEFT JOIN learners l ON l.user_id = u.id
-      LEFT JOIN learner_package_view lp ON lp.learner_id = l.id
-      ORDER BY u.id DESC
+    u.id, u.name, u.email, u.phone, u.dob, u.role, u.status, u.created_at,
+    l.id AS learner_id,
+    lp.package_name,
+    lp.status AS package_status,
+    lp.expiry_date,
+    lp.days_left,
+    mu.id AS mentor_id,
+    mu.name AS mentor_name
+  FROM users u
+  LEFT JOIN learners l ON l.user_id = u.id
+  LEFT JOIN learner_package_view lp ON lp.learner_id = l.id
+  LEFT JOIN mentors m ON l.mentor_id = m.id
+  LEFT JOIN users mu ON m.user_id = mu.id
+  ORDER BY u.id DESC
     `);
 
-    const safe = result.rows.map(({ password, ...rest }) => rest);
-    return res.json({ success: true, users: safe });
+    return res.json({ success: true, users: result.rows });
   } catch (err) {
-    console.error("listUsers error - adminController.js:32", err);
+    console.error("listUsers error - adminController.js:34", err);
     return res.status(500).json({ success: false, message: "Server error" });
   }
 }
 
-// Lấy user theo id
+// Lấy user theo id (JOIN learners + view + mentor)
 export async function getUser(req, res) {
   try {
-    const user = await findUserById(req.params.id);
-    if (!user) return res.status(404).json({ success: false, message: "Not found" });
-    const { password, ...safe } = user;
-    return res.json({ success: true, user: safe });
+    const { id } = req.params;
+    const result = await pool.query(`
+      SELECT 
+    u.id, u.name, u.email, u.phone, u.dob, u.role, u.status, u.created_at,
+    l.id AS learner_id,
+    lp.package_name,
+    lp.status AS package_status,
+    lp.expiry_date,
+    lp.days_left,
+    mu.id AS mentor_id,
+    mu.name AS mentor_name
+  FROM users u
+  LEFT JOIN learners l ON l.user_id = u.id
+  LEFT JOIN learner_package_view lp ON lp.learner_id = l.id
+  LEFT JOIN mentors m ON l.mentor_id = m.id
+  LEFT JOIN users mu ON m.user_id = mu.id
+  WHERE u.id = $1
+    `, [id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: "Not found" });
+    }
+
+    return res.json({ success: true, user: result.rows[0] });
   } catch (err) {
-    console.error("getUser error - adminController.js:45", err);
+    console.error("getUser error - adminController.js:67", err);
     return res.status(500).json({ success: false, message: "Server error" });
   }
 }
@@ -108,7 +130,7 @@ export async function createUser(req, res) {
     if (err.code === "23505") {
       return res.status(409).json({ success: false, message: "Email hoặc SĐT đã tồn tại" });
     }
-    console.error("createUser error - adminController.js:111", err);
+    console.error("createUser error - adminController.js:133", err);
     return res.status(500).json({ success: false, message: "Server error" });
   }
 }
@@ -131,7 +153,7 @@ export async function updateUser(req, res) {
     const { password: _, ...safe } = updated;
     return res.json({ success: true, user: safe });
   } catch (err) {
-    console.error("updateUser error - adminController.js:134", err);
+    console.error("updateUser error - adminController.js:156", err);
     return res.status(500).json({ success: false, message: "Server error" });
   }
 }
@@ -143,7 +165,7 @@ export async function deleteUser(req, res) {
     if (!deleted) return res.status(404).json({ success: false, message: "Not found" });
     return res.json({ success: true });
   } catch (err) {
-    console.error("deleteUser error - adminController.js:146", err);
+    console.error("deleteUser error - adminController.js:168", err);
     return res.status(500).json({ success: false, message: "Server error" });
   }
 }
@@ -152,13 +174,40 @@ export async function deleteUser(req, res) {
 export async function toggleUserStatus(req, res) {
   try {
     const { id } = req.params;
+``
+    // Đổi trạng thái user
     const updated = await toggleUserStatusInDb(id);
     if (!updated) return res.status(404).json({ success: false, message: "Not found" });
+
+    // Nếu là learner thì cập nhật purchases
+    if (updated.role === "learner") {
+      if (updated.status === "banned") {
+        // Khi Ban → chuyển gói học sang paused
+        await pool.query(
+          `UPDATE purchases 
+           SET status = 'paused'
+           WHERE learner_id = (
+             SELECT id FROM learners WHERE user_id = $1
+           ) AND status = 'active'`,
+          [updated.id]
+        );
+      } else if (updated.status === "active") {
+        // Khi Unban → khôi phục gói học từ paused về active
+        await pool.query(
+          `UPDATE purchases 
+           SET status = 'active'
+           WHERE learner_id = (
+             SELECT id FROM learners WHERE user_id = $1
+           ) AND status = 'paused'`,
+          [updated.id]
+        );
+      }
+    }
 
     const { password, ...safe } = updated;
     return res.json({ success: true, user: safe });
   } catch (err) {
-    console.error("toggleUserStatus error - adminController.js:161", err);
+    console.error("toggleUserStatus error - adminController.js:210", err);
     return res.status(500).json({ success: false, message: "Server error" });
   }
 }

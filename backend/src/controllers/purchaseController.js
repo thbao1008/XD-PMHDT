@@ -8,15 +8,15 @@ export async function getAllPurchases(req, res) {
     if (phone) {
       result = await pool.query(
         `SELECT * 
-         FROM purchase_details 
-         WHERE learner_phone = $1 
+         FROM learner_package_view 
+         WHERE phone = $1 
          ORDER BY created_at DESC`,
         [phone]
       );
     } else {
       result = await pool.query(
         `SELECT * 
-         FROM purchase_details 
+         FROM learner_package_view 
          ORDER BY created_at DESC`
       );
     }
@@ -32,15 +32,29 @@ export async function listLearnerPurchases(req, res) {
   const { learnerId } = req.params;
   try {
     const result = await pool.query(
-      `SELECT * 
-       FROM purchase_details 
-       WHERE learner_id = $1 
-       ORDER BY created_at DESC`,
+      `SELECT 
+    p.id,
+    pk.name AS package_name,
+    p.created_at,
+    p.status,
+    GREATEST(
+      pk.duration_days + COALESCE(p.extra_days, 0)
+      - EXTRACT(DAY FROM (NOW() - p.created_at)),
+      0
+    ) AS remaining_days,
+    u.name AS learner_name,
+    u.phone AS learner_phone
+FROM purchases p
+JOIN packages pk ON p.package_id = pk.id
+JOIN learners l ON p.learner_id = l.id
+JOIN users u ON l.user_id = u.id
+WHERE p.learner_id = $1
+ORDER BY p.created_at DESC`,
       [learnerId]
     );
     res.json({ success: true, purchases: result.rows });
   } catch (err) {
-    console.error("Error listLearnerPurchases: - purchaseController.js:43", err);
+    console.error("Error listLearnerPurchases: - purchaseController.js:57", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 }
@@ -67,13 +81,13 @@ export async function createNewPurchase(req, res) {
 
     const purchaseId = result.rows[0].id;
     const detail = await pool.query(
-      "SELECT * FROM purchase_details WHERE purchase_id=$1",
+      `SELECT * FROM learner_package_view WHERE purchase_id=$1`,
       [purchaseId]
     );
 
     res.status(201).json({ success: true, purchase: detail.rows[0] });
   } catch (err) {
-    console.error("Error createNewPurchase: - purchaseController.js:76", err);
+    console.error("Error createNewPurchase: - purchaseController.js:90", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 }
@@ -93,13 +107,13 @@ export async function renewPurchaseController(req, res) {
     );
 
     const detail = await pool.query(
-      "SELECT * FROM purchase_details WHERE purchase_id=$1",
+      `SELECT * FROM learner_package_view WHERE purchase_id=$1`,
       [id]
     );
 
     res.json({ success: true, purchase: detail.rows[0], message: "Gia hạn thành công" });
   } catch (err) {
-    console.error("Error renewPurchaseController: - purchaseController.js:102", err);
+    console.error("Error renewPurchaseController: - purchaseController.js:116", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 }
@@ -129,13 +143,13 @@ export async function changePackageController(req, res) {
     );
 
     const detail = await pool.query(
-      "SELECT * FROM purchase_details WHERE purchase_id=$1",
+      `SELECT * FROM learner_package_view WHERE purchase_id=$1`,
       [id]
     );
 
     res.json({ success: true, purchase: detail.rows[0], message: "Đổi gói thành công" });
   } catch (err) {
-    console.error("Error changePackageController: - purchaseController.js:138", err);
+    console.error("Error changePackageController: - purchaseController.js:152", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 }

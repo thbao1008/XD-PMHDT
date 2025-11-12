@@ -1,14 +1,14 @@
 ﻿import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../../api";
-import Modal from "../common/Modal.jsx";
+import UserForPage from "./UserForPage.jsx";
 import { useExistenceCheck } from "../../hooks/useExistenceCheck";
 import {
   FiUser, FiMail, FiLock, FiPhone, FiCalendar, FiUsers, FiPackage,
   FiTrash2, FiPlus, FiLoader, FiAlertTriangle, FiCheckCircle
 } from "react-icons/fi";
 import PurchasesList from "./PurchasesList.jsx";
-
+import Modal from "../common/Modal.jsx";  
 import thumucIcon from "../../assets/icons/thumuc.png";
 import usersIcon from "../../assets/icons/users.png";
 
@@ -106,9 +106,16 @@ useEffect(() => {
   if (selectedUser && selectedUser.role?.toUpperCase() === "LEARNER") {
     const learnerId = selectedUser.learner_id;
     if (!learnerId) return;
-    api.get(`/admin/learners/${learnerId}/latest-purchase`)
-      .then(res => setLatestPurchase(res.data.purchase || null))
-      .catch(err => console.error("❌ Lỗi load latest purchase:", err));
+
+    api.get(`/learners/${learnerId}/latest-purchase`)
+      .then(res => {
+        // Nếu không có purchase thì set null
+        setLatestPurchase(res.data.purchase || null);
+      })
+      .catch(err => {
+        console.error("❌ Lỗi load latest purchase:", err);
+        setLatestPurchase(null);
+      });
   }
 }, [selectedUser]);
 
@@ -235,125 +242,85 @@ useEffect(() => {
         </div>
 
         {/* Table */}
-        <table className="table">
-          <thead>
-            <tr>
-              <th>STT</th>
-              <th>Tên</th>
-              <th>Số điện thoại</th>
-              <th>Email</th>
-              <th>Vai trò</th>
-              {roleFilter === "LEARNER" && <th>Tình trạng gói</th>}
-              <th>Thao tác</th>
-            </tr>
-          </thead>
-          <tbody>
-            {paginated.length === 0 ? (
-              <tr><td colSpan="7">Không tìm thấy người dùng nào.</td></tr>
-            ) : (
-              paginated.map((user, index) => (
-                <tr key={user.id} onClick={() => setSelectedUser(user)} style={{cursor:"pointer"}}>
-                  <td>{start + index + 1}</td>
-                  <td>{capitalizeWords(user.name)}</td>
-                  <td>{user.phone || "-"}</td>
-                  <td>{user.email}</td>
-                  <td>{capitalizeWords(user.role)}</td>
-                  {roleFilter === "LEARNER" && (
-                    <td>
-  {user.package_status 
-    ? (user.package_status === "active" ? "Còn hạn" : "Hết hạn") 
-    : "Chưa có"}
-</td>
-
-                  )}
-                  <td>
-                    <button
-                      className="btn-action"
-                      onClick={(e) => { e.stopPropagation(); toggleStatus(user.id, user.status); }}
-                    >
-                      {user.status === "active" ? "Ban" : "Unban"}
-                    </button>
-                    <button
-                      className="btn-action"
-                      onClick={(e) => { e.stopPropagation(); deleteUser(user.id); }}
-                    >
-                      Xóa
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-
-        {/* Pagination */}
-        <div className="pagination">
-          <button
-            className="page-btn btn btn-secondary btn-small"
-            disabled={page === 1}
-            onClick={() => setPage((p) => p - 1)}
-          >
-            ←
-          </button>
-          <span>Trang {page} / {totalPages}</span>
-          <button
-            className="page-btn btn btn-secondary btn-small"
-            disabled={page === totalPages}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            →
-          </button>
-        </div>
-      </div>
-
-        {selectedUser && (
-          <Modal title="Thông tin người dùng" onClose={() => setSelectedUser(null)}>
-            <div style={{ display: "flex", gap: 16 }}>
-              <div style={{ flex: 1 }}>
-                <p><strong>Tên:</strong> {capitalizeWords(selectedUser.name)}</p>
-                <p><strong>Email:</strong> {selectedUser.email}</p>
-                <p><strong>SĐT:</strong> {selectedUser.phone || "-"}</p>
-                <p><strong>Ngày sinh:</strong> {selectedUser.dob ? new Date(selectedUser.dob).toLocaleDateString("vi-VN") : "-"}</p>
-                <p><strong>Vai trò:</strong> {capitalizeWords(selectedUser.role)}</p>
-
-               
-                {selectedUser.role?.toUpperCase() === "LEARNER" && (
-  <div style={{ marginTop: "1rem" }}>
-    <h4>Gói học đã đăng ký</h4>
-
-    {latestPurchase ? (
-      <>
-        <p>
-          <strong>Tên gói:</strong> {latestPurchase.package_name}{" "}
-          <span style={{ color: latestPurchase.remaining_days > 0 ? "green" : "red" }}>
-            {latestPurchase.remaining_days > 0 ? "Còn hạn" : "Hết hạn"}
-          </span>
-        </p>
-      </>
+<table className="table">
+  <thead>
+    <tr>
+      <th>STT</th>
+      <th>Tên</th>
+      <th>Số điện thoại</th>
+      <th>Email</th>
+      <th>Vai trò</th>
+      {roleFilter === "LEARNER" && <th>Tình trạng gói</th>}
+      <th>Tình trạng</th>
+    </tr>
+  </thead>
+  <tbody>
+    {paginated.length === 0 ? (
+      <tr><td colSpan="7">Không tìm thấy người dùng nào.</td></tr>
     ) : (
-      <p className="muted">Chưa có gói học nào</p>
+      paginated.map((user, index) => (
+        <tr
+          key={user.id}
+          onClick={() => setSelectedUser(user)}
+          style={{ cursor: "pointer" }}
+        >
+          <td>{start + index + 1}</td>
+          <td>{capitalizeWords(user.name)}</td>
+          <td>{user.phone || "-"}</td>
+          <td>{user.email}</td>
+          <td>{capitalizeWords(user.role)}</td>
+
+          {roleFilter === "LEARNER" && (
+            <td>
+              {user.status === "banned"
+                ? "Tạm ngưng"
+                : user.package_status
+                  ? (user.package_status === "active" ? "Còn hạn" : "Hết hạn")
+                  : "-"}
+            </td>
+          )}
+
+          <td>
+            {user.status === "active" ? "Active" : "Banned"}
+          </td>
+        </tr>
+      ))
     )}
+  </tbody>
+  </table>
+       {/* Pagination */}
+<div className="pagination">
+  <button
+    className="page-btn btn btn-secondary btn-small"
+    disabled={page === 1}
+    onClick={() => setPage((p) => p - 1)}
+  >
+    ←
+  </button>
+  <span>Trang {page} / {totalPages}</span>
+  <button
+    className="page-btn btn btn-secondary btn-small"
+    disabled={page === totalPages}
+    onClick={() => setPage((p) => p + 1)}
+  >
+    →
+  </button>
+</div>
+</div>
 
-    <button
-      className="btn btn-secondary"
-      onClick={() => navigate(`/admin/learners/${selectedUser.learner_id}/purchases`)}
-    >
-      Xem chi tiết lịch sử
-    </button>
-  </div>
+{/* Modal hiển thị thông tin user */}
+{selectedUser && (
+  <UserForPage
+    userId={selectedUser.id}
+    onClose={() => setSelectedUser(null)}
+    onStatusChange={(updatedUser) => {
+      
+      setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
+      
+      setSelectedUser(updatedUser);
+    }}
+  />
 )}
-              </div>
-
-              <div style={{ width: 120 }}>
-                <img
-                  src={getAvatar(selectedUser)}
-                  alt="Avatar"
-                  style={{ width: 120, height: 120, borderRadius: "50%", objectFit: "cover", background: "#eee" }}
-                />
-              </div>
-            </div>
-          </Modal>
-        )}
 
 
 
