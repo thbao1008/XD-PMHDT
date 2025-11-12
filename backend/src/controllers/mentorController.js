@@ -1,28 +1,28 @@
 ﻿import pool from "../config/db.js";
 import {
   getMentorSessions,
-  upsertDraft,
-  deleteDraftById,
-  finalizeDraft
+  addSession,
+  updateSession,
+  deleteSession
 } from "../services/mentorService.js";
-// ================== CRUD Mentor ==================
 
-// Tạo mentor mới
+
+// ================== CRUD Mentor ==================
 export async function createMentor(req, res) {
   const { name, email, phone, dob, bio, experience_years, specialization, rating } = req.body;
   try {
-    const userRes = await pool.query(`
-      INSERT INTO users (name, email, phone, dob, role, status, created_at)
-      VALUES ($1,$2,$3,$4,'mentor','active',NOW())
-      RETURNING id
-    `, [name, email, phone, dob]);
+    const userRes = await pool.query(
+      `INSERT INTO users (name, email, phone, dob, role, status, created_at)
+       VALUES ($1,$2,$3,$4,'mentor','active',NOW()) RETURNING id`,
+      [name, email, phone, dob]
+    );
     const userId = userRes.rows[0].id;
 
-    const mentorRes = await pool.query(`
-      INSERT INTO mentors (user_id, bio, experience_years, specialization, rating, created_at)
-      VALUES ($1,$2,$3,$4,$5,NOW())
-      RETURNING id
-    `, [userId, bio, experience_years, specialization, rating]);
+    const mentorRes = await pool.query(
+      `INSERT INTO mentors (user_id, bio, experience_years, specialization, rating, created_at)
+       VALUES ($1,$2,$3,$4,$5,NOW()) RETURNING id`,
+      [userId, bio, experience_years, specialization, rating]
+    );
 
     res.status(201).json({
       message: "Mentor created successfully",
@@ -35,12 +35,10 @@ export async function createMentor(req, res) {
   }
 }
 
-// Lấy danh sách mentors
 export async function getAllMentors(req, res) {
   try {
     const result = await pool.query(`
-      SELECT m.id AS mentor_id,
-             u.id AS user_id,
+      SELECT m.id AS mentor_id, u.id AS user_id,
              u.name, u.email, u.phone, u.dob, u.status,
              m.bio, m.experience_years, m.specialization, m.rating
       FROM mentors m
@@ -49,18 +47,16 @@ export async function getAllMentors(req, res) {
     `);
     res.json({ mentors: result.rows });
   } catch (err) {
-    console.error("Error getAllMentors: - mentorController.js:52", err);
+    console.error("Error getAllMentors: - mentorController.js:50", err);
     res.status(500).json({ message: "Server error" });
   }
 }
 
-// Lấy mentor theo id
 export async function getMentorById(req, res) {
   const { id } = req.params;
   try {
     const result = await pool.query(`
-      SELECT m.id AS mentor_id,
-             u.id AS user_id,
+      SELECT m.id AS mentor_id, u.id AS user_id,
              u.name, u.email, u.phone, u.dob, u.status,
              m.bio, m.experience_years, m.specialization, m.rating
       FROM mentors m
@@ -71,12 +67,11 @@ export async function getMentorById(req, res) {
     if (!result.rows[0]) return res.status(404).json({ message: "Mentor not found" });
     res.json(result.rows[0]);
   } catch (err) {
-    console.error("Error getMentorById: - mentorController.js:74", err);
+    console.error("Error getMentorById: - mentorController.js:70", err);
     res.status(500).json({ message: "Server error" });
   }
 }
 
-// Cập nhật mentor
 export async function updateMentor(req, res) {
   const { id } = req.params;
   const { name, email, phone, dob, bio, experience_years, specialization, rating } = req.body;
@@ -107,73 +102,52 @@ export async function updateMentor(req, res) {
 
     res.json({ message: "Mentor updated" });
   } catch (err) {
-    console.error("Error updateMentor: - mentorController.js:110", err);
+    console.error("Error updateMentor: - mentorController.js:105", err);
     res.status(500).json({ message: "Server error" });
   }
 }
 
-// Xóa mentor
 export async function removeMentor(req, res) {
   const { id } = req.params;
   try {
     await pool.query("DELETE FROM mentors WHERE id=$1", [id]);
     res.json({ message: "Mentor deleted" });
   } catch (err) {
-    console.error("Error removeMentor: - mentorController.js:122", err);
+    console.error("Error removeMentor: - mentorController.js:116", err);
     res.status(500).json({ message: "Server error" });
   }
 }
 
-// ================== Learners của mentor ==================
+// ================== Learners ==================
 export async function getLearnersByMentor(req, res) {
-  const { id } = req.params; // mentor_id
+  const { id } = req.params;
   try {
     const result = await pool.query(`
-      SELECT lp.learner_id,
-             lp.learner_name,
-             lp.email,
-             lp.phone,
-             lp.dob,
-             lp.mentor_id,
-             lp.start_date,
-             lp.note,
-             lp.package_id,
-             lp.package_name,
-             lp.status AS package_status,
-             lp.expiry_date,
-             lp.days_left,
-             l.user_id,
-             r.id            AS report_id,
-             r.content       AS report,
-             r.status        AS report_status,
-             r.reply         AS report_reply,
-             r.reply_by,
-             r.reply_at
+      SELECT lp.*, l.user_id,
+             r.id AS report_id, r.content AS report,
+             r.status AS report_status, r.reply AS report_reply,
+             r.reply_by, r.reply_at
       FROM learner_package_view lp
       JOIN learners l ON lp.learner_id = l.id
       LEFT JOIN reports r 
-             ON r.target_id = l.user_id 
-            AND r.reporter_id = (
-              SELECT user_id FROM mentors WHERE id = $1
-            )
+        ON r.target_id = l.user_id 
+       AND r.reporter_id = (SELECT user_id FROM mentors WHERE id = $1)
       WHERE lp.mentor_id = $1
       ORDER BY lp.learner_id DESC
     `, [id]);
 
     res.json({ learners: result.rows });
   } catch (err) {
-    console.error("Error getLearnersByMentor: - mentorController.js:165", err);
+    console.error("Error getLearnersByMentor: - mentorController.js:141", err);
     res.status(500).json({ message: "Server error" });
   }
 }
 
-// Map user -> mentor
 export async function getMentorByUserId(req, res) {
   const { userId } = req.params;
   try {
     const result = await pool.query(`
-      SELECT m.id AS mentor_id,
-             u.id AS user_id,
+      SELECT m.id AS mentor_id, u.id AS user_id,
              u.name, u.email, u.phone, u.dob, u.status,
              m.bio, m.experience_years, m.specialization, m.rating
       FROM mentors m
@@ -186,7 +160,7 @@ export async function getMentorByUserId(req, res) {
     }
     res.json(result.rows[0]);
   } catch (err) {
-    console.error("Error getMentorByUserId: - mentorController.js:189", err);
+    console.error("Error getMentorByUserId: - mentorController.js:163", err);
     res.status(500).json({ message: "Server error" });
   }
 }
@@ -197,17 +171,15 @@ export async function mentorCreateReport(req, res) {
   try {
     const result = await pool.query(`
       INSERT INTO reports (reporter_id, target_id, content, status, created_at)
-      VALUES ($1, $2, $3, 'pending', NOW())
-      RETURNING *
+      VALUES ($1, $2, $3, 'pending', NOW()) RETURNING *
     `, [reporter_id, target_id, content]);
 
     res.json({ success: true, report: result.rows[0] });
   } catch (err) {
     if (err.code === '23505') {
-      // unique_violation
       return res.status(400).json({ success: false, message: "Bạn đã report học viên này rồi" });
     }
-    console.error("Error mentorCreateReport: - mentorController.js:210", err);
+    console.error("Error mentorCreateReport: - mentorController.js:182", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 }
@@ -221,69 +193,123 @@ export async function updateLearnerNote(req, res) {
       "UPDATE learners SET note = $1, updated_at = NOW() WHERE id = $2 RETURNING *",
       [note, learnerId]
     );
-
     if (result.rows.length === 0) {
       return res.status(404).json({ success: false, message: "Learner not found" });
     }
-
     res.json({ success: true, learner: result.rows[0] });
   } catch (err) {
-    console.error("Error updateLearnerNote: - mentorController.js:231", err);
-    res.status(500).json({ success: false, message: "Server error" });
-  }
-}
-// Chức năng chính của mentor (mentorservvice)
-// Cập nhập lịch mentor
-
-
-
-
-
-export async function getSessions(req, res) {
-  try {
-    const mentorId = req.params.id;
-    const { status } = req.query;
-    const sessions = await getMentorSessions(mentorId, status);
-    res.json({ success: true, sessions });
-  } catch (err) {
-    console.error("Error getSessions: - mentorController.js:249", err);
+    console.error("Error updateLearnerNote: - mentorController.js:201", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 }
 
-// Lưu/ghi đè draft
-export async function upsertDraftSessions(req, res) {
-  try {
-    const mentorId = req.params.id;
-    const { sessions } = req.body;
-    const draft = await upsertDraft(mentorId, sessions);
-    res.json({ success: true, draft });
-  } catch (err) {
-    console.error("Error upsertDraftSessions: - mentorController.js:262", err);
-    res.status(500).json({ success: false, message: "Server error" });
-  }
-}
-
-export async function deleteDraftSession(req, res) {
-  try {
-    const { id: mentorId, sessionId } = req.params;
-    await deleteDraftById(mentorId, sessionId);
-    const draft = await getMentorSessions(mentorId, "draft");
-    res.json({ success: true, draft });
-  } catch (err) {
-    console.error("Error deleteDraftSession: - mentorController.js:274", err);
-    res.status(500).json({ success: false, message: "Server error" });
-  }
-}
 
 export async function finalizeSchedule(req, res) {
   try {
-    const mentorId = req.params.id;
+    const mentorId = parseInt(req.params.id, 10);
     const { sessions } = req.body;
-    const final = await finalizeDraft(mentorId, sessions);
+
+    if (!mentorId || Number.isNaN(mentorId)) {
+      return res.status(400).json({ success: false, message: "mentorId is required and must be integer" });
+    }
+    if (!Array.isArray(sessions) || sessions.length === 0) {
+      return res.status(400).json({ success: false, message: "sessions must be a non-empty array" });
+    }
+
+    const final = await finalizeScheduleService(mentorId, sessions);
     res.json({ success: true, final });
   } catch (err) {
-    console.error("Error finalizeSchedule: - mentorController.js:286", err);
+    console.error("Error finalizeSchedule: - mentorController.js:222", err);
     res.status(500).json({ success: false, message: "Server error" });
+  }
+}
+// ================== Sessions ==================//
+
+// Lấy tất cả sessions
+export async function getSessions(req, res) {
+  try {
+    const mentorId = parseInt(req.params.id, 10);
+    if (!mentorId) {
+      return res.status(400).json({ success: false, message: "mentorId required" });
+    }
+    const sessions = await getMentorSessions(mentorId);
+    res.json({ success: true, sessions });
+  } catch (err) {
+    console.error("Error getSessions: - mentorController.js:238", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+}
+
+// Thêm buổi
+export async function addSessionController(req, res) {
+  try {
+    const mentorId = parseInt(req.params.id, 10);
+    const session = req.body;
+    const sessions = await addSession(mentorId, session);
+    res.json({ success: true, sessions });
+  } catch (err) {
+    console.error("Error addSession: - mentorController.js:251", err);
+    res.status(400).json({ success: false, message: err.message });
+  }
+}
+// ================== Sessions Batch ==================//
+export async function addSessionsBatchController(req, res) {
+  try {
+    const mentorId = parseInt(req.params.id, 10);
+    const sessions = req.body; // FE gửi mảng buổi
+
+    if (!mentorId || Number.isNaN(mentorId)) {
+      return res.status(400).json({ success: false, message: "mentorId required" });
+    }
+    if (!Array.isArray(sessions) || sessions.length === 0) {
+      return res.status(400).json({ success: false, message: "sessions must be a non-empty array" });
+    }
+
+    // kiểm tra số buổi offline/online trong tuần
+    const offlineCount = sessions.filter(s => s.type.toLowerCase() === "offline").length;
+    const onlineCount = sessions.filter(s => s.type.toLowerCase() === "online").length;
+
+    if (offlineCount < 1 || onlineCount < 2) {
+      return res.status(400).json({ success: false, message: "Mỗi tuần phải có ≥1 offline và ≥2 online" });
+    }
+
+    // lưu tất cả buổi
+    for (const s of sessions) {
+  await addSession(mentorId, { ...s, type: s.type.toLowerCase() }, { skipValidation: true });
+}
+
+
+    res.json({ success: true, message: "Batch sessions created" });
+  } catch (err) {
+    console.error("Error addSessionsBatchController: - mentorController.js:284", err);
+    res.status(400).json({ success: false, message: err.message });
+  }
+}
+
+
+// Cập nhật buổi
+export async function updateSessionController(req, res) {
+  try {
+    const mentorId = parseInt(req.params.id, 10);
+    const sessionId = parseInt(req.params.sessionId, 10);
+    const session = req.body;
+    const sessions = await updateSession(mentorId, sessionId, session);
+    res.json({ success: true, sessions });
+  } catch (err) {
+    console.error("Error updateSession: - mentorController.js:299", err);
+    res.status(400).json({ success: false, message: err.message });
+  }
+}
+
+// Xóa buổi
+export async function deleteSessionController(req, res) {
+  try {
+    const mentorId = parseInt(req.params.id, 10);
+    const sessionId = parseInt(req.params.sessionId, 10);
+    const sessions = await deleteSession(mentorId, sessionId);
+    res.json({ success: true, sessions });
+  } catch (err) {
+    console.error("Error deleteSession: - mentorController.js:312", err);
+    res.status(400).json({ success: false, message: err.message });
   }
 }
