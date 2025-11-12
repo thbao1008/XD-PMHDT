@@ -20,8 +20,9 @@ const pool = new Pool({
   port: parseInt(process.env.DB_PORT) || 5432,
 });
 
-pool.connect()
-  .then(() => console.log("✅ Connected to PostgreSQL - db.js:24"))
-  .catch(err => console.error("❌ DB connection error - db.js:25", err));
+// test query để chắc chắn pool hoạt động
+pool.query("SELECT NOW()")
+  .then(res => console.log("✅ Connected to PostgreSQL: - db.js:25", res.rows[0]))
+  .catch(err => console.error("❌ DB connection error: - db.js:26", err));
 
 export default pool;
