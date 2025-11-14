@@ -16,3 +16,10 @@ Lưu ý:
 - Mỗi service cần code trong services/<service>/src, file entry chạy server tại src/server.js
 
 # XD-PMHDT
+<<<<<<< HEAD
+=======
+Hiện tại source chưa hoàn thiện nên
+debug với
+"npm run dev:all"
+
+>>>>>>> a278c9cac4c5eb494dd25f845bee4a57b7e42369
