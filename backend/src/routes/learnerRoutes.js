@@ -6,31 +6,28 @@ import {
   create,
   update,
   remove,
-  getLatestPurchase
+  getLatestPurchase,
+  getMentorByLearnerId,
+  getLearnerByUserId,
+  downloadLearnerResource
 } from "../controllers/learnerController.js";
 
 const router = express.Router();
 
-// Lấy danh sách learners
-router.get("/", getAll);
+// ========== Learners CRUD ==========
+router.get("/", getAll);                // Lấy danh sách learners
+router.get("/:id", getById);            // Lấy learner theo ID
+router.post("/", create);               // Tạo learner mới
+router.put("/:id", update);             // Cập nhật learner
+router.delete("/:id", remove);          // Xóa learner
 
-// Lấy learner theo ID
-router.get("/:id", getById);
+// ========== Purchases ==========
+router.get("/:id/purchases", getPurchases);       // Lấy toàn bộ purchases của learner
+router.get("/:id/latest-purchase", getLatestPurchase); // Lấy purchase mới nhất
 
-// Lấy toàn bộ purchases của learner
-router.get("/:id/purchases", getPurchases);
+// ========== Mentor ==========
+router.get("/:id/mentor", getMentorByLearnerId);  // Lấy mentor của learner
+router.get("/by-user/:userId", getLearnerByUserId); // Lấy learner theo userId
 
-// Tạo learner mới (tự động gán mentor ngay trong create)
-router.post("/", create);
-
-// Cập nhật learner
-router.put("/:id", update);
-
-// Xóa learner
-router.delete("/:id", remove);
-
-// Lấy purchase mới nhất của learner
-router.get("/:id/latest-purchase", getLatestPurchase);
-
-
+router.get("/:learnerId/resource/:resourceId/download", downloadLearnerResource);
 export default router;

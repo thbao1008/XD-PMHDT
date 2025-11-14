@@ -60,7 +60,7 @@ app.use((req, res, next) => {
   console.log("Incoming: - server.js:60", req.method, req.url);
   next();
 });
-
+app.use("/uploads", express.static("uploads"));
 // Start server sau khi seed admin
 seedAdmins()
   .then(() => {

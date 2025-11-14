@@ -11,7 +11,6 @@ export default function AssignedLearnersModal({ mentorId, onClose }) {
     if (!mentorId) return;
     const fetchLearners = async () => {
       try {
-        // nếu mentorId thực chất là userId thì phải đổi sang mentorId thật
         const mentorRes = await api.get(`/mentors/by-user/${mentorId}`);
         const realMentorId = mentorRes.data.mentor_id || mentorRes.data.id;
 

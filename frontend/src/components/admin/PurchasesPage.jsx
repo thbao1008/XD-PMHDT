@@ -58,25 +58,33 @@ export default function PurchasesPage() {
           </tr>
         </thead>
         <tbody>
-          {purchases.length === 0 ? (
-            <tr>
-              <td colSpan="6">Không có purchase nào</td>
-            </tr>
-          ) : (
-            purchases.map((p, idx) => (
-              <tr key={p.id}>
-                <td>{idx + 1}</td>
-                <td>{p.package_name}</td>
-                <td>{new Date(p.created_at).toLocaleDateString("vi-VN")}</td>
-                <td>{p.status}</td>
-                <td>{p.remaining_days ?? "-"}</td>
-                <td>
-                  <button onClick={() => handleRenewClick(p)}>Gia hạn</button>
-                </td>
-              </tr>
-            ))
-          )}
-        </tbody>
+  {purchases.length === 0 ? (
+    <tr>
+      <td colSpan="6">Không có purchase nào</td>
+    </tr>
+  ) : (
+    purchases.map((p, idx) => (
+      <tr key={p.purchase_id || p.id}>
+        <td>{idx + 1}</td>
+        <td>{p.package_name}</td>
+        <td>{new Date(p.created_at).toLocaleDateString("vi-VN")}</td>
+        {/* dùng package_status thay vì status */}
+        <td>
+          {p.package_status === "active" && "Còn hạn"}
+          {p.package_status === "expired" && "Hết hạn"}
+          {p.package_status === "paused" && "Tạm ngưng"}
+          {p.package_status === "no_package" && "Chưa có gói"}
+        </td>
+        {/* dùng days_left thay vì remaining_days */}
+        <td>{p.days_left !== null ? `${p.days_left} ngày` : "-"}</td>
+        <td>
+          <button onClick={() => handleRenewClick(p)}>Gia hạn</button>
+        </td>
+      </tr>
+    ))
+  )}
+</tbody>
+
       </table>
     </div>
   );

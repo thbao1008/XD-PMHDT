@@ -1,3 +1,4 @@
+// src/components/mentor/MentorSidebar.jsx
 import React from "react";
 import { NavLink } from "react-router-dom";
 import {
@@ -7,7 +8,8 @@ import {
   FiBookOpen,
   FiCalendar,
   FiUsers,
-  FiFolder
+  FiFolder,
+  FiShare2
 } from "react-icons/fi";
 
 export default function MentorSidebar({ collapsed = false }) {
@@ -18,7 +20,8 @@ export default function MentorSidebar({ collapsed = false }) {
     { id: "topics", label: "Topics", icon: <FiBookOpen />, to: "/mentor/topics" },
     { id: "sessions", label: "Sessions", icon: <FiCalendar />, to: "/mentor/sessions" },
     { id: "learners", label: "Learners", icon: <FiUsers />, to: "/mentor/learners" },
-    { id: "resources", label: "Resources", icon: <FiFolder />, to: "/mentor/resources" }
+    { id: "resources", label: "Resources", icon: <FiFolder />, to: "/mentor/resources" },
+    { id: "communicate", label: "Communicate", icon: <FiShare2 />, to: "/mentor/communicate" } // thêm
   ];
 
   return (

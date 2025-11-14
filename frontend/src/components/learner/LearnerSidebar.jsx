@@ -1,16 +1,30 @@
 // src/components/learner/LearnerSidebar.jsx
 import React from "react";
 import { NavLink } from "react-router-dom";
-import { MENU } from "../../config/menu";
 import { getAuth } from "../../utils/auth";
+import {
+  FaHome,
+  FaBook,
+  FaMicrophone,
+  FaBolt,
+  FaChartLine,
+  FaComments,
+  FaPen
+} from "react-icons/fa";
 
 export default function LearnerSidebar({ basePath = "/learn", collapsed = false }) {
   const auth = getAuth();
   const role = auth?.user?.role || "guest";
 
-  const learnerMenu = Array.isArray(MENU)
-    ? MENU.filter((m) => m.role?.includes("learner"))
-    : [];
+  const learnerMenu = [
+    { id: "dashboard", label: "Dashboard", path: `${basePath}/catalog`, icon: <FaHome /> },
+    { id: "catalog", label: "Learning Catalog", path: `${basePath}/catalog`, icon: <FaBook /> },
+    { id: "practice", label: "Speaking Practice", path: `${basePath}/practice`, icon: <FaMicrophone /> },
+    { id: "challenges", label: "Challenges", path: `${basePath}/challenges`, icon: <FaBolt /> },
+    { id: "progress", label: "Progress Analytics", path: `${basePath}/progress`, icon: <FaChartLine /> },
+    { id: "communicate", label: "Communicate Center", path: `${basePath}/communicate`, icon: <FaComments /> },
+    { id: "feedback", label: "Feedback", path: `${basePath}/feedback`, icon: <FaPen /> },
+  ];
 
   return (
     <aside
@@ -19,15 +33,9 @@ export default function LearnerSidebar({ basePath = "/learn", collapsed = false 
       aria-label="Learner sidebar"
     >
       <nav className="sidebar-nav" aria-label="Learner navigation">
-        {learnerMenu.length === 0 && (
-          <div className="muted" style={{ padding: 12 }}>
-            No menu items available
-          </div>
-        )}
-
         {learnerMenu.map((item) => (
           <NavLink
-            key={item.id ?? item.label}
+            key={item.id}
             to={item.path}
             end={item.path === basePath}
             className={({ isActive }) =>
@@ -35,12 +43,16 @@ export default function LearnerSidebar({ basePath = "/learn", collapsed = false 
             }
           >
             <span className="link-icon" aria-hidden>
-              {item.icon ?? "📁"}
+              {item.icon}
             </span>
-            <span className="link-label">{item.label}</span>
+            {!collapsed && <span className="link-label">{item.label}</span>}
           </NavLink>
         ))}
       </nav>
+
+      <div className="sidebar-footer">
+        {!collapsed && <span>© 2025 AESP Learner</span>}
+      </div>
     </aside>
   );
 }
