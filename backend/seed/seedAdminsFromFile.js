@@ -17,25 +17,26 @@ export async function seedAdmins(closePool = false) {
       const hashed = await bcrypt.hash(admin.password, 10);
 
       await pool.query(
-        `
-        INSERT INTO users (name, email, phone, password, dob, role, status)
-        VALUES ($1, $2, $3, $4, $5, 'admin', 'active')
-        ON CONFLICT (email) DO UPDATE
-        SET name = EXCLUDED.name,
-            phone = EXCLUDED.phone,
-            password = EXCLUDED.password,
-            dob = EXCLUDED.dob,
-            role = 'admin',
-            status = 'active',
-            updated_at = CURRENT_TIMESTAMP
-        `,
-        [admin.name, admin.email, admin.phone || null, hashed, admin.dob || null]
-      );
+  `
+  INSERT INTO public.users (name, email, phone, password, dob, role, status)
+  VALUES ($1, $2, $3, $4, $5, 'admin', 'active')
+  ON CONFLICT (email) DO UPDATE
+  SET name = EXCLUDED.name,
+      phone = EXCLUDED.phone,
+      password = EXCLUDED.password,
+      dob = EXCLUDED.dob,
+      role = 'admin',
+      status = 'active',
+      updated_at = CURRENT_TIMESTAMP
+  `,
+  [admin.name, admin.email, admin.phone || null, hashed, admin.dob || null]
+);
 
-      console.log(`✅ Seeded/Updated admin: ${admin.email} - seedAdminsFromFile.js:35`);
+
+      console.log(`✅ Seeded/Updated admin: ${admin.email} - seedAdminsFromFile.js:36`);
     }
   } catch (err) {
-    console.error("❌ Seed admin error: - seedAdminsFromFile.js:38", err);
+    console.error("❌ Seed admin error: - seedAdminsFromFile.js:39", err);
   } finally {
     if (closePool) {
       await pool.end();

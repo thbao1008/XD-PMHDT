@@ -8,6 +8,7 @@ import Home from "../pages/Home";
 import Login from "../pages/Login";
 import ProfilePage from "../pages/Profile";
 import NotFound from "../pages/NotFound";
+import CommunicateCenter from "../pages/CommunicateCenter";   // thêm
 
 // Admin
 import AdminLayout from "../components/admin/AdminLayout";
@@ -21,7 +22,8 @@ import SupportTickets from "../components/admin/SupportTickets";
 
 // Learner
 import LearnerLayout from "../components/learner/LearnerLayout";
-import PackageCatalog from "../components/learner/PackageCatalog";
+// Đổi import: dùng LearningCatalog thay cho PackageCatalog
+import LearningCatalog from "../components/learner/LearningCatalog";
 import SpeakingPractice from "../components/learner/SpeakingPractice";
 import Challenges from "../components/learner/Challenges";
 import ProgressAnalytics from "../components/learner/ProgressAnalytics";
@@ -77,6 +79,7 @@ export default function AppRoutes() {
         <Route path="learners/:id/purchases" element={<PurchasesPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="support" element={<SupportTickets />} />
+        <Route path="communicate" element={<CommunicateCenter />} /> {/* thêm */}
         <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
       </Route>
 
@@ -89,11 +92,13 @@ export default function AppRoutes() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<PackageCatalog />} />
-        <Route path="catalog" element={<PackageCatalog />} />
+        {/* Đổi component ở đây */}
+        <Route index element={<LearningCatalog />} />
+        <Route path="catalog" element={<LearningCatalog />} />
         <Route path="practice" element={<SpeakingPractice />} />
         <Route path="challenges" element={<Challenges />} />
         <Route path="progress" element={<ProgressAnalytics />} />
+        <Route path="communicate" element={<CommunicateCenter />} /> {/* thêm */}
         <Route path="*" element={<Navigate to="/learn/catalog" replace />} />
       </Route>
 
@@ -114,6 +119,7 @@ export default function AppRoutes() {
         <Route path="sessions" element={<MentorSessions />} />
         <Route path="learners" element={<MentorLearners />} />
         <Route path="resources" element={<MentorResources />} />
+        <Route path="communicate" element={<CommunicateCenter />} /> {/* thêm */}
         <Route path="*" element={<Navigate to="/mentor/dashboard" replace />} />
       </Route>
 

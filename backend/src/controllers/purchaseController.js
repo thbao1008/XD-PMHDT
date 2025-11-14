@@ -33,31 +33,31 @@ export async function listLearnerPurchases(req, res) {
   try {
     const result = await pool.query(
       `SELECT 
-    p.id,
-    pk.name AS package_name,
-    p.created_at,
-    p.status,
-    GREATEST(
-      pk.duration_days + COALESCE(p.extra_days, 0)
-      - EXTRACT(DAY FROM (NOW() - p.created_at)),
-      0
-    ) AS remaining_days,
-    u.name AS learner_name,
-    u.phone AS learner_phone
-FROM purchases p
-JOIN packages pk ON p.package_id = pk.id
-JOIN learners l ON p.learner_id = l.id
-JOIN users u ON l.user_id = u.id
-WHERE p.learner_id = $1
-ORDER BY p.created_at DESC`,
+         learner_id,
+         learner_name,
+         email,
+         phone,
+         package_id,
+         package_name,
+         purchase_id,
+         created_at,
+         status AS purchase_status,
+         expiry_date,
+         days_left,
+         package_status
+       FROM learner_package_view
+       WHERE learner_id = $1
+       ORDER BY created_at DESC`,
       [learnerId]
     );
+
     res.json({ success: true, purchases: result.rows });
   } catch (err) {
-    console.error("Error listLearnerPurchases: - purchaseController.js:57", err);
+    console.error("Error listLearnerPurchases: - purchaseController.js:56", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 }
+
 
 // ===== Tạo purchase mới =====
 export async function createNewPurchase(req, res) {

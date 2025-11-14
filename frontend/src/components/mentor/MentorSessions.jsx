@@ -7,7 +7,9 @@ import {
   FiPauseCircle,
   FiEdit,
   FiMonitor,
-  FiHome
+  FiHome,
+  FiRepeat,
+  FiChevronUp
 } from "react-icons/fi";
 import { getAuth } from "../../utils/auth";
 import "../../styles/mentorsessions.css";
@@ -68,6 +70,11 @@ export default function MentorSessions() {
   const [selectedSession, setSelectedSession] = useState(null);
   const [noteEdit, setNoteEdit] = useState("");
 
+  // Thêm state để toggle giữa lịch hiện tại / đã giảng dạy
+  const [activeTab, setActiveTab] = useState("upcoming");
+  // Nút scroll-top khi cuộn xa
+  const [showScrollTop, setShowScrollTop] = useState(false);
+
   useEffect(() => {
     async function fetchMentorId() {
       const userId = auth?.user?.id || auth?.user?.user_id;
@@ -82,22 +89,41 @@ export default function MentorSessions() {
     fetchSessions();
   }, [mentorId]);
 
+  useEffect(() => {
+    const onScroll = () => setShowScrollTop(window.scrollY > 300);
+    window.addEventListener("scroll", onScroll);
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
   const fetchSessions = async () => {
-    const res = await api.get(`/mentors/${mentorId}/sessions`);
-    const final = (res.data.sessions || [])
-      .map(s => ({
-        id: s.id,
-        date: safeDateForInput(s.date),
-        startTime: safeTimeForInput(s.start_time),
-        endTime: safeTimeForInput(s.end_time),
-        type: s.type,
-        note: s.note || "",
-        isExam: !!s.is_exam,
-        paused: !!s.paused
-      }))
-      .sort((a, b) => new Date(a.date + " " + a.startTime) - new Date(b.date + " " + b.startTime));
-    setSessions(final);
-  };
+  const res = await api.get(`/mentors/${mentorId}/sessions`);
+  const final = (res.data.sessions || [])
+    .map(s => ({
+      id: s.id,
+      date: safeDateForInput(s.date),
+      startTime: safeTimeForInput(s.start_time),
+      endTime: safeTimeForInput(s.end_time),
+      type: s.type,
+      note: s.note || "",
+      isExam: !!s.is_exam,
+      paused: !!s.paused
+    }))
+    .sort((a, b) => new Date(a.date + " " + a.startTime) - new Date(b.date + " " + b.startTime));
+
+  // phân loại theo thời gian
+  const now = new Date();
+  const withStatus = final.map(s => {
+    const start = new Date(`${s.date} ${s.startTime}`);
+    const end = new Date(`${s.date} ${s.endTime}`);
+    let status = "upcoming";
+    if (end < now) status = "completed";
+    else if (start <= now && end >= now) status = "ongoing";
+    return { ...s, status };
+  });
+
+  setSessions(withStatus);
+};
+
 
   const updateSession = (index, field, value) => {
     const updated = [...newSessions];
@@ -217,6 +243,36 @@ export default function MentorSessions() {
     setSelectedSession(null);
   };
 
+  const renderSession = (s) => (
+  <div
+    key={s.id}
+    className={`schedule-row ${s.paused ? "paused" : ""}`}
+    onClick={() => {
+      setSelectedSession(s);
+      setNoteEdit(s.note);
+    }}
+  >
+    {s.paused && <span className="paused-badge"><FiPauseCircle /> Tạm ngưng</span>}
+    <div className="row-left">
+      <h4><FiCalendar /> {s.date}</h4>
+      <p><FiClock /> {s.startTime} – {s.endTime}</p>
+    </div>
+
+    <div className="row-middle">
+      <p>{s.type === "online" ? <><FiMonitor /> Online</> : <><FiHome /> Offline</>}</p>
+      {s.isExam && <strong>📌 Lịch thi</strong>}
+    </div>
+
+    <div className="row-right">
+      {s.isExam && s.note ? (
+        <div className="exam-note">📒 {s.note}</div>
+      ) : (
+        <p>{s.note || "Không có ghi chú"}</p>
+      )}
+    </div>
+  </div>
+);
+
   const handlePause = async () => {
     if (window.confirm("Sau khi tạm ngưng sẽ không mở lại được, bạn chắc chắn chứ?")) {
       await api.put(`/mentors/${mentorId}/sessions/${selectedSession.id}`, { paused: true });
@@ -231,50 +287,65 @@ export default function MentorSessions() {
 
       {!creating ? (
         <>
-          <button className="btn-create" onClick={() => setCreating(true)}>
-            <FiPlus /> Tạo lịch mới
-          </button>
+          {/* Header đối xứng: nút tạo lịch mới bên trái, nút toggle bên phải */}
+          <div className="header-actions" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <button className="btn-create" onClick={() => setCreating(true)}>
+              <FiPlus /> Tạo lịch mới
+            </button>
+            <button
+              className="btn-toggle"
+              onClick={() => setActiveTab(activeTab === "upcoming" ? "completed" : "upcoming")}
+              title={activeTab === "upcoming" ? "Xem lịch đã giảng dạy" : "Xem lịch hiện tại"}
+            >
+              <FiRepeat /> {activeTab === "upcoming" ? "Chuyển sang lịch đã giảng dạy" : "Chuyển sang lịch hiện tại"}
+            </button>
+          </div>
+
           <div className="schedule-list">
+          
             {sessions.length === 0 && <p>Chưa có lịch nào</p>}
-            {sessions.map((s) => {
-              const range = getWeekRange(s.date);
-              const inSameWeek = range.weekStart && range.weekEnd
-                ? sessions.some(
-                    other => other.id !== s.id &&
-                      other.date >= range.weekStart &&
-                      other.date <= range.weekEnd
-                  )
-                : false;
-              return (
-                <div
-                  key={s.id}
-                  className={`schedule-row ${s.paused ? "paused" : ""} ${inSameWeek ? "same-week" : ""}`}
-                  onClick={() => {
-                    setSelectedSession(s);
-                    setNoteEdit(s.note);
-                  }}
-                >
-                  {s.paused && <span className="paused-badge"><FiPauseCircle /> Tạm ngưng</span>}
-                  <div className="row-left">
-                    <h4><FiCalendar /> {s.date}</h4>
-                    <p><FiClock /> {s.startTime} – {s.endTime}</p>
-                  </div>
+            {/* Lọc theo tab đang chọn thay vì render tất cả */}
+            {sessions
+              .filter(s => s.status === activeTab)
+              .map((s) => {
+                const range = getWeekRange(s.date);
+                const inSameWeek = range.weekStart && range.weekEnd
+                  ? sessions.some(
+                      other => other.id !== s.id &&
+                        other.date >= range.weekStart &&
+                        other.date <= range.weekEnd
+                    )
+                  : false;
+                return (
+                  <div
+                    key={s.id}
+                    className={`schedule-row ${s.paused ? "paused" : ""} ${inSameWeek ? "same-week" : ""}`}
+                    onClick={() => {
+                      setSelectedSession(s);
+                      setNoteEdit(s.note);
+                    }}
+                  >
+                    {s.paused && <span className="paused-badge"><FiPauseCircle /> Tạm ngưng</span>}
+                    <div className="row-left">
+                      <h4><FiCalendar /> {s.date}</h4>
+                      <p><FiClock /> {s.startTime} – {s.endTime}</p>
+                    </div>
 
-                  <div className="row-middle">
-                    <p>{s.type === "online" ? <><FiMonitor /> Online</> : <><FiHome /> Offline</>}</p>
-                    {s.isExam && <strong>📌 Lịch thi</strong>}
-                  </div>
+                    <div className="row-middle">
+                      <p>{s.type === "online" ? <><FiMonitor /> Online</> : <><FiHome /> Offline</>}</p>
+                      {s.isExam && <strong>📌 Lịch thi</strong>}
+                    </div>
 
-                                    <div className="row-right">
-                    {s.isExam && s.note ? (
-                      <div className="exam-note">📒 {s.note}</div>
-                    ) : (
-                      <p>{s.note || "Không có ghi chú"}</p>
-                    )}
+                    <div className="row-right">
+                      {s.isExam && s.note ? (
+                        <div className="exam-note">📒 {s.note}</div>
+                      ) : (
+                        <p>{s.note || "Không có ghi chú"}</p>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
           </div>
         </>
       ) : (
@@ -285,13 +356,13 @@ export default function MentorSessions() {
           <table className="schedule-table">
             <thead>
               <tr>
-                <th>Ngày</th>
-                <th>Bắt đầu</th>
-                <th>Kết thúc</th>
-                <th>Loại</th>
-                <th>Ghi chú</th>
-                <th>Thi</th>
-                <th>Hành động</th>
+                <th><FiCalendar /> Ngày</th>
+                <th><FiClock /> Bắt đầu</th>
+                <th><FiClock /> Kết thúc</th>
+                <th><FiMonitor /> Loại</th>
+                <th><FiEdit /> Ghi chú</th>
+                <th>📌 Thi</th>
+                <th>🛠️ Hành động</th>
               </tr>
             </thead>
             <tbody>
@@ -336,14 +407,15 @@ export default function MentorSessions() {
                         value={s.type}
                         onChange={(e) => updateSession(idx, "type", e.target.value)}
                       >
-                        <option value="online">Online</option>
-                        <option value="offline">Offline</option>
+                        <option value="online">💻 Online</option>
+                        <option value="offline">🏫 Offline</option>
                       </select>
                     </td>
                     <td>
                       <input
                         type="text"
                         value={s.note}
+                        placeholder="Thêm ghi chú..."
                         onChange={(e) => updateSession(idx, "note", e.target.value)}
                       />
                     </td>
@@ -355,8 +427,8 @@ export default function MentorSessions() {
                       />
                     </td>
                     <td>
-                      <button onClick={() => removeSession(idx)}>
-                        <FiTrash2 />
+                      <button onClick={() => removeSession(idx)} className="btn-icon">
+                        <FiTrash2 /> Xóa
                       </button>
                     </td>
                   </tr>
@@ -371,7 +443,7 @@ export default function MentorSessions() {
             <button onClick={saveSchedule}>
               <FiEdit /> Lưu lịch
             </button>
-            <button onClick={() => setCreating(false)}>⬅️ Quay về</button>
+            <button onClick={() => setCreating(false)} className="btn-secondary">⬅️ Quay về</button>
           </div>
         </div>
       )}
@@ -381,6 +453,7 @@ export default function MentorSessions() {
           <p><strong>Ngày:</strong> {selectedSession.date}</p>
           <p><strong>Giờ:</strong> {selectedSession.startTime} – {selectedSession.endTime}</p>
           <p><strong>Loại:</strong> {selectedSession.type === "online" ? "💻 Online" : "🏫 Offline"}</p>
+          {selectedSession.isExam && <p><strong>📌 Đây là lịch thi</strong></p>}
           <label>
             <strong>Ghi chú:</strong>
             <textarea
@@ -399,6 +472,16 @@ export default function MentorSessions() {
             </button>
           </div>
         </Modal>
+      )}
+
+      {showScrollTop && (
+        <button
+          className="btn-scroll-top"
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          title="Trở lên trên cùng"
+        >
+          <FiChevronUp /> Trở lên trên cùng
+        </button>
       )}
     </div>
   );

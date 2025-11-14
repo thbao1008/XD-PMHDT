@@ -8,8 +8,7 @@ export default function UserForPage({ userId, onClose, onStatusChange }) {
   const [latestPurchase, setLatestPurchase] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showAssigned, setShowAssigned] = useState(false);
-  const [showMentorInfo, setShowMentorInfo] = useState(false); // thêm state để mở modal mentor
-
+  const [showMentorInfo, setShowMentorInfo] = useState(false); 
   useEffect(() => {
     const fetchUser = async () => {
       try {

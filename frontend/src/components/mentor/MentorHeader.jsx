@@ -4,7 +4,6 @@ import { clearAuth, getAuth } from "../../utils/auth";
 import logo from "../../assets/images/logo.png";
 import userAvatar from "../../assets/icons/users.png";
 import "../../styles/theme.css";
-
 export default function MentorHeader() {
   const navigate = useNavigate();
   const auth = getAuth();

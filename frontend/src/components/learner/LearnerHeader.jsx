@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { clearAuth, getAuth } from "../../utils/auth";
 import logo from "../../assets/images/logo.png";
 import userAvatar from "../../assets/icons/users.png";
+import "../../styles/theme.css"; 
 
 export default function LearnerHeader() {
   const navigate = useNavigate();
@@ -47,7 +48,9 @@ export default function LearnerHeader() {
   return (
     <header className="shell-header" role="banner">
       <div className="header-left">
-        <img src={logo} alt="AESP logo" className="header-mark" />
+        <div className="brand-block">
+          <img src={logo} alt="AESP logo" className="header-logo" />
+        </div>
       </div>
 
       <div className="header-center">
@@ -57,7 +60,7 @@ export default function LearnerHeader() {
       </div>
 
       <div className="header-right">
-        <div className="user-menu">
+        <div className="dropdown-wrapper">
           <button
             ref={buttonRef}
             className="user-dropdown-toggle"
@@ -70,14 +73,13 @@ export default function LearnerHeader() {
               alt="User avatar"
               className="user-avatar"
             />
-            <span className="user-name">{userName}</span>
-            <span className="dropdown-icon">▾</span>
+        
           </button>
 
           {open && (
             <div
               ref={dropdownRef}
-              className="dropdown-menu"
+              className="dropdown-menu dropdown-elevated" 
               role="menu"
             >
               <button

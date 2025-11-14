@@ -1,10 +1,43 @@
-  services:
-  aesp:
-    image: aesp
-    build:
-      context: .
-      dockerfile: ./Dockerfile
-    environment:
-      NODE_ENV: production
+services:
+  app:
+    build: .
     ports:
-      - 3000:3000
+      - "4002:4002"
+      - "5173:5173"
+    env_file:
+      - ./backend/.env.docker   # chỉ rõ đường dẫn tới file env trong backend
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      db:
+        condition: service_healthy
+    command: sh -c "npm run dev:all"
+
+  seed:
+    build: .
+    env_file:
+      - ./backend/.env.docker  
+    depends_on:
+      db:
+        condition: service_healthy
+    command: sh -c "npm run seed:admin"
+
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 1234
+      POSTGRES_DB: aesp
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d aesp"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  db_data:

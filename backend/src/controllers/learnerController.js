@@ -1,214 +1,169 @@
-﻿import pool from "../config/db.js";
-import { getPurchasesByLearner } from "../models/purchaseModel.js";
+﻿import * as learnerService from "../services/learnerService.js";
 
-// Lấy danh sách learners kèm đơn hàng mới nhất
+// Lấy tất cả learners
 export async function getAll(req, res) {
   try {
-    const result = await pool.query(`
-      SELECT l.id AS learner_id,
-             u.id AS user_id,
-             u.name, u.email, u.phone, u.dob,
-             l.mentor_id,
-             (SELECT p.id 
-                FROM purchases p 
-               WHERE p.learner_id = l.id 
-            ORDER BY p.created_at DESC 
-               LIMIT 1) AS latest_purchase_id
-      FROM learners l
-      JOIN users u ON l.user_id = u.id
-      ORDER BY l.id DESC
-    `);
-    res.json({ learners: result.rows });
+    const learners = await learnerService.getAllLearners();
+    res.json({ learners });
   } catch (err) {
-    console.error("Error learnerController.getAll: - learnerController.js:23", err);
+    console.error("Error learnerController.getAll: - learnerController.js:9", err);
     res.status(500).json({ message: "Server error" });
   }
 }
 
-// Lấy learner theo id
+// Lấy learner theo ID
 export async function getById(req, res) {
-  const { id } = req.params;
   try {
-    const result = await pool.query(`
-      SELECT l.id AS learner_id, l.mentor_id, u.*
-      FROM learners l
-      JOIN users u ON l.user_id = u.id
-      WHERE l.id = $1
-    `, [id]);
-    if (!result.rows[0]) return res.status(404).json({ message: "Learner not found" });
-    res.json({ learner: result.rows[0] });
+    const learner = await learnerService.getLearnerById(req.params.id);
+    if (!learner) return res.status(404).json({ message: "Learner not found" });
+    res.json({ learner });
   } catch (err) {
-    console.error("Error learnerController.getById: - learnerController.js:41", err);
+    console.error("Error learnerController.getById: - learnerController.js:21", err);
     res.status(500).json({ message: "Server error" });
   }
 }
 
-// Lấy toàn bộ lịch sử mua của learner
+// Lấy purchases
 export async function getPurchases(req, res) {
-  const { id } = req.params;
   try {
-    const purchases = await getPurchasesByLearner(id);
+    const purchases = await learnerService.getLearnerPurchases(req.params.id);
     res.json({ purchases });
   } catch (err) {
-    console.error("Error learnerController.getPurchases: - learnerController.js:53", err);
+    console.error("Error learnerController.getPurchases: - learnerController.js:32", err);
     res.status(500).json({ message: "Server error" });
   }
 }
 
-// Tạo learner mới (mentor sẽ được trigger tự động gán)
+// Tạo learner mới
 export async function create(req, res) {
-  const { name, email, phone, dob, packageId } = req.body;
   try {
-    // 1. Tạo user
-    const userRes = await pool.query(`
-      INSERT INTO users (name, email, phone, dob, role, status, created_at)
-      VALUES ($1,$2,$3,$4,'learner','active',NOW())
-      RETURNING id
-    `, [name, email, phone, dob]);
-    const userId = userRes.rows[0].id;
-
-    // 2. Tạo learner (mentor_id để NULL, trigger sẽ tự động xử lý)
-    const learnerRes = await pool.query(`
-      INSERT INTO learners (user_id, mentor_id, start_date)
-      VALUES ($1, NULL, NOW())
-      RETURNING id, mentor_id
-    `, [userId]);
-    const learnerId = learnerRes.rows[0].id;
-    const mentorId = learnerRes.rows[0].mentor_id; // trigger đã gán
-
-    // 3. Nếu có package thì tạo purchase
-    if (packageId) {
-      await pool.query(`
-        INSERT INTO purchases (learner_id, package_id, status, created_at, extra_days)
-        VALUES ($1, $2, 'active', NOW(), 0)
-      `, [learnerId, packageId]);
-    }
-
-    res.status(201).json({ learnerId, userId, mentorId });
+    const learner = await learnerService.createLearner(req.body);
+    res.status(201).json(learner);
   } catch (err) {
-    console.error("Error learnerController.create: - learnerController.js:89", err);
+    console.error("Error learnerController.create: - learnerController.js:43", err);
     res.status(500).json({ message: "Server error" });
   }
 }
 
-// Cập nhật learner (chỉ thông tin user)
+// Update learner
 export async function update(req, res) {
-  const { id } = req.params;
-  const { name, email, phone, dob } = req.body;
   try {
-    const userIdRes = await pool.query("SELECT user_id FROM learners WHERE id=$1", [id]);
-    if (!userIdRes.rows[0]) return res.status(404).json({ message: "Learner not found" });
-    const userId = userIdRes.rows[0].user_id;
-
-    await pool.query(`
-      UPDATE users SET
-        name = COALESCE($1, name),
-        email = COALESCE($2, email),
-        phone = COALESCE($3, phone),
-        dob = COALESCE($4, dob),
-        updated_at = NOW()
-      WHERE id=$5
-    `, [name, email, phone, dob, userId]);
-
+    const ok = await learnerService.updateLearner(req.params.id, req.body);
+    if (!ok) return res.status(404).json({ message: "Learner not found" });
     res.json({ message: "Updated" });
   } catch (err) {
-    console.error("Error learnerController.update: - learnerController.js:115", err);
+    console.error("Error learnerController.update: - learnerController.js:55", err);
     res.status(500).json({ message: "Server error" });
   }
 }
 
+// Reassign mentor
 export async function reassignMentor(req, res) {
-  const { id } = req.params; // learnerId
   try {
-    const learnerRes = await pool.query("SELECT id FROM learners WHERE id=$1", [id]);
-    if (!learnerRes.rows[0]) {
-      return res.status(404).json({ message: "Learner not found" });
-    }
-
-    // Set mentor_id = NULL → trigger sẽ tự động gán lại
-    await pool.query("UPDATE learners SET mentor_id=NULL WHERE id=$1", [id]);
-
-    // Query lại để lấy mentor_id sau khi trigger chạy
-    const updatedRes = await pool.query("SELECT mentor_id FROM learners WHERE id=$1", [id]);
-
-    res.json({
-      message: "Mentor reassigned automatically by trigger",
-      learnerId: id,
-      mentorId: updatedRes.rows[0].mentor_id
-    });
+    const mentorId = await learnerService.reassignMentorService(req.params.id);
+    if (!mentorId) return res.status(404).json({ message: "Learner not found" });
+    res.json({ learnerId: req.params.id, mentorId });
   } catch (err) {
-    console.error("Error learnerController.reassignMentor: - learnerController.js:140", err);
+    console.error("Error learnerController.reassignMentor: - learnerController.js:67", err);
     res.status(500).json({ message: "Server error" });
   }
 }
-
 
 // Xóa learner
 export async function remove(req, res) {
-  const { id } = req.params;
   try {
-    await pool.query("DELETE FROM learners WHERE id=$1", [id]);
+    await learnerService.deleteLearner(req.params.id);
     res.json({ message: "Deleted" });
   } catch (err) {
-    console.error("Error learnerController.remove: - learnerController.js:153", err);
+    console.error("Error learnerController.remove: - learnerController.js:78", err);
     res.status(500).json({ message: "Server error" });
   }
 }
 
-// Lấy gói gần nhất
+// Lấy purchase mới nhất
 export async function getLatestPurchase(req, res) {
   try {
-    const { id } = req.params; 
+    const purchase = await learnerService.getLatestPurchaseService(req.params.id);
+    res.json({ success: true, purchase });
+  } catch (err) {
+    console.error("Error learnerController.getLatestPurchase: - learnerController.js:89", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+}
+
+// Update note
+export async function updateLearnerNote(req, res) {
+  try {
+    const learner = await learnerService.updateLearnerNoteService(req.params.learnerId, req.body.note);
+    res.json({ success: true, learner });
+  } catch (err) {
+    console.error("Error learnerController.updateLearnerNote: - learnerController.js:100", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+}
+
+// Tạo report
+export async function createReport(req, res) {
+  try {
+    const report = await learnerService.createReportService(req.body);
+    res.status(201).json({ success: true, report });
+  } catch (err) {
+    console.error("Error learnerController.createReport: - learnerController.js:111", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+}
+
+// Lấy mentor từ learner
+export async function getMentorByLearnerId(req, res) {
+  try {
+    const mentorId = await learnerService.getMentorByLearnerIdService(req.params.id);
+    if (!mentorId) return res.status(404).json({ message: "Learner chưa được gán mentor" });
+    res.json({ mentor_id: mentorId });
+  } catch (err) {
+    console.error("Error learnerController.getMentorByLearnerId: - learnerController.js:123", err);
+    res.status(500).json({ message: "Server error" });
+  }
+}
+export async function getLearnerByUserId(req, res) {
+  try {
+    const learner = await learnerService.getLearnerByUserIdService(req.params.userId);
+    if (!learner) return res.status(404).json({ message: "Learner not found" });
+    res.json({ learner });
+  } catch (err) {
+    console.error("Error learnerController.getLearnerByUserId: - learnerController.js:133", err);
+    res.status(500).json({ message: "Server error" });
+  }
+}
+export async function downloadResourceById(req, res) {
+  const { id } = req.params;
+
+  try {
     const result = await pool.query(
-      `SELECT *
-       FROM learner_package_view
-       WHERE learner_id = $1
-       ORDER BY purchase_id DESC
-       LIMIT 1`,
+      "SELECT file_url FROM mentor_resources WHERE id = $1",
       [id]
     );
 
-    // Nếu không có purchase thì trả về null thay vì 404
-    if (!result.rows[0]) {
-      return res.json({ success: true, purchase: null });
+    const resource = result.rows[0];
+    if (!resource) return res.status(404).json({ message: "Tài liệu không tồn tại" });
+
+    return res.redirect(resource.file_url);
+  } catch (err) {
+    console.error("Error downloadResourceById: - learnerController.js:151", err);
+    res.status(500).json({ message: "Lỗi máy chủ" });
+  }
+}
+export async function downloadLearnerResource(req, res) {
+  const { learnerId, resourceId } = req.params;
+
+  try {
+    const fileUrl = await downloadLearnerResourceService(learnerId, resourceId);
+    if (!fileUrl) {
+      return res.status(404).json({ message: "Tài liệu không tồn tại hoặc không thuộc mentor của learner này" });
     }
 
-    res.json({ success: true, purchase: result.rows[0] });
+    return res.redirect(fileUrl);
   } catch (err) {
-    console.error("Error learnerController.getLatestPurchase: - learnerController.js:178", err);
-    res.status(500).json({ success: false, message: "Server error" });
-  }
-}
-
-// Cập nhật ghi chú cho learner
-export async function updateLearnerNote(req, res) {
-  const { learnerId } = req.params;
-  const { note } = req.body;
-  try {
-    const result = await pool.query(
-      "UPDATE learners SET note=$1, updated_at=NOW() WHERE id=$2 RETURNING *",
-      [note, learnerId]
-    );
-    res.json({ success: true, learner: result.rows[0] });
-  } catch (err) {
-    console.error("Error updateLearnerNote:  mentorController.js - learnerController.js:194", err);
-    res.status(500).json({ success: false, message: "Server error" });
-  }
-}
-
-// Mentor gửi report
-export async function createReport(req, res) {
-  const { mentor_id, learner_id, content } = req.body;
-  try {
-    const result = await pool.query(
-      `INSERT INTO reports (mentor_id, learner_id, content, status, created_at, updated_at)
-       VALUES ($1,$2,$3,'pending',NOW(),NOW())
-       RETURNING *`,
-      [mentor_id, learner_id, content]
-    );
-    res.status(201).json({ success: true, report: result.rows[0] });
-  } catch (err) {
-    console.error("Error createReport:  mentorController.js - learnerController.js:211", err);
-    res.status(500).json({ success: false, message: "Server error" });
+    console.error("Error downloadLearnerResource: - learnerController.js:166", err);
+    res.status(500).json({ message: "Lỗi máy chủ" });
   }
 }

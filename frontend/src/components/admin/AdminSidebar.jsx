@@ -1,15 +1,17 @@
-﻿import React, { useEffect, useState } from "react";
+﻿// src/components/admin/AdminSidebar.jsx
+import React, { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import {
   FiHome, FiUsers, FiPackage,
-  FiShoppingBag, FiBarChart2, FiLifeBuoy
+  FiShoppingBag, FiBarChart2, FiLifeBuoy,
+  FiMessageCircle, FiShare2
 } from "react-icons/fi";
 
 export default function AdminSidebar({ collapsed = false }) {
   const [stats, setStats] = useState({ traffic: 0, online: 0 });
 
   function mockStats() {
-    const randomTraffic = 5000; // cố định 5k (hoặc Math.floor(Math.random()*20000)+5000)
+    const randomTraffic = 5000;
     const randomOnline = Math.floor(Math.random() * 500) + 50;
     setStats({ traffic: randomTraffic, online: randomOnline });
   }
@@ -26,7 +28,9 @@ export default function AdminSidebar({ collapsed = false }) {
     { id: "packages", label: "Packages", icon: <FiPackage />, to: "/admin/packages" },
     { id: "purchases", label: "Purchases", icon: <FiShoppingBag />, to: "/admin/purchases" },
     { id: "reports", label: "Reports", icon: <FiBarChart2 />, to: "/admin/reports" },
-    { id: "support", label: "Support", icon: <FiLifeBuoy />, to: "/admin/support" }
+    { id: "support", label: "Support", icon: <FiLifeBuoy />, to: "/admin/support" },
+    { id: "communicate", label: "Communicate", icon: <FiShare2 />, to: "/admin/communicate" }, // thêm
+    { id: "feedback", label: "Feedback", icon: <FiMessageCircle />, to: "/admin/feedback" } // thêm
   ];
 
   return (
@@ -55,11 +59,10 @@ export default function AdminSidebar({ collapsed = false }) {
           <span className="stat-value">{stats.online}</span>
         </div>
       </div>
-      <div className="sidebar-footer">
-    {!collapsed && <span>© 2025 AESP Admin</span>} 
-</div>
 
+      <div className="sidebar-footer">
+        {!collapsed && <span>© 2025 AESP Admin</span>}
+      </div>
     </aside>
-     
   );
 }

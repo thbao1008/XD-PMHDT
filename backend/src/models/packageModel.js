@@ -28,9 +28,7 @@ export async function createUser(req, res) {
 
 // Lấy tất cả gói học
 export async function getAllPackages() {
-  const result = await pool.query(
-    "SELECT id, name, price, original_price, duration_days FROM packages ORDER BY id ASC"
-  );
+  const result = await pool.query("SELECT * FROM packages ORDER BY id DESC");
   return result.rows;
 }
 
@@ -44,28 +42,26 @@ export async function getPackageById(id) {
 }
 
 // Tạo gói học mới
-export async function createPackage({ name, price, originalPrice, durationDays }) {
+export async function createPackage({ name, price, original_price, duration_days }) {
   const result = await pool.query(
-    "INSERT INTO packages (name, price, original_price, duration_days) VALUES ($1,$2,$3,$4) RETURNING *",
-    [name, price, originalPrice, durationDays]
+    `INSERT INTO packages (name, price, original_price, duration_days) 
+     VALUES ($1,$2,$3,$4) RETURNING *`,
+    [name, price, original_price, duration_days]
   );
   return result.rows[0];
 }
 
-// Cập nhật gói học
-export async function updatePackage(id, { name, price, originalPrice, durationDays }) {
+export async function updatePackage(id, { name, price, original_price, duration_days }) {
   const result = await pool.query(
-    "UPDATE packages SET name=$1, price=$2, original_price=$3, duration_days=$4 WHERE id=$5 RETURNING *",
-    [name, price, originalPrice, durationDays, id]
+    `UPDATE packages 
+     SET name=$1, price=$2, original_price=$3, duration_days=$4, updated_at=NOW()
+     WHERE id=$5 RETURNING *`,
+    [name, price, original_price, duration_days, id]
   );
   return result.rows[0];
 }
 
-// Xóa gói học
 export async function deletePackage(id) {
-  const result = await pool.query(
-    "DELETE FROM packages WHERE id=$1 RETURNING *",
-    [id]
-  );
-  return result.rows[0];
+  await pool.query("DELETE FROM packages WHERE id=$1", [id]);
 }
+
