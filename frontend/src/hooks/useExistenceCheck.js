@@ -1,42 +1,45 @@
-import { useEffect, useState } from "react";
-import api from "../api"; // axios instance
+// src/hooks/useExistenceCheck.js
+import { useState, useEffect } from "react";
+import api from "../api.js"; // đường dẫn tới file api của bạn
 
-export function useExistenceCheck(type, value, delay = 300) {
-  const [state, setState] = useState({
-    loading: false,
-    valid: null,     // true = hợp lệ (chưa tồn tại), false = đã tồn tại, null = chưa kiểm tra
-    message: "",     // thông điệp hiển thị
-  });
+export default function useExistenceCheck(field, value) {
+  const [loading, setLoading] = useState(false);
+  const [valid, setValid] = useState(null); // true = hợp lệ, false = đã tồn tại
+  const [message, setMessage] = useState("");
 
   useEffect(() => {
-    if (!value) {
-      setState({ loading: false, valid: null, message: "" });
+    if (!value || !field) {
+      setValid(null);
+      setMessage("");
       return;
     }
 
-    setState((s) => ({ ...s, loading: true }));
-
-    const t = setTimeout(async () => {
+    let active = true;
+    const delay = setTimeout(async () => {
+      setLoading(true);
       try {
-        const params = type === "email" ? { email: value } : { phone: value };
-        const res = await api.get("/admin/users/check", { params });
-        const exists = !!res.data?.exists;
-
-        setState({
-          loading: false,
-          valid: !exists,
-          message: exists
-            ? (type === "email" ? "Email đã tồn tại" : "Số điện thoại đã tồn tại")
-            : (type === "email" ? "Email hợp lệ" : "Số điện thoại hợp lệ"),
+        const res = await api.get(`/admin/users/check`, {
+          params: { [field]: value }
         });
+        if (!active) return;
+        const exists = res.data?.exists ?? false;
+        setValid(!exists);
+        setMessage(exists ? `${field === "email" ? "Email" : "SĐT"} đã tồn tại` : "Hợp lệ");
       } catch (err) {
-        // lỗi API: không thay đổi valid, chỉ tắt loading
-        setState((s) => ({ ...s, loading: false }));
+        if (!active) return;
+        console.error("❌ Lỗi kiểm tra tồn tại: - useExistenceCheck.js:30", err);
+        setValid(null);
+        setMessage("Không thể kiểm tra");
+      } finally {
+        if (active) setLoading(false);
       }
-    }, delay);
+    }, 500); // debounce 500ms
 
-    return () => clearTimeout(t);
-  }, [type, value, delay]);
+    return () => {
+      active = false;
+      clearTimeout(delay);
+    };
+  }, [field, value]);
 
-  return state;
+  return { loading, valid, message };
 }

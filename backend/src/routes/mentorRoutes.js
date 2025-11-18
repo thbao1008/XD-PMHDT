@@ -1,67 +1,69 @@
+// backend/src/routes/mentorRoutes.js
 import express from "express";
-import {
-  // Mentor CRUD
-  createMentor,
-  getAllMentors,
-  getMentorById,
-  updateMentor,
-  removeMentor,
-
-  // Learners
-  getLearnersByMentor,
-  getMentorByUserId,
-  updateLearnerNote,
-
-  // Sessions
-  getSessions,
-  addSessionController,
-  updateSessionController,
-  deleteSessionController,
-  addSessionsBatchController,
-
-  // Resources
-  getResources,
-  createResource,
-  updateResource,
-  deleteResource,
-
-  // Report
-  mentorCreateReport
-} from "../controllers/mentorController.js";
+import * as mentorCtrl from "../controllers/mentorController.js";
 
 const router = express.Router();
 
+/* -----------------------
+   Specific routes first
+   ----------------------- */
 
-// ========== Mentor CRUD ==========
-router.post("/", createMentor);
-router.get("/", getAllMentors);
-router.get("/:id", getMentorById);
-router.put("/:id", updateMentor);
-router.delete("/:id", removeMentor);
+// AI endpoints and topic/challenge specific (specific paths before generic /:id)
+router.post("/topics/:topicId/challenges/ai", mentorCtrl.createChallengeAI);
+router.put("/challenges/:id/ai", mentorCtrl.editChallengeAI);
+router.post("/challenges/ai-chat", mentorCtrl.chatWithAI);
+router.post("/challenges/ai-improve", mentorCtrl.improveChallengeDraft);
 
+// Topics & Challenges
+router.get("/:id/topics", mentorCtrl.getTopicsByMentor);
+router.post("/:id/topics", mentorCtrl.createTopic);
+router.delete("/topics/:topicId", mentorCtrl.deleteTopic);
+router.get("/topics/:topicId/challenges", mentorCtrl.getChallengesByTopic);
+router.post("/topics/:topicId/challenges", mentorCtrl.createChallenge);
+router.delete("/challenges/:id", mentorCtrl.deleteChallenge);
+router.put("/challenges/:id", mentorCtrl.updateChallenge);
 
-// ========== Learners ==========
-router.get("/:id/learners", getLearnersByMentor);
-router.get("/by-user/:userId", getMentorByUserId);
-router.put("/learners/:learnerId/note", updateLearnerNote);
+// Resources
+router.get("/:id/resources", mentorCtrl.getResources);
+router.post("/:id/resources", mentorCtrl.createResource);
+router.put("/resources/:id", mentorCtrl.updateResource);
+router.delete("/resources/:id", mentorCtrl.deleteResource);
 
+// Reports
+router.post("/reports", mentorCtrl.mentorCreateReport);
 
-// ========== Sessions ==========
-router.get("/:id/sessions", getSessions);
-router.post("/:id/sessions", addSessionController);
-router.put("/:id/sessions/:sessionId", updateSessionController);
-router.delete("/:id/sessions/:sessionId", deleteSessionController);
-router.post("/:id/sessions/batch", addSessionsBatchController);
+// Mentor by user and learners
+router.get("/by-user/:userId", mentorCtrl.getMentorByUserId);
+router.get("/:id/learners", mentorCtrl.getLearnersByMentor);
+router.put("/learners/:learnerId/note", mentorCtrl.updateLearnerNote);
 
+// Sessions
+router.get("/:id/sessions", mentorCtrl.getSessions);
+router.post("/:id/sessions", mentorCtrl.addSessionController);
+router.put("/:id/sessions/:sessionId", mentorCtrl.updateSessionController);
+router.delete("/:id/sessions/:sessionId", mentorCtrl.deleteSessionController);
+router.post("/:id/sessions/batch", mentorCtrl.addSessionsBatchController);
 
-// ========== Resources ==========
-router.get("/:id/resources", getResources);
-router.post("/:id/resources", createResource);
-router.put("/resources/:id", updateResource);
-router.delete("/resources/:id", deleteResource);
+// Mentor CRUD (generic id route placed after specific ones)
+router.post("/", mentorCtrl.createMentor);
+router.get("/", mentorCtrl.getAllMentors);
+router.get("/:id", mentorCtrl.getMentorById);
+router.put("/:id", mentorCtrl.updateMentor);
+router.delete("/:id", mentorCtrl.removeMentor);
 
+/* -----------------------
+   Mentor-specific submission/review endpoints
+   ----------------------- */
+// List submissions for a mentor
+router.get("/:mentorId/submissions", mentorCtrl.listSubmissions);
 
-// ========== Report ==========
-router.post("/reports", mentorCreateReport);
+// Get single submission (only if learner.mentor_id === mentorId)
+router.get("/:mentorId/submissions/:id", mentorCtrl.getSubmission);
+
+// Mentor save review for submission (accepts audio_url in body)
+router.post("/:mentorId/submissions/:id/review", mentorCtrl.postReview);
+
+// List reviews by mentor
+router.get("/:mentorId/reviews", mentorCtrl.listReviews);
 
 export default router;

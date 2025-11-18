@@ -1,12 +1,4 @@
-:root {
-  --primary: #0066cc;
-  --text: #333;
-  --bg-light: #f9f9f9;
-  --shadow: 0 4px 12px rgba(0,0,0,0.1);
-  --radius: 12px;
-  --bg-intro: #e6f2ff;
-  --bg-packages: #e6f2ff;
-}
+
 
 /* ===== Reset & Layout ===== */
 .home-wrap {

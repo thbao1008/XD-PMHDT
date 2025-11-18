@@ -1,20 +1,22 @@
 ﻿import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import api from "../../api";
+import api from "../../api.js";
 import UserForPage from "./UserForPage.jsx";
-import { useExistenceCheck } from "../../hooks/useExistenceCheck";
 import {
-  FiUser, FiMail, FiLock, FiPhone, FiCalendar, FiUsers, FiPackage,
+  FiUser, FiMail, FiLock, FiPhone, FiCalendar, FiPackage,
   FiTrash2, FiPlus, FiLoader, FiAlertTriangle, FiCheckCircle
 } from "react-icons/fi";
 import PurchasesList from "./PurchasesList.jsx";
-import Modal from "../common/Modal.jsx";  
+import Modal from "../common/Modal.jsx";
 import thumucIcon from "../../assets/icons/thumuc.png";
 import usersIcon from "../../assets/icons/users.png";
+import useExistenceCheck from "../../hooks/useExistenceCheck.js";
 
 export default function UsersList() {
   const [users, setUsers] = useState([]);
   const [packages, setPackages] = useState([]);
+  const [packagesLoading, setPackagesLoading] = useState(false);
+  const [packagesError, setPackagesError] = useState("");
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("ADMIN");
   const [page, setPage] = useState(1);
@@ -27,7 +29,6 @@ export default function UsersList() {
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
   const [dob, setDob] = useState("");
-  const [role, setRole] = useState("LEARNER");
   const [packageId, setPackageId] = useState("");
 
   const [emailError, setEmailError] = useState("");
@@ -38,6 +39,7 @@ export default function UsersList() {
 
   const navigate = useNavigate();
   const [latestPurchase, setLatestPurchase] = useState(null);
+
   // Helpers
   function capitalizeWords(str) {
     return (str || "")
@@ -76,49 +78,59 @@ export default function UsersList() {
     return diff > 0 ? diff : 0;
   }
 
- useEffect(() => {
-  const fetchUsers = async () => {
-    try {
-      const res = await api.get("/admin/users"); 
-      console.log("👥 Users từ API:", res.data);
-      setUsers(res.data.users || []);
-    } catch (err) {
-      console.error("❌ Lỗi khi load users:", err);
-    }
-  };
-  fetchUsers();
-}, []);
+  // Load users
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const res = await api.get("/admin/users");
+        console.log("👥 Users từ API:", res.data);
+        setUsers(res.data.users || []);
+      } catch (err) {
+        console.error("❌ Lỗi khi load users:", err);
+      }
+    };
+    fetchUsers();
+  }, []);
 
- useEffect(() => {
+  // Load packages (public)
+  useEffect(() => {
   const fetchPackages = async () => {
     try {
-      const res = await api.get("/packages/public"); 
+      setPackagesLoading(true);
+      setPackagesError("");
+      const res = await api.get("/packages/public");
       console.log("📦 Packages từ API:", res.data);
-      setPackages(res.data.packages || []);
+
+      const data = res.data;
+      const list = Array.isArray(data) ? data : (data.packages || []);
+      setPackages(list);
     } catch (err) {
       console.error("❌ Lỗi khi load packages:", err);
+      setPackages([]);
+      setPackagesError("Không thể tải danh sách gói học");
+    } finally {
+      setPackagesLoading(false);
     }
   };
   fetchPackages();
 }, []);
 
-useEffect(() => {
-  if (selectedUser && selectedUser.role?.toUpperCase() === "LEARNER") {
-    const learnerId = selectedUser.learner_id;
-    if (!learnerId) return;
+  // Load latest purchase khi chọn learner
+  useEffect(() => {
+    if (selectedUser && selectedUser.role?.toUpperCase() === "LEARNER") {
+      const learnerId = selectedUser.learner_id;
+      if (!learnerId) return;
 
-    api.get(`/learners/${learnerId}/latest-purchase`)
-      .then(res => {
-        // Nếu không có purchase thì set null
-        setLatestPurchase(res.data.purchase || null);
-      })
-      .catch(err => {
-        console.error("❌ Lỗi load latest purchase:", err);
-        setLatestPurchase(null);
-      });
-  }
-}, [selectedUser]);
-
+      api.get(`/learners/${learnerId}/latest-purchase`)
+        .then(res => {
+          setLatestPurchase(res.data.purchase || null);
+        })
+        .catch(err => {
+          console.error("❌ Lỗi load latest purchase:", err);
+          setLatestPurchase(null);
+        });
+    }
+  }, [selectedUser]);
 
   const filtered = users.filter((u) => {
     const roleUpper = (u.role || "").toUpperCase();
@@ -161,7 +173,7 @@ useEffect(() => {
 
   const resetForm = () => {
     setName(""); setEmail(""); setPassword("");
-    setPhone(""); setDob(""); setRole("LEARNER"); setPackageId("");
+    setPhone(""); setDob(""); setPackageId("");
     setEmailError(""); setPhoneError("");
   };
 
@@ -178,7 +190,7 @@ useEffect(() => {
 
     try {
       const payload = {
-        name: capitalizeWords(name),  
+        name: capitalizeWords(name),
         email: email.toLowerCase(),
         password,
         phone: phone ? phoneDigits : "",
@@ -206,7 +218,7 @@ useEffect(() => {
           <input
             type="text"
             className="input search-input"
-                       placeholder="Tìm theo tên / email..."
+            placeholder="Tìm theo tên / email..."
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           />
@@ -234,7 +246,11 @@ useEffect(() => {
             <button
               type="button"
               className="btn btn-primary"
-              onClick={() => setShowCreate(true)}
+              onClick={() => {
+                // đảm bảo đúng role trước khi mở modal
+                setRoleFilter("LEARNER");
+                setShowCreate(true);
+              }}
             >
               <FiPlus /> Thêm Learner
             </button>
@@ -242,87 +258,84 @@ useEffect(() => {
         </div>
 
         {/* Table */}
-<table className="table">
-  <thead>
-    <tr>
-      <th>STT</th>
-      <th>Tên</th>
-      <th>Số điện thoại</th>
-      <th>Email</th>
-      <th>Vai trò</th>
-      {roleFilter === "LEARNER" && <th>Tình trạng gói</th>}
-      <th>Tình trạng</th>
-    </tr>
-  </thead>
-  <tbody>
-    {paginated.length === 0 ? (
-      <tr><td colSpan="7">Không tìm thấy người dùng nào.</td></tr>
-    ) : (
-      paginated.map((user, index) => (
-        <tr
-          key={user.id}
-          onClick={() => setSelectedUser(user)}
-          style={{ cursor: "pointer" }}
-        >
-          <td>{start + index + 1}</td>
-          <td>{capitalizeWords(user.name)}</td>
-          <td>{user.phone || "-"}</td>
-          <td>{user.email}</td>
-          <td>{capitalizeWords(user.role)}</td>
+        <table className="table">
+          <thead>
+            <tr>
+              <th>STT</th>
+              <th>Tên</th>
+              <th>Số điện thoại</th>
+              <th>Email</th>
+              <th>Vai trò</th>
+              {roleFilter === "LEARNER" && <th>Tình trạng gói</th>}
+              <th>Tình trạng</th>
+            </tr>
+          </thead>
+          <tbody>
+            {paginated.length === 0 ? (
+              <tr><td colSpan="7">Không tìm thấy người dùng nào.</td></tr>
+            ) : (
+              paginated.map((user, index) => (
+                <tr
+                  key={user.id}
+                  onClick={() => setSelectedUser(user)}
+                  style={{ cursor: "pointer" }}
+                >
+                  <td>{start + index + 1}</td>
+                  <td>{capitalizeWords(user.name)}</td>
+                  <td>{user.phone || "-"}</td>
+                  <td>{user.email}</td>
+                  <td>{capitalizeWords(user.role)}</td>
 
-          {roleFilter === "LEARNER" && (
-            <td>
-              {user.status === "banned"
-                ? "Tạm ngưng"
-                : user.package_status
-                  ? (user.package_status === "active" ? "Còn hạn" : "Hết hạn")
-                  : "-"}
-            </td>
-          )}
+                  {roleFilter === "LEARNER" && (
+                    <td>
+                      {user.status === "banned"
+                        ? "Tạm ngưng"
+                        : user.package_status
+                          ? (user.package_status === "active" ? "Còn hạn" : "Hết hạn")
+                          : "-"}
+                    </td>
+                  )}
 
-          <td>
-            {user.status === "active" ? "Active" : "Banned"}
-          </td>
-        </tr>
-      ))
-    )}
-  </tbody>
-  </table>
-       {/* Pagination */}
-<div className="pagination">
-  <button
-    className="page-btn btn btn-secondary btn-small"
-    disabled={page === 1}
-    onClick={() => setPage((p) => p - 1)}
-  >
-    ←
-  </button>
-  <span>Trang {page} / {totalPages}</span>
-  <button
-    className="page-btn btn btn-secondary btn-small"
-    disabled={page === totalPages}
-    onClick={() => setPage((p) => p + 1)}
-  >
-    →
-  </button>
-</div>
-</div>
+                  <td>
+                    {user.status === "active" ? "Active" : "Banned"}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
 
-{/* Modal hiển thị thông tin user */}
-{selectedUser && (
-  <UserForPage
-    userId={selectedUser.id}
-    onClose={() => setSelectedUser(null)}
-    onStatusChange={(updatedUser) => {
-      
-      setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
-      
-      setSelectedUser(updatedUser);
-    }}
-  />
-)}
+        {/* Pagination */}
+        <div className="pagination">
+          <button
+            className="page-btn btn btn-secondary btn-small"
+            disabled={page === 1}
+            onClick={() => setPage((p) => p - 1)}
+          >
+            ←
+          </button>
+          <span>Trang {page} / {totalPages}</span>
+          <button
+            className="page-btn btn btn-secondary btn-small"
+            disabled={page === totalPages}
+            onClick={() => setPage((p) => p + 1)}
+          >
+            →
+          </button>
+        </div>
+      </div>
 
-
+      {/* Modal hiển thị thông tin user */}
+      {selectedUser && (
+        <UserForPage
+          userId={selectedUser.id}
+          onClose={() => setSelectedUser(null)}
+          onStatusChange={(updatedUser) => {
+            setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
+            setSelectedUser(updatedUser);
+          }}
+        />
+      )}
 
       {/* Modal tạo user */}
       {showCreate && (
@@ -344,30 +357,30 @@ useEffect(() => {
                 </div>
               </div>
 
-             {/* Email */}
-<div className="form-group">
-  <label>Email</label>
-  <div className="input-with-icon">
-    <FiMail className="icon" />
-    <input
-      type="email"
-      placeholder="email@domain.com"
-      value={email}
-      onChange={(e) => {
-        const v = e.target.value;
-        setEmail(v);
-        if (v === "") setEmailError("Email không được để trống");
-        else if (!validateEmail(v)) setEmailError("Email không đúng định dạng");
-        else setEmailError("");
-      }}
-      required
-    />
-  </div>
-  {emailError && <span className="input-error row"><FiAlertTriangle /> {emailError}</span>}
-  {!emailError && emailCheck.loading && <span className="muted row"><FiLoader /> Đang kiểm tra...</span>}
-  {!emailError && emailCheck.valid === false && <span className="input-error row"><FiAlertTriangle /> {emailCheck.message}</span>}
-  {!emailError && emailCheck.valid === true && <span className="row" style={{ color: "#166534", fontSize: 12 }}><FiCheckCircle /> {emailCheck.message}</span>}
-</div>
+              {/* Email */}
+              <div className="form-group">
+                <label>Email</label>
+                <div className="input-with-icon">
+                  <FiMail className="icon" />
+                  <input
+                    type="email"
+                    placeholder="email@domain.com"
+                    value={email}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setEmail(v);
+                      if (v === "") setEmailError("Email không được để trống");
+                      else if (!validateEmail(v)) setEmailError("Email không đúng định dạng");
+                      else setEmailError("");
+                    }}
+                    required
+                  />
+                </div>
+                {emailError && <span className="input-error row"><FiAlertTriangle /> {emailError}</span>}
+                {!emailError && emailCheck.loading && <span className="muted row"><FiLoader /> Đang kiểm tra...</span>}
+                {!emailError && emailCheck.valid === false && <span className="input-error row"><FiAlertTriangle /> {emailCheck.message}</span>}
+                {!emailError && emailCheck.valid === true && <span className="row" style={{ color: "#166534", fontSize: 12 }}><FiCheckCircle /> {emailCheck.message}</span>}
+              </div>
 
               {/* Mật khẩu */}
               <div className="form-group">
@@ -384,32 +397,32 @@ useEffect(() => {
                 </div>
               </div>
 
-             {/* Số điện thoại */}
-<div className="form-group">
-  <label>Số điện thoại</label>
-  <div className="input-with-icon">
-    <FiPhone className="icon" />
-    <input
-      type="tel"
-      placeholder="Ví dụ: 0901234567"
-      value={phone}
-      onChange={(e) => {
-        const raw = e.target.value;
-        const digits = sanitizePhone(raw);
-        setPhone(raw);
-        if (raw === "") setPhoneError("");
-        else if (!validateVNPhone(digits)) setPhoneError("SĐT phải 10 số, bắt đầu bằng 0");
-        else setPhoneError("");
-      }}
-      inputMode="numeric"
-      pattern="0[0-9]{9}"
-    />
-  </div>
-  {phoneError && <span className="input-error row"><FiAlertTriangle /> {phoneError}</span>}
-  {phone && !phoneError && phoneCheck.loading && <span className="muted row"><FiLoader /> Đang kiểm tra...</span>}
-  {phone && !phoneError && phoneCheck.valid === false && <span className="input-error row"><FiAlertTriangle /> {phoneCheck.message}</span>}
-  {phone && !phoneError && phoneCheck.valid === true && <span className="row" style={{ color: "#166534", fontSize: 12 }}><FiCheckCircle /> {phoneCheck.message}</span>}
-</div>
+              {/* Số điện thoại */}
+              <div className="form-group">
+                <label>Số điện thoại</label>
+                <div className="input-with-icon">
+                  <FiPhone className="icon" />
+                  <input
+                    type="tel"
+                    placeholder="Ví dụ: 0901234567"
+                    value={phone}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      const digits = sanitizePhone(raw);
+                      setPhone(raw);
+                      if (raw === "") setPhoneError("");
+                      else if (!validateVNPhone(digits)) setPhoneError("SĐT phải 10 số, bắt đầu bằng 0");
+                      else setPhoneError("");
+                    }}
+                    inputMode="numeric"
+                    pattern="0[0-9]{9}"
+                  />
+                </div>
+                {phoneError && <span className="input-error row"><FiAlertTriangle /> {phoneError}</span>}
+                {phone && !phoneError && phoneCheck.loading && <span className="muted row"><FiLoader /> Đang kiểm tra...</span>}
+                {phone && !phoneError && phoneCheck.valid === false && <span className="input-error row"><FiAlertTriangle /> {phoneCheck.message}</span>}
+                {phone && !phoneError && phoneCheck.valid === true && <span className="row" style={{ color: "#166534", fontSize: 12 }}><FiCheckCircle /> {phoneCheck.message}</span>}
+              </div>
 
               {/* Ngày sinh */}
               <div className="form-group">
@@ -425,26 +438,34 @@ useEffect(() => {
               </div>
 
               {/* Gói học cho Learner */}
-{roleFilter === "LEARNER" && (
+              {roleFilter === "LEARNER" && (
   <div className="form-group">
     <label>Gói học</label>
     <div className="input-with-icon">
       <FiPackage className="icon" />
-      <select
-        value={packageId}
-        onChange={(e) => setPackageId(e.target.value)}
-      >
-        <option value="">-- Chọn gói học --</option>
-        {packages.map(pkg => (
-          <option key={pkg.id} value={pkg.id}>
-            {pkg.name} ({pkg.duration_days} ngày)
-          </option>
-        ))}
-      </select>
+      {packagesLoading ? (
+        <div className="row muted"><FiLoader /> Đang tải danh sách gói...</div>
+      ) : packagesError ? (
+        <span className="input-error row"><FiAlertTriangle /> {packagesError}</span>
+      ) : packages.length > 0 ? (
+        <select
+          value={packageId}
+          onChange={(e) => setPackageId(e.target.value)}
+        >
+          <option value="">-- Chọn gói học --</option>
+          {packages.map(pkg => (
+            <option key={pkg.id} value={pkg.id}>
+              {pkg.name} ({pkg.duration_days} ngày)
+            </option>
+          ))}
+        </select>
+      ) : (
+        <span className="muted">Không có gói học khả dụng</span>
+      )}
     </div>
   </div>
 )}
-
+            
             </div>
 
             {/* Nút hành động */}

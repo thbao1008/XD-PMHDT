@@ -1,4 +1,5 @@
-﻿import React from "react";
+﻿// src/app/routes.jsx
+import React from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import ProtectedRoute from "../components/ProtectedRoute";
 import GuestRoute from "../components/GuestRoute";
@@ -8,10 +9,14 @@ import Home from "../pages/Home";
 import Login from "../pages/Login";
 import ProfilePage from "../pages/Profile";
 import NotFound from "../pages/NotFound";
-import CommunicateCenter from "../pages/CommunicateCenter";   // thêm
+import CommunicateCenter from "../pages/CommunicateCenter";
 
-// Admin
+// Layouts
 import AdminLayout from "../components/admin/AdminLayout";
+import LearnerLayout from "../components/learner/LearnerLayout";
+import MentorLayout from "../components/mentor/MentorLayout";
+
+// Admin pages
 import AdminDashboard from "../components/admin/AdminDashboard";
 import ReportsPage from "../components/admin/ReportsPage";
 import UsersList from "../components/admin/UsersList";
@@ -20,16 +25,14 @@ import PurchasesList from "../components/admin/PurchasesList";
 import PurchasesPage from "../components/admin/PurchasesPage";
 import SupportTickets from "../components/admin/SupportTickets";
 
-// Learner
-import LearnerLayout from "../components/learner/LearnerLayout";
-// Đổi import: dùng LearningCatalog thay cho PackageCatalog
+// Learner pages
 import LearningCatalog from "../components/learner/LearningCatalog";
 import SpeakingPractice from "../components/learner/SpeakingPractice";
 import Challenges from "../components/learner/Challenges";
+import ChallengeDetail from "../components/learner/ChallengeDetail";
 import ProgressAnalytics from "../components/learner/ProgressAnalytics";
 
-// Mentor
-import MentorLayout from "../components/mentor/MentorLayout";
+// Mentor pages
 import MentorDashboard from "../components/mentor/MentorDashboard";
 import AssessmentPanel from "../components/mentor/AssessmentPanel";
 import FeedbackPanel from "../components/mentor/FeedbackPanel";
@@ -67,7 +70,7 @@ export default function AppRoutes() {
         path="/admin"
         element={
           <ProtectedRoute requiredRole="admin">
-            <AdminLayout />
+            <AdminLayout />   {/* Layout có theme-admin */}
           </ProtectedRoute>
         }
       >
@@ -79,7 +82,7 @@ export default function AppRoutes() {
         <Route path="learners/:id/purchases" element={<PurchasesPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="support" element={<SupportTickets />} />
-        <Route path="communicate" element={<CommunicateCenter />} /> {/* thêm */}
+        <Route path="communicate" element={<CommunicateCenter />} />
         <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
       </Route>
 
@@ -88,17 +91,17 @@ export default function AppRoutes() {
         path="/learn"
         element={
           <ProtectedRoute requiredRole="learner">
-            <LearnerLayout />
+            <LearnerLayout /> {/* Layout có theme-learner */}
           </ProtectedRoute>
         }
       >
-        {/* Đổi component ở đây */}
         <Route index element={<LearningCatalog />} />
         <Route path="catalog" element={<LearningCatalog />} />
         <Route path="practice" element={<SpeakingPractice />} />
         <Route path="challenges" element={<Challenges />} />
+        <Route path="challenges/:id" element={<ChallengeDetail />} />
         <Route path="progress" element={<ProgressAnalytics />} />
-        <Route path="communicate" element={<CommunicateCenter />} /> {/* thêm */}
+        <Route path="communicate" element={<CommunicateCenter />} />
         <Route path="*" element={<Navigate to="/learn/catalog" replace />} />
       </Route>
 
@@ -107,7 +110,7 @@ export default function AppRoutes() {
         path="/mentor"
         element={
           <ProtectedRoute requiredRole="mentor">
-            <MentorLayout />
+            <MentorLayout />  {/* Layout có theme-mentor */}
           </ProtectedRoute>
         }
       >
@@ -119,7 +122,7 @@ export default function AppRoutes() {
         <Route path="sessions" element={<MentorSessions />} />
         <Route path="learners" element={<MentorLearners />} />
         <Route path="resources" element={<MentorResources />} />
-        <Route path="communicate" element={<CommunicateCenter />} /> {/* thêm */}
+        <Route path="communicate" element={<CommunicateCenter />} />
         <Route path="*" element={<Navigate to="/mentor/dashboard" replace />} />
       </Route>
 

@@ -3,7 +3,7 @@ import {
   getPackages,
   createNewPackage,
   updateExistingPackage,
-  deleteExistingPackage
+  deleteExistingPackage,
 } from "../controllers/packageController.js";
 
 const router = express.Router();
@@ -16,5 +16,4 @@ router.get("/", getPackages);
 router.post("/", createNewPackage);
 router.put("/:id", updateExistingPackage);
 router.delete("/:id", deleteExistingPackage);
-
 export default router;
