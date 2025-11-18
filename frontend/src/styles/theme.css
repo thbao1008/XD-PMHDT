@@ -1,82 +1,184 @@
 /* =========================
-   BASE THEME VARIABLES (dùng chung)
+   BASE THEME VARIABLES
    ========================= */
 :root {
-  /* Màu mặc định (Home) */
+  --card-radius: 12px;
+  --btn-radius: 10px;
+  --gap: 16px;
+  --sidebar-width: 240px;
+  --sidebar-collapsed: 72px;
+  --header-height: 100px;
+
   --bg: #ffffff;
   --surface: #ffffff;
-  --primary: #c62828;      
-  --primary-600: #b71c1c;   
-  --accent: #ffebee;        
-  --text-900: #0b0b0b;
-  --text-700: #333333;
-  --muted: #6f6f6f;
-  --support-green: #008080;       /* xanh lá chính */
-  --support-green-600: #40E0;   
-  /* Shadow & Border */
-  --shadow-low: 0 4px 10px rgba(0,0,0,0.05);
-  --shadow-high: 0 12px 28px rgba(0,0,0,0.12);
-  --border-1: 1px solid rgba(15,23,24,0.08);
-  --focus-ring: rgba(198,40,40,0.25);
-  
-  /* Font */
-  --fw-regular: 400;
-  --fw-medium: 500;
-  --fw-bold: 700;
-  --fs-base: 15px;
-
-  /* Biến riêng cho admin layout */
-  --admin-primary: var(--primary);
-  --admin-primary-600: var(--primary-600);
-  --admin-accent: var(--accent);
-  --sidebar-bg: linear-gradient(180deg, #c62828, #b71c1c);
-}
-
-/* =========================
-   THEME OVERRIDES
-   ========================= */
-
-/* Admin theme */
-.theme-admin {
-  --primary: #059ca0;
-  --primary-600: #048080;
-  --accent: #7be6c7;
-  --admin-primary: #059ca0;
-  --admin-primary-600: #048080;
-  --admin-accent: #7be6c7;
-  --sidebar-bg: linear-gradient(180deg, #6a11cb, #2575fc);
-}
-
-/* Mentor theme */
-.theme-mentor {
-  --primary: #4868d9;
-  --primary-600: #3d58b6;
-  --accent: #7db3ff;
-  --admin-primary: #4868d9;
-  --admin-primary-600: #3d58b6;
-  --admin-accent: #7db3ff;
-  --sidebar-bg: linear-gradient(180deg, #4868d9, #3d58b6);
-}
-
-/* Learner theme */
-.theme-learner {
-  --primary: #05b09f;
-  --primary-600: #04907f;
-  --accent: #7be6c7;
-  --admin-primary: #05b09f;
-  --admin-primary-600: #04907f;
-  --admin-accent: #7be6c7;
-  --sidebar-bg: linear-gradient(180deg, #05b09f, #04907f);
-}
-
-/* Home theme (Landing page) */
-.theme-home {
   --primary: #c62828;
   --primary-600: #b71c1c;
   --accent: #ffebee;
   --text-900: #0b0b0b;
   --text-700: #333333;
   --muted: #6f6f6f;
+  --support-green: #008080;
+  --support-green-600: #40E0D0;
+
+  --shadow-low: 0 4px 10px rgba(0,0,0,0.05);
+  --shadow-high: 0 12px 28px rgba(0,0,0,0.12);
+  --border-1: 1px solid rgba(15,23,24,0.08);
+  --focus-ring: rgba(198,40,40,0.25);
+
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-bold: 700;
+  --fs-base: 15px;
+
+  --sidebar-bg: linear-gradient(180deg, #c62828, #b71c1c);
+}
+
+/* =========================
+   THEME OVERRIDES
+   ========================= */
+.theme-admin {
+  --primary: #059ca0;
+  --primary-600: #048080;
+  --accent: #7be6c7;
+  --sidebar-bg: linear-gradient(180deg, #6a11cb, #2575fc);
+}
+
+.theme-mentor {
+  --primary: #4868d9;
+  --primary-600: #3d58b6;
+  --accent: #7db3ff;
+  --sidebar-bg: linear-gradient(180deg, #4868d9, #3d58b6);
+}
+
+.theme-learner {
+  --primary: #05b09f;
+  --primary-600: #04907f;
+  --accent: #7be6c7;
+  --sidebar-bg: linear-gradient(180deg, #05b09f, #04907f);
+}
+
+.theme-home {
+  --primary: #c62828;
+  --primary-600: #b71c1c;
+  --accent: #ffebee;
   --bg: #ffffff;
   --surface: #ffffff;
+  --text-900: #0b0b0b;
+  --text-700: #333333;
+  --muted: #6f6f6f;
+}
+
+/* =========================
+   LAYOUT STYLES
+   ========================= */
+.shell-root {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+  background: var(--bg);
+}
+
+.shell-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--header-height);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  background: var(--surface);
+  border-bottom: var(--border-1);
+  box-shadow: var(--shadow-low);
+  z-index: 120;
+  gap: 12px;
+}
+
+.shell-sidebar {
+  position: fixed;
+  top: var(--header-height);
+  left: 0;
+  bottom: 0;
+  width: var(--sidebar-width);
+  background: var(--sidebar-bg);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 16px 12px;
+  transition: width .2s ease, padding .2s ease;
+  overflow-y: auto;
+}
+
+.shell-main {
+  margin-left: var(--sidebar-width);
+  margin-top: var(--header-height);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--header-height));
+  transition: margin-left .18s ease;
+}
+
+.shell-content {
+  flex: 1;
+  padding: 20px;
+  background: var(--surface);
+  height: 100%;
+  overflow-y: auto;
+}
+
+/* =========================
+   COMPONENT STYLES
+   ========================= */
+.btn-primary {
+  background: var(--primary);
+  color: #fff;
+}
+
+.btn-ghost {
+  background: transparent;
+  border: 1px solid var(--primary);
+  color: var(--primary);
+}
+
+.btn-action.ban {
+  background: var(--primary);
+  color: #fff;
+}
+
+.btn-action.delete {
+  background: var(--primary-600);
+  color: #fff;
+}
+
+.kpi-icon {
+  color: var(--primary);
+}
+
+.panel h2 {
+  color: var(--text-900);
+}
+
+.btn.btn-secondary {
+  background: #f3f4f6;
+  color: var(--text-700);
+  border: var(--border-1);
+}
+
+.form-group label {
+  color: var(--text-900);
+}
+
+.dropdown-item {
+  color: var(--text-900);
+}
+
+.brand-name {
+  color: var(--text-900);
+}
+
+.brand-sub {
+  color: var(--muted);
 }

@@ -1,14 +1,19 @@
 import React, { useEffect, useState } from "react";
-import api from "../../api";
+import api from "../../api.js";
 import Modal from "../common/Modal.jsx";
 import AssignedLearnersModal from "../common/AssignedLearnersModal.jsx";
+import { getAuth } from "../../utils/auth.js"; // giả sử bạn có hàm này
 
 export default function UserForPage({ userId, onClose, onStatusChange }) {
   const [user, setUser] = useState(null);
   const [latestPurchase, setLatestPurchase] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showAssigned, setShowAssigned] = useState(false);
-  const [showMentorInfo, setShowMentorInfo] = useState(false); 
+  const [showMentorInfo, setShowMentorInfo] = useState(false);
+
+  const auth = getAuth();
+  const isAdmin = auth?.user?.role?.toUpperCase() === "ADMIN";
+
   useEffect(() => {
     const fetchUser = async () => {
       try {
@@ -24,7 +29,17 @@ export default function UserForPage({ userId, onClose, onStatusChange }) {
           }
         }
       } catch (err) {
-        console.error("❌ Lỗi load user:", err);
+        if (err.response?.status === 403) {
+          try {
+            const res = await api.get(`/mentors/${userId}`);
+            const u = res.data.mentor || res.data;
+            setUser(u);
+          } catch (e2) {
+            console.error("❌ Fallback load mentor error:", e2);
+          }
+        } else {
+          console.error("❌ Lỗi load user:", err);
+        }
       } finally {
         setLoading(false);
       }
@@ -47,19 +62,22 @@ export default function UserForPage({ userId, onClose, onStatusChange }) {
   };
 
   if (loading) return <p>Đang tải...</p>;
-  if (!user) return <p>Không tìm thấy user.</p>;
+  if (!user) return <p>Không tìm thấy người dùng.</p>;
+
+  const isMentor = user.role?.toUpperCase() === "MENTOR";
 
   return (
     <Modal title="Thông tin người dùng" onClose={onClose}>
       <div style={{ display: "flex", gap: 16, position: "relative" }}>
         <div style={{ flex: 1 }}>
-          <p><strong>Tên:</strong> {user.name}</p>
-          <p><strong>Email:</strong> {user.email}</p>
-          <p><strong>SĐT:</strong> {user.phone || "-"}</p>
-          <p><strong>Ngày sinh:</strong> {user.dob ? new Date(user.dob).toLocaleDateString("vi-VN") : "-"}</p>
-          <p><strong>Vai trò:</strong> {user.role}</p>
+          <div style={{ display: "grid", rowGap: "6px", marginBottom: "12px" }}>
+            <div><strong>Tên:</strong> {user.name}</div>
+            <div><strong>Email:</strong> {user.email}</div>
+            <div><strong>SĐT:</strong> {user.phone || "-"}</div>
+            <div><strong>Ngày sinh:</strong> {user.dob ? new Date(user.dob).toLocaleDateString("vi-VN") : "-"}</div>
+            {!isMentor && <div><strong>Vai trò:</strong> {user.role}</div>}
+          </div>
 
-          {/* Nếu là LEARNER thì hiển thị gói học + giảng viên */}
           {user.role?.toUpperCase() === "LEARNER" && (
             <>
               <div style={{ marginTop: "1rem" }}>
@@ -69,13 +87,12 @@ export default function UserForPage({ userId, onClose, onStatusChange }) {
                     <p>
                       <strong>Tên gói:</strong> {latestPurchase.package_name || "Không rõ"}{" "}
                       <span style={{ color: user.status === "banned" ? "#fd7e14" : latestPurchase.status === "active" ? "green" : "gray" }}>
-  {user.status === "banned"
-    ? "Tạm ngưng"
-    : latestPurchase.status === "active"
-    ? "Còn hạn"
-    : "Hết hạn"}
-</span>
-
+                        {user.status === "banned"
+                          ? "Tạm ngưng"
+                          : latestPurchase.status === "active"
+                          ? "Còn hạn"
+                          : "Hết hạn"}
+                      </span>
                       <br />
                       {latestPurchase.created_at && (
                         <small>
@@ -100,7 +117,6 @@ export default function UserForPage({ userId, onClose, onStatusChange }) {
                 )}
               </div>
 
-              {/* Giảng viên hướng dẫn */}
               <div style={{ marginTop: "1rem" }}>
                 <h4>Được hướng dẫn bởi giảng viên</h4>
                 {user.mentor_name ? (
@@ -119,7 +135,7 @@ export default function UserForPage({ userId, onClose, onStatusChange }) {
             </>
           )}
 
-          {user.role?.toUpperCase() === "MENTOR" && (
+          {isMentor && isAdmin && (
             <div style={{ marginTop: "1rem" }}>
               <button className="btn btn-secondary" onClick={() => setShowAssigned(true)}>
                 Danh sách học viên được bổ nhiệm
@@ -136,34 +152,34 @@ export default function UserForPage({ userId, onClose, onStatusChange }) {
           />
         </div>
 
-        {/* Nút Ban/Unban cố định góc dưới phải */}
-        <button
-          onClick={toggleBan}
-          style={{
-            position: "absolute",
-            bottom: "16px",
-            right: "16px",
-            backgroundColor: "#dc3545",
-            border: "none",
-            color: "#fff",
-            padding: "10px 20px",
-            borderRadius: "6px",
-            cursor: "pointer",
-            fontWeight: "bold"
-          }}
-        >
-          {user.status === "active" ? "Ban user" : "Unban user"}
-        </button>
+        {isAdmin && !isMentor && (
+          <button
+            onClick={toggleBan}
+            style={{
+              position: "absolute",
+              bottom: "16px",
+              right: "16px",
+              backgroundColor: "#dc3545",
+              border: "none",
+              color: "#fff",
+              padding: "10px 20px",
+              borderRadius: "6px",
+              cursor: "pointer",
+              fontWeight: "bold"
+            }}
+          >
+            {user.status === "active" ? "Ban user" : "Unban user"}
+          </button>
+        )}
       </div>
 
       {showAssigned && (
         <AssignedLearnersModal mentorId={user.id} onClose={() => setShowAssigned(false)} />
       )}
 
-      {/* Modal hiển thị thông tin giảng viên */}
       {showMentorInfo && (
         <UserForPage
-          userId={user.mentor_id}
+          userId={user.mentor_user_id ?? user.mentor_id}
           onClose={() => setShowMentorInfo(false)}
         />
       )}

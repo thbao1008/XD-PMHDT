@@ -46,4 +46,3 @@ export async function getPackages(req, res) {
     res.status(500).json({ error: "DB error" });
   }
 }
-  

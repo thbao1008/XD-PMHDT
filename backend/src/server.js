@@ -1,8 +1,14 @@
-﻿import express from "express";
+﻿import "dotenv/config";
+import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
+import { spawn } from "child_process";
 
-import { seedAdmins } from "../seed/seedAdminsFromFile.js";
+
+// Controllers
+import * as learnerCtrl from "./controllers/learnerController.js";
+import { getLearnersByMentor } from "./controllers/mentorController.js";
 
 // Routes
 import authRoutes from "./routes/authRoutes.js";
@@ -10,65 +16,122 @@ import adminUsersRoutes from "./routes/adminUsersRoutes.js";
 import adminSupportRoutes from "./routes/adminSupportRoutes.js";
 import adminPackagesRoutes from "./routes/adminPackagesRoutes.js";
 import adminPurchasesRoutes from "./routes/adminPurchasesRoutes.js";
+import adminReportRoutes from "./routes/adminReportsRoutes.js";
 import learnerRoutes from "./routes/learnerRoutes.js";
 import mentorRoutes from "./routes/mentorRoutes.js";
-import adminReportRoutes from "./routes/adminReportsRoutes.js";
-
-// Controllers
-import { getLearnersByMentor } from "./controllers/mentorController.js";
 
 // Middleware
 import { errorHandler } from "./middleware/errorHandler.js";
 import { requestLogger } from "./middleware/requestLogger.js";
 
-dotenv.config();
+// Seed + Queue
+import { seedAdmins } from "../seed/seedAdminsFromFile.js";
+import "./queueHandlers.js";
 
 const app = express();
 const PORT = process.env.PORT || 4002;
 
-// Middleware
+// ====== Log trạng thái key ======
+console.log(
+  "🔑 OPENROUTER_API_KEY: - server.js",
+  process.env.OPENROUTER_API_KEY
+    ? process.env.OPENROUTER_API_KEY.slice(0, 8) + "..."
+    : "❌ missing"
+);
+
+// ====== Middleware ======
 app.use(cors({ origin: "http://localhost:5173", credentials: true }));
 app.use(express.json());
 app.use(requestLogger);
 
-// Routes
-app.use("/api/auth", authRoutes);
+// ====== Health check ======
+app.get("/health/ai", (_req, res) => {
+  res.json({
+    openrouter: !!process.env.OPENROUTER_API_KEY,
+    openrouter_model: process.env.OPENROUTER_MODEL || null,
+  });
+});
 
-// Admin routes
+// ====== Routes ======
+app.use("/api/auth", authRoutes);
 app.use("/api/admin/users", adminUsersRoutes);
 app.use("/api/admin/support", adminSupportRoutes);
 app.use("/api/admin/packages", adminPackagesRoutes);
 app.use("/api/admin/purchases", adminPurchasesRoutes);
 app.use("/api/admin/reports", adminReportRoutes);
 
-// Learner routes
 app.use("/api/learners", learnerRoutes);
-
-// Mentor routes
 app.use("/api/mentors", mentorRoutes);
 
-// Public packages
-app.use("/api/packages", adminPackagesRoutes);
+// Challenge routes
+app.get("/api/challenges", learnerCtrl.listAllChallenges);
+app.get("/api/challenges/:id", learnerCtrl.getChallengeById);
 
-// Endpoint: learners của mentor
+// Mentor learners
 app.get("/api/admin/mentors/:id/learners", getLearnersByMentor);
 
-// Error handler cuối cùng
-app.use(errorHandler);
-// Middleware log request
-app.use((req, res, next) => {
-  console.log("Incoming: - server.js:60", req.method, req.url);
+// ====== Static uploads ======
+app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
+
+// ====== Simple logger ======
+app.use((req, _res, next) => {
+  console.log("📥 Incoming: - server.js:78", req.method, req.url);
   next();
 });
-app.use("/uploads", express.static("uploads"));
-// Start server sau khi seed admin
+
+// ====== Error handler ======
+app.use(errorHandler);
+
+// ====== Start server ======
 seedAdmins()
   .then(() => {
     app.listen(PORT, () => {
-      console.log(`✅ Server running on http://localhost:${PORT} - server.js:68`);
+      console.log(`✅ Server running on http://localhost:${PORT} - server.js:89`);
+      console.log(
+        "🧠 Analysis (OpenRouter):",
+        process.env.OPENROUTER_API_KEY ? "enabled" : "disabled"
+      );
     });
   })
   .catch((err) => {
-    console.error("❌ Seed admin error: - server.js:72", err);
+    console.error("❌ Seed admin error: - server.js:97", err);
     process.exit(1);
   });
+
+// ====== Global error handlers ======
+process.on("unhandledRejection", (err) => {
+  console.error("Unhandled Rejection: - server.js:103", err);
+});
+process.on("uncaughtException", (err) => {
+  console.error("Uncaught Exception: - server.js:106", err);
+  process.exit(1);
+});
+
+// ====== Python BERTopic integration ======
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+export async function autoDetectTopics(transcripts) {
+  return new Promise((resolve, reject) => {
+    const pyPath = path.resolve(__dirname, "../ai_models/autoDetectTopics.py");
+    const args = [pyPath, JSON.stringify(transcripts)];
+    const py = spawn("python", args);
+
+    let data = "";
+    let err = "";
+
+    py.stdout.on("data", chunk => { data += chunk.toString(); });
+    py.stderr.on("data", chunk => { err += chunk.toString(); });
+
+    py.on("close", code => {
+      if (code !== 0) {
+        return reject(new Error(`autoDetectTopics exited ${code}: ${err}`));
+      }
+      try {
+        resolve(JSON.parse(data));
+      } catch (e) {
+        reject(e);
+      }
+    });
+  });
+}
