@@ -42,6 +42,8 @@ export async function getReports(status) {
            r.reply,
            r.reply_by,
            r.reply_at,
+           r.image_url,
+           r.video_url,
            reporter.id AS reporter_id,
            reporter.name AS reporter_name,
            reporter.role AS reporter_role,
@@ -116,6 +118,29 @@ export async function updateReportStatus(id, status, replyContent = null, actorR
   }
 }
 
+
+/**
+ * Check if reporter can report target (24 hours since last report)
+ */
+export async function canReport(reporterId, targetId) {
+  const result = await pool.query(
+    `SELECT MAX(created_at) AS last_report_date
+     FROM reports
+     WHERE reporter_id = $1 AND target_id = $2`,
+    [reporterId, targetId]
+  );
+  
+  const lastDate = result.rows[0]?.last_report_date;
+  if (!lastDate) return { canReport: true, hoursRemaining: 0, lastReportDate: null };
+  
+  const lastReportTime = new Date(lastDate).getTime();
+  const now = Date.now();
+  const hoursSince = (now - lastReportTime) / (1000 * 60 * 60);
+  const canReport = hoursSince >= 24;
+  const hoursRemaining = canReport ? 0 : Math.ceil(24 - hoursSince);
+  
+  return { canReport, hoursRemaining, lastReportDate: lastDate };
+}
 
 // Cập nhật ghi chú cho learner (mentor nhập)
 export async function updateLearnerNote(req, res) {

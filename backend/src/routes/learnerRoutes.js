@@ -1,6 +1,9 @@
 import express from "express";
 import multer from "multer";
 import * as learnerCtrl from "../controllers/learnerController.js";
+import * as speakingPracticeCtrl from "../controllers/speakingPracticeController.js";
+import * as dictionaryCtrl from "../controllers/dictionaryController.js";
+import * as scenarioCtrl from "../controllers/scenarioController.js";
 
 const router = express.Router();
 
@@ -38,5 +41,33 @@ router.post("/submissions", upload.single("file"), learnerCtrl.createSubmission)
 router.get("/submissions/:id/analysis", learnerCtrl.getSubmissionAnalysis);
 
 router.get("/submissions/:id", learnerCtrl.getSubmissionById);
+
+/* ===== Learner Feedback & Reports ===== */
+router.get("/:learnerId/mentor/feedback-status", learnerCtrl.getMentorFeedbackStatus);
+router.get("/:learnerId/mentor/feedbacks", learnerCtrl.getLearnerFeedbacksForMentor);
+router.post("/:learnerId/mentor/feedback", learnerCtrl.createLearnerFeedbackForMentor);
+router.post("/:learnerId/mentor/report", upload.fields([{ name: 'image', maxCount: 1 }, { name: 'video', maxCount: 1 }]), learnerCtrl.reportMentor);
+
+/* ===== Speaking Practice ===== */
+// Practice mode routes
+router.post("/speaking-practice/sessions", speakingPracticeCtrl.createPracticeSession);
+router.get("/speaking-practice/sessions/:sessionId/prompt", speakingPracticeCtrl.getPrompt);
+router.post("/speaking-practice/sessions/:sessionId/rounds", upload.single("audio"), speakingPracticeCtrl.saveRound);
+router.get("/speaking-practice/sessions/:sessionId/rounds/:roundId/analysis", speakingPracticeCtrl.getRoundAnalysis);
+router.post("/speaking-practice/sessions/:sessionId/rounds/:roundId/translation", speakingPracticeCtrl.checkTranslation);
+router.get("/speaking-practice/sessions/:sessionId/summary", speakingPracticeCtrl.getSummary);
+
+// Story mode routes
+router.post("/speaking-practice/story/sessions", speakingPracticeCtrl.createStorySession);
+router.post("/speaking-practice/story/message", upload.single("audio"), speakingPracticeCtrl.processStoryMessage);
+
+// Dictionary route
+router.get("/dictionary/:word", dictionaryCtrl.getWordDefinition);
+
+// Scenario-based speaking practice routes
+router.get("/speaking-practice/scenarios", scenarioCtrl.getScenarios);
+router.post("/speaking-practice/scenario/sessions", scenarioCtrl.createScenarioSession);
+router.post("/speaking-practice/scenario/sessions/:sessionId/start", scenarioCtrl.startConversation);
+router.post("/speaking-practice/scenario/sessions/:sessionId/message", upload.single("audio"), scenarioCtrl.sendMessage);
 
 export default router;

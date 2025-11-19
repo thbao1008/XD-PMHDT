@@ -1,8 +1,10 @@
 // backend/src/routes/mentorRoutes.js
 import express from "express";
+import multer from "multer";
 import * as mentorCtrl from "../controllers/mentorController.js";
 
 const router = express.Router();
+const upload = multer({ dest: "uploads/" });
 
 /* -----------------------
    Specific routes first
@@ -30,7 +32,7 @@ router.put("/resources/:id", mentorCtrl.updateResource);
 router.delete("/resources/:id", mentorCtrl.deleteResource);
 
 // Reports
-router.post("/reports", mentorCtrl.mentorCreateReport);
+router.post("/reports", upload.fields([{ name: 'image', maxCount: 1 }, { name: 'video', maxCount: 1 }]), mentorCtrl.mentorCreateReport);
 
 // Mentor by user and learners
 router.get("/by-user/:userId", mentorCtrl.getMentorByUserId);
