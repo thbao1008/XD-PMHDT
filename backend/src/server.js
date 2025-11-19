@@ -10,6 +10,9 @@ import { spawn } from "child_process";
 import * as learnerCtrl from "./controllers/learnerController.js";
 import { getLearnersByMentor } from "./controllers/mentorController.js";
 
+// Multer for file uploads
+import multer from "multer";
+
 // Routes
 import authRoutes from "./routes/authRoutes.js";
 import adminUsersRoutes from "./routes/adminUsersRoutes.js";
@@ -44,6 +47,9 @@ app.use(cors({ origin: "http://localhost:5173", credentials: true }));
 app.use(express.json());
 app.use(requestLogger);
 
+// ====== Multer config for file uploads ======
+const upload = multer({ dest: "uploads/" });
+
 // ====== Health check ======
 app.get("/health/ai", (_req, res) => {
   res.json({
@@ -69,6 +75,15 @@ app.get("/api/challenges/:id", learnerCtrl.getChallengeById);
 
 // Mentor learners
 app.get("/api/admin/mentors/:id/learners", getLearnersByMentor);
+
+// ====== File upload endpoint ======
+app.post("/api/uploads", upload.single("file"), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: "No file uploaded" });
+  }
+  const fileUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
+  res.json({ url: fileUrl, filename: req.file.filename });
+});
 
 // ====== Static uploads ======
 app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));

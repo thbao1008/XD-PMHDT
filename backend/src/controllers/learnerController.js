@@ -3,6 +3,8 @@ import * as learnerService from "../services/learnerService.js";
 import * as aiService from "../services/aiService.js";
 import { enqueue } from "../utils/queue.js";
 import { runWhisperX } from "../utils/whisperxRunner.js";
+import * as reportController from "./reportController.js";
+import pool from "../config/db.js";
 import fs from "fs";
 import path from "path";
 
@@ -166,6 +168,212 @@ export async function createReport(req, res) {
   } catch (err) {
     console.error("Error learnerController.createReport: - learnerController.js:167", err);
     return res.status(500).json({ success: false, message: "Server error" });
+  }
+}
+
+/**
+ * Get mentor feedback status (can feedback? days remaining?)
+ */
+export async function getMentorFeedbackStatus(req, res) {
+  try {
+    const learnerId = parseInt(req.params.learnerId);
+    if (!learnerId) return res.status(400).json({ error: "Invalid learnerId" });
+    
+    const mentorInfo = await learnerService.getMentorInfoForFeedback(learnerId);
+    if (!mentorInfo) {
+      return res.status(404).json({ error: "Learner chưa được gán mentor" });
+    }
+    
+    const canFeedback = await learnerService.canFeedbackMentor(learnerId, mentorInfo.mentor_id);
+    
+    return res.json({
+      mentor: {
+        id: mentorInfo.mentor_id,
+        name: mentorInfo.mentor_name,
+        rating: mentorInfo.rating
+      },
+      canFeedback: canFeedback.canFeedback,
+      daysRemaining: canFeedback.daysRemaining,
+      lastFeedbackDate: canFeedback.lastFeedbackDate
+    });
+  } catch (err) {
+    console.error("Error getMentorFeedbackStatus: - learnerController.js", err);
+    return res.status(500).json({ error: "Server error" });
+  }
+}
+
+/**
+ * Get learner feedbacks for mentor
+ */
+export async function getLearnerFeedbacksForMentor(req, res) {
+  try {
+    const learnerId = parseInt(req.params.learnerId);
+    if (!learnerId) return res.status(400).json({ error: "Invalid learnerId" });
+    
+    const mentorInfo = await learnerService.getMentorInfoForFeedback(learnerId);
+    if (!mentorInfo) {
+      return res.status(404).json({ error: "Learner chưa được gán mentor" });
+    }
+    
+    const feedbacks = await learnerService.getLearnerFeedbacksForMentor(learnerId, mentorInfo.mentor_id);
+    
+    return res.json({ feedbacks });
+  } catch (err) {
+    console.error("Error getLearnerFeedbacksForMentor: - learnerController.js", err);
+    return res.status(500).json({ error: "Server error" });
+  }
+}
+
+/**
+ * Create learner feedback for mentor
+ */
+export async function createLearnerFeedbackForMentor(req, res) {
+  try {
+    const learnerId = parseInt(req.params.learnerId);
+    const { content, rating } = req.body;
+    
+    if (!learnerId) return res.status(400).json({ error: "Invalid learnerId" });
+    if (rating !== null && rating !== undefined && (rating < 0 || rating > 10)) {
+      return res.status(400).json({ error: "Rating phải từ 0-10" });
+    }
+    
+    const mentorInfo = await learnerService.getMentorInfoForFeedback(learnerId);
+    if (!mentorInfo) {
+      return res.status(404).json({ error: "Learner chưa được gán mentor" });
+    }
+    
+    const result = await learnerService.createLearnerFeedbackForMentor(learnerId, mentorInfo.mentor_id, { content, rating });
+    
+    if (!result.ok) {
+      return res.status(result.status || 400).json({ error: result.message });
+    }
+    
+    return res.json({
+      success: true,
+      feedback: result.feedback,
+      newRating: result.newRating
+    });
+  } catch (err) {
+    console.error("Error createLearnerFeedbackForMentor: - learnerController.js", err);
+    return res.status(500).json({ error: "Server error" });
+  }
+}
+
+/**
+ * Report mentor with image/video
+ */
+export async function reportMentor(req, res) {
+  try {
+    const learnerId = parseInt(req.params.learnerId);
+    const { content } = req.body;
+    
+    if (!learnerId) return res.status(400).json({ error: "Invalid learnerId" });
+    if (!content) return res.status(400).json({ error: "Thiếu nội dung report" });
+    
+    // Get learner user_id and mentor user_id
+    const learnerRes = await pool.query(
+      `SELECT l.user_id AS learner_user_id, m.user_id AS mentor_user_id
+       FROM learners l
+       JOIN mentors m ON l.mentor_id = m.id
+       WHERE l.id = $1`,
+      [learnerId]
+    );
+    
+    if (!learnerRes.rows[0]) {
+      return res.status(404).json({ error: "Learner không tìm thấy hoặc chưa có mentor" });
+    }
+    
+    const { learner_user_id, mentor_user_id } = learnerRes.rows[0];
+    
+    // Check 24h constraint
+    const canReportRes = await pool.query(
+      `SELECT MAX(created_at) AS last_report_date
+       FROM reports
+       WHERE reporter_id = $1 AND target_id = $2`,
+      [learner_user_id, mentor_user_id]
+    );
+    
+    const lastDate = canReportRes.rows[0]?.last_report_date;
+    if (lastDate) {
+      const lastReportTime = new Date(lastDate).getTime();
+      const now = Date.now();
+      const hoursSince = (now - lastReportTime) / (1000 * 60 * 60);
+      if (hoursSince < 24) {
+        const hoursRemaining = Math.ceil(24 - hoursSince);
+        return res.status(400).json({ 
+          error: `Bạn chỉ có thể report lại sau 24 giờ. Còn ${hoursRemaining} giờ nữa.`,
+          canReport: false,
+          hoursRemaining
+        });
+      }
+    }
+    
+    // Handle image/video upload
+    let image_url = null;
+    let video_url = null;
+    
+    if (req.files) {
+      if (req.files.image && req.files.image[0]) {
+        image_url = `/uploads/${req.files.image[0].filename}`;
+      }
+      if (req.files.video && req.files.video[0]) {
+        video_url = `/uploads/${req.files.video[0].filename}`;
+      }
+    }
+    
+    // Create report using reportController
+    const originalBody = req.body;
+    req.body = {
+      reporter_id: learner_user_id,
+      target_id: mentor_user_id,
+      content,
+      status: "pending",
+      image_url,
+      video_url
+    };
+    
+    // Create report directly using pool
+    try {
+      const reportResult = await pool.query(
+        `INSERT INTO reports (reporter_id, target_id, content, status, created_at, updated_at, image_url, video_url)
+         VALUES (
+           $1, 
+           $2, 
+           '[Report - ' || TO_CHAR(NOW(), 'DD/MM/YYYY HH24:MI:SS') || '] ' || $3,
+           $4,
+           NOW(),
+           NOW(),
+           $5,
+           $6
+         )
+         RETURNING *`,
+        [learner_user_id, mentor_user_id, content, "pending", image_url || null, video_url || null]
+      );
+      
+      return res.json({ success: true, report: reportResult.rows[0] });
+    } catch (err) {
+      // Nếu lỗi do thiếu column, thử insert không có image/video
+      if (err.code === "42703" || err.message.includes("image_url") || err.message.includes("video_url")) {
+        const reportResult = await pool.query(
+          `INSERT INTO reports (reporter_id, target_id, content, status, created_at, updated_at)
+           VALUES (
+             $1, 
+             $2, 
+             '[Report - ' || TO_CHAR(NOW(), 'DD/MM/YYYY HH24:MI:SS') || '] ' || $3,
+             $4,
+             NOW(),
+             NOW()
+           )
+           RETURNING *`,
+          [learner_user_id, mentor_user_id, content, "pending"]
+        );
+        return res.json({ success: true, report: reportResult.rows[0], warning: "Bảng reports chưa có cột image_url/video_url" });
+      }
+      throw err;
+    }
+  } catch (err) {
+    console.error("Error reportMentor: - learnerController.js", err);
+    return res.status(500).json({ error: "Server error" });
   }
 }
 

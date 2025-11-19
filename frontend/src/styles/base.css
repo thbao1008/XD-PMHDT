@@ -1,13 +1,4 @@
-﻿  :root {
-    /* Layout & style */
-    --card-radius: 12px;
-    --btn-radius: 10px;
-    --gap: 16px;
-    --sidebar-width: 240px;
-    --sidebar-collapsed: 72px;
-    --header-height: 100px;
-  }
-
+﻿  
   /* ===== Reset & global ===== */  
   * { box-sizing: border-box; }
   html, body, #root { height: 100%; }

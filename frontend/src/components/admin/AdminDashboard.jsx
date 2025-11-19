@@ -1,15 +1,31 @@
 ﻿// src/components/admin/Dashboard.jsx
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Pie, Line, Bar } from "react-chartjs-2";
 import "../../lib/chartSetup.js"; 
 import KpiCard from "../common/KpiCard.jsx";
+import api from "../../api.js";
+import { FaUserGraduate, FaChalkboardTeacher } from "react-icons/fa";
 
 export default function Dashboard() {
+  const [summary, setSummary] = useState({ total_learners: 0, total_mentors: 0 });
+
+  useEffect(() => {
+    async function loadSummary() {
+      try {
+        const res = await api.get("/admin/reports/summary");
+        setSummary(res.data.summary || { total_learners: 0, total_mentors: 0 });
+      } catch (err) {
+        console.error("❌ Lỗi load summary:", err);
+      }
+    }
+    loadSummary();
+  }, []);
+
   const kpis = [
-    { id: "activeUsers", title: "Người dùng hoạt động", value: "1,254", delta: 4.8, icon: "👥", color: "linear-gradient(180deg,var(--primary),var(--primary-600))" },
+    { id: "learners", title: "Tổng số học viên", value: summary.total_learners || "0", delta: null, icon: <FaUserGraduate size={24} />, color: "linear-gradient(180deg,#3b82f6,#2563eb)" },
+    { id: "mentors", title: "Tổng số mentor", value: summary.total_mentors || "0", delta: null, icon: <FaChalkboardTeacher size={24} />, color: "linear-gradient(180deg,#10b981,#059669)" },
     { id: "revenue", title: "Doanh thu (VND)", value: "₫120,500,000", delta: 3.25, icon: "💰", color: "linear-gradient(180deg,var(--accent), #e08b00)" },
     { id: "newPackages", title: "Gói dịch vụ mới", value: "342", delta: 1.85, icon: "📦", color: "linear-gradient(180deg,#6a9cff,#4868d9)" },
-    { id: "newUsers", title: "Người dùng mới", value: "1,980", delta: 3.25, icon: "🆕", color: "linear-gradient(180deg,#7be6c7,#05b09f)" },
   ];
 
   // Chart data giống mẫu (đơn giản)

@@ -2,6 +2,7 @@
    BASE THEME VARIABLES
    ========================= */
 :root {
+  /* Layout & spacing */
   --card-radius: 12px;
   --btn-radius: 10px;
   --gap: 16px;
@@ -9,27 +10,38 @@
   --sidebar-collapsed: 72px;
   --header-height: 100px;
 
+  /* Colors */
   --bg: #ffffff;
   --surface: #ffffff;
+  --card-bg: #ffffff;
   --primary: #c62828;
   --primary-600: #b71c1c;
   --accent: #ffebee;
+  --text: #0f172a;
   --text-900: #0b0b0b;
   --text-700: #333333;
   --muted: #6f6f6f;
+  --border: #e6e9ee;
+  --success: #16a34a;
+  --danger: #ef4444;
+
+  /* Support palette */
   --support-green: #008080;
   --support-green-600: #40E0D0;
 
+  /* Effects */
   --shadow-low: 0 4px 10px rgba(0,0,0,0.05);
   --shadow-high: 0 12px 28px rgba(0,0,0,0.12);
   --border-1: 1px solid rgba(15,23,24,0.08);
   --focus-ring: rgba(198,40,40,0.25);
 
+  /* Typography */
   --fw-regular: 400;
   --fw-medium: 500;
   --fw-bold: 700;
   --fs-base: 15px;
 
+  /* Sidebar background default */
   --sidebar-bg: linear-gradient(180deg, #c62828, #b71c1c);
 }
 
@@ -63,6 +75,7 @@
   --accent: #ffebee;
   --bg: #ffffff;
   --surface: #ffffff;
+  --text: #0f172a;
   --text-900: #0b0b0b;
   --text-700: #333333;
   --muted: #6f6f6f;

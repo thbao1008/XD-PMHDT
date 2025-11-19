@@ -1,11 +1,13 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from "react";
 
-export default function AudioRecorder({
+const AudioRecorder = forwardRef(function AudioRecorder({
   onRecorded,
   isSubmitting = false,
   maxDuration = 120,
-  mimeType = "audio/webm"
-}) {
+  mimeType = "audio/webm",
+  hideFileUpload = false,
+  hideRecordButton = false
+}, ref) {
   const mediaStreamRef = useRef(null);
   const recorderRef = useRef(null);
   const chunksRef = useRef([]);
@@ -130,46 +132,56 @@ export default function AudioRecorder({
     return `${m}:${s}`;
   }
 
+  // Expose methods via ref
+  useImperativeHandle(ref, () => ({
+    startRecording,
+    stopRecording: stopRecordingInternal
+  }));
+
   return (
     <div className="audio-recorder">
-      <div className="flex items-center gap-3">
-        {!isRecording ? (
-          <button
-            type="button"
-            className="px-3 py-1 bg-red-600 text-white rounded"
-            onClick={startRecording}
-          >
-            Ghi âm
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="px-3 py-1 bg-gray-700 text-white rounded"
-            onClick={stopRecording}
-          >
-            Dừng
-          </button>
-        )}
-
-        <div className="text-sm text-gray-700">
-          {isRecording ? (
-            <span>Đang ghi… <strong>{formatTime(duration)}</strong></span>
+      {!hideRecordButton && (
+        <div className="flex items-center gap-3">
+          {!isRecording ? (
+            <button
+              type="button"
+              className="px-3 py-1 bg-red-600 text-white rounded"
+              onClick={startRecording}
+            >
+              Ghi âm
+            </button>
           ) : (
-            <span>Thời lượng: <strong>{formatTime(duration)}</strong></span>
+            <button
+              type="button"
+              className="px-3 py-1 bg-gray-700 text-white rounded"
+              onClick={stopRecording}
+            >
+              Dừng
+            </button>
+          )}
+
+          <div className="text-sm text-gray-700">
+            {isRecording ? (
+              <span>Đang ghi… <strong>{formatTime(duration)}</strong></span>
+            ) : (
+              <span>Thời lượng: <strong>{formatTime(duration)}</strong></span>
+            )}
+          </div>
+
+          {!hideFileUpload && (
+            <div>
+              <label className="text-sm mr-2">Hoặc upload</label>
+              <input
+                key={fileInputKey}
+                type="file"
+                accept="audio/*"
+                onChange={handleFileInput}
+                className="text-sm"
+              />
+            </div>
           )}
         </div>
-
-        <div>
-          <label className="text-sm mr-2">Hoặc upload</label>
-          <input
-            key={fileInputKey}
-            type="file"
-            accept="audio/*"
-            onChange={handleFileInput}
-            className="text-sm"
-          />
-        </div>
-      </div>
+      )}
 
       {error && <div className="mt-2 text-sm text-red-600">{error}</div>}
 
@@ -183,4 +195,6 @@ export default function AudioRecorder({
       )}
     </div>
   );
-}
+});
+
+export default AudioRecorder;
