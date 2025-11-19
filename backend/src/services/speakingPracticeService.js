@@ -1,4 +1,3 @@
-<<<<<<< Current (Your changes)
 // backend/src/services/speakingPracticeService.js
 import pool from "../config/db.js";
 import { runWhisperX } from "../utils/whisperxRunner.js";
@@ -371,12 +370,6 @@ async function getTrainingDataFromPython(trainingType, options = {}) {
         };
       }
       
-<<<<<<< Current (Your changes)
-      // Spawn Python process với stdin
-      const pythonProcess = spawn('python', [trainerPath], {
-        stdio: ['pipe', 'pipe', 'pipe'],
-        shell: true
-=======
       // Spawn Python process với stdin và set UTF-8 encoding
       const pythonProcess = spawn('python', [trainerPath], {
         stdio: ['pipe', 'pipe', 'pipe'],
@@ -385,7 +378,6 @@ async function getTrainingDataFromPython(trainingType, options = {}) {
           ...process.env,
           PYTHONIOENCODING: 'utf-8'
         }
->>>>>>> Incoming (Background Agent changes)
       });
       
       let stdout = '';
@@ -1350,7 +1342,4 @@ Respond naturally and empathetically.`;
     return "I understand. Thank you for sharing with me. How are you feeling about this?";
   }
 }
-=======
-v? s?a merge conflict
->>>>>>> Incoming (Background Agent changes)
 
