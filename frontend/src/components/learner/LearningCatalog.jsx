@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { getAuth } from "../../utils/auth";
 import api from "../../api";
 import Modal from "../common/Modal";
-import "../../styles/learner.css";
+import "../../styles/catalog.css";
 import { FiFileText, FiVideo, FiDownload } from "react-icons/fi";
 
 export default function LearningCatalog() {

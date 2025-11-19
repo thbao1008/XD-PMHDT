@@ -1,7 +1,7 @@
 ﻿import { useEffect, useState } from "react";
 import { getAuth } from "../../utils/auth";
 import Modal from "../common/Modal";
-import "../../styles/mentor.css";
+import "../../styles/learnersofmentor.css";
 import api from "../../api";   // axios instance với baseURL http://localhost:4002/api
 
 export default function MentorLearners() {
@@ -13,9 +13,14 @@ export default function MentorLearners() {
   // Modal state
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedLearner, setSelectedLearner] = useState(null);
   const [noteInput, setNoteInput] = useState("");
   const [reportInput, setReportInput] = useState("");
+  const [reportImage, setReportImage] = useState(null);
+  const [reportVideo, setReportVideo] = useState(null);
+  const [reportStatus, setReportStatus] = useState({ canReport: true, hoursRemaining: 0 });
+  const [checkingReport, setCheckingReport] = useState(false);
 
   // Theo dõi số lượng học viên trước đó để phát hiện học viên mới
   const [prevCount, setPrevCount] = useState(0);
@@ -29,11 +34,34 @@ export default function MentorLearners() {
         setMentorId(mid);
 
         const learnersRes = await api.get(`/mentors/${mid}/learners`);
-        const newLearners = learnersRes.data.learners.map(l => ({
-          ...l,
-          report: l.report || null,
-          report_reply: l.report_reply || null,
-        }));
+        const newLearners = learnersRes.data.learners.map(l => {
+          // Normalize report data - ensure null if empty or invalid
+          let report = null;
+          if (l.report) {
+            if (typeof l.report === 'string') {
+              const trimmed = l.report.trim();
+              if (trimmed.length > 0) {
+                report = trimmed;
+              }
+            }
+          }
+          
+          let report_reply = null;
+          if (l.report_reply) {
+            if (typeof l.report_reply === 'string') {
+              const trimmed = l.report_reply.trim();
+              if (trimmed.length > 0) {
+                report_reply = trimmed;
+              }
+            }
+          }
+          
+          return {
+            ...l,
+            report,
+            report_reply,
+          };
+        });
 
         // Nếu số lượng tăng lên thì báo có học viên mới
         if (prevCount && newLearners.length > prevCount) {
@@ -80,35 +108,109 @@ export default function MentorLearners() {
   };
 
   // mở modal report
-  const openReportModal = (learner) => {
+  const openReportModal = async (learner) => {
     setSelectedLearner(learner);
+    // Reset form - luôn bắt đầu với form trống
     setReportInput("");
+    setReportImage(null);
+    setReportVideo(null);
     setShowReportModal(true);
+    
+    // Check 24h constraint
+    if (learner.user_id) {
+      setCheckingReport(true);
+      try {
+        const reporterId = auth?.user?._id || auth?.user?.id || auth?.user?.user_id;
+        const res = await api.get("/admin/reports/can-report", {
+          params: { reporter_id: reporterId, target_id: learner.user_id }
+        });
+        setReportStatus(res.data);
+      } catch (err) {
+        console.error("❌ Error checking report status:", err);
+        setReportStatus({ canReport: true, hoursRemaining: 0 });
+      } finally {
+        setCheckingReport(false);
+      }
+    }
   };
 
   const saveReport = async () => {
+    if (!reportInput.trim()) {
+      alert("Vui lòng nhập nội dung report");
+      return;
+    }
+
+    if (!reportStatus.canReport) {
+      alert(`Bạn chỉ có thể report lại sau 24 giờ. Còn ${reportStatus.hoursRemaining} giờ nữa.`);
+      return;
+    }
+
     try {
       const reporterId = auth?.user?._id || auth?.user?.id || auth?.user?.user_id;
       const targetId = selectedLearner?.user_id;
 
-      await api.post("/admin/reports", {
-        reporter_id: reporterId,
-        target_id: targetId,
-        content: reportInput,
-        status: "pending",
+      const formData = new FormData();
+      formData.append("reporter_id", reporterId);
+      formData.append("target_id", targetId);
+      formData.append("content", reportInput);
+      formData.append("status", "pending");
+      if (reportImage) formData.append("image", reportImage);
+      if (reportVideo) formData.append("video", reportVideo);
+
+      const res = await api.post("/mentors/reports", formData, {
+        headers: { "Content-Type": "multipart/form-data" }
       });
 
-      setLearners(prev =>
-        prev.map(l =>
-          l.learner_id === selectedLearner.learner_id
-            ? { ...l, report: reportInput }
-            : l
-        )
-      );
+      // Reload learners để lấy dữ liệu mới nhất từ backend
+      if (mentorId) {
+        try {
+          const learnersRes = await api.get(`/mentors/${mentorId}/learners`);
+          const newLearners = learnersRes.data.learners.map(l => {
+            const report = (l.report && typeof l.report === 'string' && l.report.trim().length > 0) ? l.report : null;
+            const report_reply = (l.report_reply && typeof l.report_reply === 'string' && l.report_reply.trim().length > 0) ? l.report_reply : null;
+            return {
+              ...l,
+              report,
+              report_reply,
+            };
+          });
+          setLearners(newLearners);
+        } catch (reloadErr) {
+          console.error("❌ Error reloading learners:", reloadErr);
+          // Fallback: update manually
+          setLearners(prev =>
+            prev.map(l =>
+              l.learner_id === selectedLearner.learner_id
+                ? { 
+                    ...l, 
+                    report: res.data?.report?.content || reportInput,
+                    report_status: res.data?.report?.status || "pending"
+                  }
+                : l
+            )
+          );
+        }
+      }
+      
+      alert("Report đã được gửi thành công!");
+      setShowReportModal(false);
+      setReportInput("");
+      setReportImage(null);
+      setReportVideo(null);
+      // Reset reportStatus sau khi gửi thành công
+      setReportStatus({ canReport: false, hoursRemaining: 24 });
     } catch (err) {
       console.error("❌ Error saving report:", err);
-    } finally {
-      setShowReportModal(false);
+      // Xử lý lỗi 24h constraint từ backend
+      if (err?.response?.data?.canReport === false) {
+        setReportStatus({
+          canReport: false,
+          hoursRemaining: err.response.data.hoursRemaining || 24
+        });
+        alert(`Bạn chỉ có thể report lại sau 24 giờ. Còn ${err.response.data.hoursRemaining || 24} giờ nữa.`);
+      } else {
+        alert(err?.response?.data?.message || err?.response?.data?.error || "Gửi report thất bại");
+      }
     }
   };
 
@@ -126,6 +228,7 @@ export default function MentorLearners() {
             <th>Tình trạng gói</th>
             <th>Ghi chú</th>
             <th>Report</th>
+            <th>Thông báo</th>
           </tr>
         </thead>
         <tbody>
@@ -145,41 +248,62 @@ export default function MentorLearners() {
                 {l.note || <span className="placeholder">Nhấn để ghi chú</span>}
               </td>
               <td>
-                {l.report ? (
-                  <>
-                    <span
-                      className="reported-label clickable"
-                      onClick={() => {
-                        setSelectedLearner(l);
-                        setReportInput(l.report);
-                        setShowReportModal(true);
-                      }}
-                    >
-                      Đã gửi báo cáo (xem nội dung)
-                    </span>
-                    {l.report_reply && (
-                      <div className="admin-reply">
-                        <small>{l.report_reply}</small>
-                      </div>
-                    )}
-                    {l.report_status === "dismissed" && (
+                {(() => {
+                  const hasReport = l.report !== null && l.report !== undefined && String(l.report).trim().length > 0;
+                  const isDismissed = l.report_status === "dismissed";
+                  
+                  // Nếu có report và status là dismissed, hiển thị "Gửi lại Report"
+                  if (hasReport && isDismissed) {
+                    return (
                       <button
                         className="report-btn"
                         onClick={() => openReportModal(l)}
-                        style={{ marginTop: "5px" }}
                       >
                         Gửi lại Report
                       </button>
-                    )}
-                  </>
-                ) : (
-                  <button
-                    className="report-btn"
-                    onClick={() => openReportModal(l)}
-                  >
-                    Report
-                  </button>
-                )}
+                    );
+                  } else {
+                    // Luôn hiển thị nút Report (cho cả trường hợp chưa có report hoặc đã có report nhưng không phải dismissed)
+                    return (
+                      <button
+                        className="report-btn"
+                        onClick={() => openReportModal(l)}
+                      >
+                        Report
+                      </button>
+                    );
+                  }
+                })()}
+              </td>
+              <td>
+                {(() => {
+                  const hasReport = l.report !== null && l.report !== undefined && String(l.report).trim().length > 0;
+                  
+                  if (hasReport) {
+                    const statusText = l.report_status === "resolved" ? "Đã xử lý" : l.report_status === "dismissed" ? "Từ chối" : "Đang chờ";
+                    const statusColor = l.report_status === "resolved" ? "#10b981" : l.report_status === "dismissed" ? "#ef4444" : "#f59e0b";
+                    
+                    return (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-start" }}>
+                        <div style={{ fontSize: "12px", color: statusColor }}>
+                          <strong>{statusText}</strong>
+                        </div>
+                        <button
+                          className="btn-ghost"
+                          onClick={() => {
+                            setSelectedLearner(l);
+                            setShowDetailModal(true);
+                          }}
+                          style={{ fontSize: "12px", padding: "4px 8px" }}
+                        >
+                          Xem chi tiết
+                        </button>
+                      </div>
+                    );
+                  } else {
+                    return <span className="placeholder" style={{ fontSize: "12px" }}>Chưa có report</span>;
+                  }
+                })()}
               </td>
             </tr>
           ))}
@@ -212,51 +336,131 @@ export default function MentorLearners() {
           title={`Report học viên ${selectedLearner.learner_name}`}
           onClose={() => setShowReportModal(false)}
         >
-          {selectedLearner.report ? (
-            <div>
+          {/* Hiển thị thông tin report đã gửi (nếu có) */}
+          {selectedLearner.report && (
+            <div style={{ marginBottom: 20, padding: 12, background: "#f9fafb", borderRadius: 6 }}>
               <p><strong>Nội dung report đã gửi:</strong></p>
-              <p style={{ whiteSpace: "pre-line" }}>{selectedLearner.report}</p>
+              <p style={{ whiteSpace: "pre-line", marginBottom: 12 }}>{selectedLearner.report}</p>
 
               {selectedLearner.report_reply && (
-                <div style={{ marginTop: "10px" }}>
+                <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #e5e7eb" }}>
                   <p><strong>Thông báo từ admin:</strong></p>
                   <p style={{ whiteSpace: "pre-line" }}>{selectedLearner.report_reply}</p>
                 </div>
               )}
+            </div>
+          )}
 
-              {selectedLearner.report_status === "dismissed" && (
-                <>
-                  <hr />
-                  <p><strong>Gửi lại report:</strong></p>
-                  <textarea
-                    value={reportInput}
-                    onChange={(e) => setReportInput(e.target.value)}
-                    rows="5"
-                    style={{ width: "100%" }}
-                    placeholder="Nhập lý do báo cáo bổ sung..."
-                  />
-                  <div className="modal-actions">
-                    <button className="btn-save" onClick={saveReport}>Gửi lại Report</button>
-                    <button className="btn-cancel" onClick={() => setShowReportModal(false)}>Hủy</button>
-                  </div>
-                </>
+          {/* Form report - luôn hiển thị */}
+          <div>
+            <p><strong>{selectedLearner.report ? "Gửi lại report:" : "Gửi report:"}</strong></p>
+            
+            {checkingReport ? (
+              <p>Đang kiểm tra...</p>
+            ) : !reportStatus.canReport ? (
+              <div style={{ padding: 12, background: "#fef3c7", borderRadius: 6, marginBottom: 12 }}>
+                <strong>⚠️ Bạn chỉ có thể report lại sau 24 giờ.</strong>
+                <p>Còn {reportStatus.hoursRemaining} giờ nữa.</p>
+              </div>
+            ) : null}
+            
+            <textarea
+              value={reportInput}
+              onChange={(e) => setReportInput(e.target.value)}
+              rows="5"
+              style={{ width: "100%", marginBottom: 12 }}
+              placeholder={selectedLearner.report ? "Nhập lý do báo cáo bổ sung..." : "Nhập lý do báo cáo..."}
+              disabled={!reportStatus.canReport}
+            />
+            
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ display: "block", marginBottom: 4 }}>Hình ảnh (tùy chọn):</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => setReportImage(e.target.files[0] || null)}
+                disabled={!reportStatus.canReport}
+              />
+              {reportImage && (
+                <div style={{ marginTop: 8 }}>
+                  <img src={URL.createObjectURL(reportImage)} alt="Preview" style={{ maxWidth: "200px", maxHeight: "200px" }} />
+                  <button onClick={() => setReportImage(null)} style={{ marginLeft: 8 }}>Xóa</button>
+                </div>
               )}
             </div>
-          ) : (
-            <>
-              <textarea
-                value={reportInput}
-                onChange={(e) => setReportInput(e.target.value)}
-                rows="5"
-                style={{ width: "100%" }}
-                placeholder="Nhập lý do báo cáo..."
+            
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ display: "block", marginBottom: 4 }}>Video (tùy chọn):</label>
+              <input
+                type="file"
+                accept="video/*"
+                onChange={(e) => setReportVideo(e.target.files[0] || null)}
+                disabled={!reportStatus.canReport}
               />
-                            <div className="modal-actions">
-                <button className="btn-save" onClick={saveReport}>Gửi Report</button>
-                <button className="btn-cancel" onClick={() => setShowReportModal(false)}>Hủy</button>
+              {reportVideo && (
+                <div style={{ marginTop: 8 }}>
+                  <video src={URL.createObjectURL(reportVideo)} controls style={{ maxWidth: "300px", maxHeight: "200px" }} />
+                  <button onClick={() => setReportVideo(null)} style={{ marginLeft: 8 }}>Xóa</button>
+                </div>
+              )}
+            </div>
+            
+            <div className="modal-actions">
+              <button className="btn-save" onClick={saveReport} disabled={!reportStatus.canReport}>
+                {selectedLearner.report ? "Gửi lại Report" : "Gửi Report"}
+              </button>
+              <button className="btn-cancel" onClick={() => setShowReportModal(false)}>Hủy</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Modal xem chi tiết report */}
+      {showDetailModal && selectedLearner && (
+        <Modal
+          title={`Thông báo - ${selectedLearner.learner_name}`}
+          onClose={() => {
+            setShowDetailModal(false);
+            setSelectedLearner(null);
+          }}
+        >
+          {(() => {
+            const hasReport = selectedLearner.report !== null && selectedLearner.report !== undefined && String(selectedLearner.report).trim().length > 0;
+            
+            if (!hasReport) {
+              return <p>Chưa có report</p>;
+            }
+
+            const statusText = selectedLearner.report_status === "resolved" ? "Đã xử lý" : selectedLearner.report_status === "dismissed" ? "Từ chối" : "Đang chờ";
+            const statusColor = selectedLearner.report_status === "resolved" ? "#10b981" : selectedLearner.report_status === "dismissed" ? "#ef4444" : "#f59e0b";
+
+            return (
+              <div>
+                <div style={{ marginBottom: 20 }}>
+                  <p><strong>Nội dung report:</strong></p>
+                  <div style={{ marginTop: 8, padding: 12, background: "#f9fafb", borderRadius: 6, whiteSpace: "pre-line" }}>
+                    {selectedLearner.report}
+                  </div>
+                </div>
+
+                {selectedLearner.report_reply && (
+                  <div style={{ marginBottom: 20 }}>
+                    <p><strong>Phản hồi admin:</strong></p>
+                    <div className="admin-reply" style={{ marginTop: 8, padding: 12, background: "#eff6ff", borderRadius: 6, borderLeft: "4px solid #3b82f6" }}>
+                      <p style={{ whiteSpace: "pre-line", margin: 0 }}>{selectedLearner.report_reply}</p>
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <p><strong>Trạng thái:</strong></p>
+                  <div style={{ marginTop: 8, fontSize: "14px", color: statusColor }}>
+                    <strong>{statusText}</strong>
+                  </div>
+                </div>
               </div>
-            </>
-          )}
+            );
+          })()}
         </Modal>
       )}
     </div>

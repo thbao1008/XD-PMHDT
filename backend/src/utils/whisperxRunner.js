@@ -68,7 +68,13 @@ export async function runWhisperX(localPath, opts = {}) {
     }, timeoutMs);
 
     py.stdout.on("data", (d) => { stdout += d.toString(); });
-    py.stderr.on("data", (d) => { stderr += d.toString(); });
+    py.stderr.on("data", (d) => { 
+      const stderrStr = d.toString();
+      // Ignore pkg_resources deprecation warnings
+      if (!stderrStr.includes("pkg_resources is deprecated")) {
+        stderr += stderrStr;
+      }
+    });
 
     py.on("error", (err) => {
       clearTimeout(timer);

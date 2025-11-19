@@ -1,0 +1,279 @@
+{
+  "level_1": [
+    {
+      "topic": "Self-introduction",
+      "prompt": "Hello, my name is Anna. I am from Vietnam.",
+      "word_count": 9,
+      "difficulty": "beginner"
+    },
+    {
+      "topic": "Family",
+      "prompt": "I live with my parents and my younger brother.",
+      "word_count": 8,
+      "difficulty": "beginner"
+    },
+    {
+      "topic": "Daily routine",
+      "prompt": "I wake up at 7 AM and go to school at 8 AM.",
+      "word_count": 12,
+      "difficulty": "beginner"
+    },
+    {
+      "topic": "Food",
+      "prompt": "My favorite food is pizza because it is delicious.",
+      "word_count": 9,
+      "difficulty": "beginner"
+    },
+    {
+      "topic": "Colors",
+      "prompt": "I like blue color. Blue is my favorite color.",
+      "word_count": 8,
+      "difficulty": "beginner"
+    },
+    {
+      "topic": "Pets",
+      "prompt": "I have a small dog. His name is Max.",
+      "word_count": 8,
+      "difficulty": "beginner"
+    },
+    {
+      "topic": "School",
+      "prompt": "I go to school every day. School is fun.",
+      "word_count": 9,
+      "difficulty": "beginner"
+    },
+    {
+      "topic": "Friends",
+      "prompt": "I have many friends. We play together.",
+      "word_count": 7,
+      "difficulty": "beginner"
+    },
+    {
+      "topic": "Hobbies",
+      "prompt": "I like reading books in my free time.",
+      "word_count": 8,
+      "difficulty": "beginner"
+    },
+    {
+      "topic": "Sports",
+      "prompt": "I play soccer with my friends on weekends.",
+      "word_count": 8,
+      "difficulty": "beginner"
+    },
+    {
+      "topic": "Weather",
+      "prompt": "Today the weather is sunny and warm.",
+      "word_count": 7,
+      "difficulty": "beginner"
+    },
+    {
+      "topic": "Home",
+      "prompt": "I live in a small house with my family.",
+      "word_count": 9,
+      "difficulty": "beginner"
+    },
+    {
+      "topic": "Shopping",
+      "prompt": "I go shopping with my mother every week.",
+      "word_count": 8,
+      "difficulty": "beginner"
+    },
+    {
+      "topic": "Transportation",
+      "prompt": "I take the bus to school every morning.",
+      "word_count": 9,
+      "difficulty": "beginner"
+    },
+    {
+      "topic": "Numbers",
+      "prompt": "I have three brothers and two sisters.",
+      "word_count": 8,
+      "difficulty": "beginner"
+    }
+  ],
+  "level_2": [
+    {
+      "topic": "Travel",
+      "prompt": "Last summer I visited Paris and saw the Eiffel Tower. It was amazing.",
+      "word_count": 13,
+      "difficulty": "intermediate"
+    },
+    {
+      "topic": "Work",
+      "prompt": "I work as a software engineer and I enjoy solving problems every day.",
+      "word_count": 12,
+      "difficulty": "intermediate"
+    },
+    {
+      "topic": "Education",
+      "prompt": "I study computer science at university and enjoy learning new technologies.",
+      "word_count": 12,
+      "difficulty": "intermediate"
+    },
+    {
+      "topic": "Music",
+      "prompt": "I enjoy listening to classical music when I study because it helps me focus.",
+      "word_count": 14,
+      "difficulty": "intermediate"
+    },
+    {
+      "topic": "Movies",
+      "prompt": "My favorite movie is Inception because it is very creative and thought-provoking.",
+      "word_count": 12,
+      "difficulty": "intermediate"
+    },
+    {
+      "topic": "Books",
+      "prompt": "I love reading novels, especially detective stories that keep me guessing.",
+      "word_count": 13,
+      "difficulty": "intermediate"
+    },
+    {
+      "topic": "Technology",
+      "prompt": "Artificial intelligence is changing the way we live and work in many ways.",
+      "word_count": 14,
+      "difficulty": "intermediate"
+    },
+    {
+      "topic": "Health",
+      "prompt": "I try to exercise three times a week to stay healthy and feel energetic.",
+      "word_count": 13,
+      "difficulty": "intermediate"
+    },
+    {
+      "topic": "Culture",
+      "prompt": "Vietnamese culture is rich with traditions and festivals throughout the year.",
+      "word_count": 11,
+      "difficulty": "intermediate"
+    },
+    {
+      "topic": "Future plans",
+      "prompt": "I want to become a teacher in the future because I love helping students learn.",
+      "word_count": 14,
+      "difficulty": "intermediate"
+    },
+    {
+      "topic": "Dreams",
+      "prompt": "My dream is to travel around the world and experience different cultures.",
+      "word_count": 13,
+      "difficulty": "intermediate"
+    },
+    {
+      "topic": "Hobbies",
+      "prompt": "I enjoy painting landscapes in my free time because it relaxes my mind.",
+      "word_count": 13,
+      "difficulty": "intermediate"
+    },
+    {
+      "topic": "Career",
+      "prompt": "I am planning to change my career to become a professional photographer.",
+      "word_count": 11,
+      "difficulty": "intermediate"
+    },
+    {
+      "topic": "Relationships",
+      "prompt": "I value my friendships because good friends support you through difficult times.",
+      "word_count": 12,
+      "difficulty": "intermediate"
+    },
+    {
+      "topic": "Entertainment",
+      "prompt": "I prefer watching documentaries over movies because they teach me new things.",
+      "word_count": 12,
+      "difficulty": "intermediate"
+    }
+  ],
+  "level_3": [
+    {
+      "topic": "Artificial Intelligence",
+      "prompt": "Artificial intelligence has the potential to revolutionize healthcare by enabling early disease detection and personalized treatment plans.",
+      "word_count": 17,
+      "difficulty": "advanced"
+    },
+    {
+      "topic": "Climate change",
+      "prompt": "Climate change requires immediate global action through renewable energy adoption and sustainable practices to protect future generations.",
+      "word_count": 16,
+      "difficulty": "advanced"
+    },
+    {
+      "topic": "Globalization",
+      "prompt": "Globalization has created both opportunities and challenges for developing countries in terms of economic growth and cultural preservation.",
+      "word_count": 16,
+      "difficulty": "advanced"
+    },
+    {
+      "topic": "Philosophy",
+      "prompt": "The meaning of life is a fundamental question that philosophers have debated for centuries without reaching a definitive answer.",
+      "word_count": 16,
+      "difficulty": "advanced"
+    },
+    {
+      "topic": "Psychology",
+      "prompt": "Understanding human behavior requires examining both cognitive processes and environmental factors that influence decision-making.",
+      "word_count": 14,
+      "difficulty": "advanced"
+    },
+    {
+      "topic": "Economics",
+      "prompt": "The relationship between inflation and unemployment is complex and varies depending on economic conditions and government policies.",
+      "word_count": 14,
+      "difficulty": "advanced"
+    },
+    {
+      "topic": "Science",
+      "prompt": "Quantum computing represents a paradigm shift in computational power that could solve problems currently impossible for classical computers.",
+      "word_count": 15,
+      "difficulty": "advanced"
+    },
+    {
+      "topic": "Ethics",
+      "prompt": "Ethical considerations in technology development must balance innovation with responsibility to ensure benefits outweigh potential harms.",
+      "word_count": 14,
+      "difficulty": "advanced"
+    },
+    {
+      "topic": "Society",
+      "prompt": "Social media has transformed how people communicate but also raised concerns about privacy and mental health impacts.",
+      "word_count": 14,
+      "difficulty": "advanced"
+    },
+    {
+      "topic": "Innovation",
+      "prompt": "Successful innovation requires not only creative ideas but also the ability to execute and adapt to changing market conditions.",
+      "word_count": 15,
+      "difficulty": "advanced"
+    },
+    {
+      "topic": "Sustainability",
+      "prompt": "Achieving sustainability requires systemic changes in production, consumption, and waste management across all sectors of society.",
+      "word_count": 14,
+      "difficulty": "advanced"
+    },
+    {
+      "topic": "Research",
+      "prompt": "Scientific research methodology emphasizes rigorous data collection and analysis to ensure findings are reliable and reproducible.",
+      "word_count": 13,
+      "difficulty": "advanced"
+    },
+    {
+      "topic": "Public health",
+      "prompt": "Public health initiatives must address both individual behaviors and systemic factors that influence population health outcomes.",
+      "word_count": 14,
+      "difficulty": "advanced"
+    },
+    {
+      "topic": "Mental health",
+      "prompt": "Mental health awareness has improved significantly, but stigma and access to care remain significant barriers for many people.",
+      "word_count": 15,
+      "difficulty": "advanced"
+    },
+    {
+      "topic": "Data science",
+      "prompt": "Data science combines statistical analysis, machine learning, and domain expertise to extract insights from complex datasets.",
+      "word_count": 14,
+      "difficulty": "advanced"
+    }
+  ]
+}
+

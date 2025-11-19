@@ -5,13 +5,17 @@ import {
   getReports,
   searchLearnerProgress,
   updateReportStatus,
-  updateLearnerNote
+  updateLearnerNote,
+  checkCanReport
 } from "../controllers/reportController.js";
 
 const router = express.Router();
 
 // Mentor/Learner tạo report
 router.post("/", createReport);
+
+// Check if can report (24h)
+router.get("/can-report", checkCanReport);
 
 // Thống kê số lượng học viên, mentor, report theo thời gian
 router.get("/summary", getReportSummary);

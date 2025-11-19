@@ -31,6 +31,7 @@ import SpeakingPractice from "../components/learner/SpeakingPractice";
 import Challenges from "../components/learner/Challenges";
 import ChallengeDetail from "../components/learner/ChallengeDetail";
 import ProgressAnalytics from "../components/learner/ProgressAnalytics";
+import LearnerFeedback from "../components/learner/LearnerFeedback";
 
 // Mentor pages
 import MentorDashboard from "../components/mentor/MentorDashboard";
@@ -101,6 +102,7 @@ export default function AppRoutes() {
         <Route path="challenges" element={<Challenges />} />
         <Route path="challenges/:id" element={<ChallengeDetail />} />
         <Route path="progress" element={<ProgressAnalytics />} />
+        <Route path="feedback" element={<LearnerFeedback />} />
         <Route path="communicate" element={<CommunicateCenter />} />
         <Route path="*" element={<Navigate to="/learn/catalog" replace />} />
       </Route>

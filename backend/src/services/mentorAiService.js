@@ -2,59 +2,101 @@
 import { callOpenRouter, safeParseJSON } from "./aiService.js";
 
 /**
- * generateChallengeAI - create a challenge JSON using OpenRouter
- * params: { learner, topic, promptText, level }
+ * learnFromMentorFeedback - Gửi feedback transcript của mentor cho AI để học cách đánh giá
+ * @param {string} feedbackTranscript - Transcript của audio feedback từ mentor
+ * @param {object} scores - { final_score, pronunciation_score, fluency_score }
+ * @param {object} submissionContext - { learner_transcript, challenge_title, challenge_description }
  */
-export async function generateChallengeAI({ learner, topic, promptText, level }) {
-  const system = `You are an assistant that writes speaking challenges for language learners.
-Output a single valid JSON object only with fields: title, description (HTML), type, level, hints (array), prompts (array of {question,sampleAnswer,followUps}).`;
-  const user = `Learner: ${learner?.name || "Learner"}; level=${learner?.level || "beginner"}.
-Topic: ${topic || promptText || "General"}.
-Requested level: ${level || "medium"}.`;
-
-  const data = await callOpenRouter([{ role: "system", content: system }, { role: "user", content: user }], { max_tokens: 900 });
-  const text = data?.choices?.[0]?.message?.content || "";
-  try {
-    return JSON.parse(text);
-  } catch (e) {
-    // fallback: return a minimal challenge object with raw text in description
-    return { title: "Challenge", description: text, type: "speaking", level: level || "medium", hints: [], prompts: [] };
+export async function learnFromMentorFeedback(feedbackTranscript, scores, submissionContext = {}) {
+  if (!feedbackTranscript || typeof feedbackTranscript !== "string") {
+    console.warn("[mentorAiService] learnFromMentorFeedback: invalid transcript");
+    return null;
   }
+
+  const prompt = `Bạn là hệ thống AI đang học cách đánh giá từ mentor.
+
+Mentor đã đánh giá một bài nộp của học viên với các điểm số:
+- Điểm tổng: ${scores.final_score ?? "N/A"}/10
+- Phát âm: ${scores.pronunciation_score ?? "N/A"}/10
+- Trôi chảy: ${scores.fluency_score ?? "N/A"}/10
+
+Transcript của nhận xét audio từ mentor:
+"${feedbackTranscript}"
+
+${submissionContext.learner_transcript ? `Transcript của học viên được đánh giá:
+"${submissionContext.learner_transcript}"` : ""}
+
+${submissionContext.challenge_title ? `Challenge: ${submissionContext.challenge_title}` : ""}
+
+Hãy phân tích và trích xuất:
+1. Các tiêu chí đánh giá mà mentor sử dụng
+2. Các điểm mạnh/yếu mà mentor nhận xét
+3. Các gợi ý cải thiện mà mentor đưa ra
+4. Cách mentor cân nhắc giữa pronunciation và fluency
+
+Trả về JSON:
+{
+  "evaluation_criteria": ["tiêu chí 1", "tiêu chí 2", ...],
+  "strengths_mentioned": ["điểm mạnh 1", ...],
+  "weaknesses_mentioned": ["điểm yếu 1", ...],
+  "improvement_suggestions": ["gợi ý 1", ...],
+  "scoring_rationale": "giải thích cách mentor chấm điểm",
+  "key_phrases": ["cụm từ quan trọng mentor dùng", ...]
 }
 
-/**
- * editChallengeAI - improve challenge content
- * challengeContent: string or JSON-like content to improve
- */
-export async function editChallengeAI(challengeContent) {
-  const messages = [
-    { role: "system", content: "You improve challenge content and return strict JSON." },
-    { role: "user", content:
-      `Improve this English learning challenge. 
-       Return JSON: { "title": string, "description": string (HTML), "type": "speaking"|"writing"|"quiz", "level": "easy"|"medium"|"hard", "tags": string[], "issues": string[] }.
-       "issues" lists any problems detected (too short, unclear, formatting issues). If none, return empty array.` },
-    { role: "user", content: typeof challengeContent === "string" ? challengeContent : JSON.stringify(challengeContent) }
-  ];
+Chỉ trả về JSON hợp lệ.`;
 
-  const data = await callOpenRouter(messages, { max_tokens: 700, temperature: 0.4 });
-  const text = data.choices?.[0]?.message?.content || "";
   try {
-    return JSON.parse(text);
-  } catch (e) {
-    throw new Error("AI returned non-JSON content for editChallengeAI");
+    const resp = await callOpenRouter(
+      [
+        { role: "system", content: "Bạn là hệ thống phân tích và học hỏi từ đánh giá của mentor. Trả về JSON hợp lệ." },
+        { role: "user", content: prompt }
+      ],
+      { max_tokens: 1000, temperature: 0.3 }
+    );
+
+    const result = safeParseJSON(resp?.choices?.[0]?.message?.content);
+    if (result && typeof result === "object") {
+      console.log("[mentorAiService] ✅ Learned from mentor feedback");
+      return result;
+    }
+    return null;
+  } catch (err) {
+    console.error("[mentorAiService] learnFromMentorFeedback error:", err);
+    return null;
   }
 }
 
 /**
  * chatWithAI - short HTML suggestion (used by mentorService.chatWithAI)
  */
-export async function chatWithAI(message, context = "") {
-  const messages = [
-    { role: "system", content: "You return a short HTML snippet suggestion only. Do not include explanations." },
-    { role: "user", content: `User request: ${message}\nContext: ${context}\nReturn only HTML.` }
-  ];
+export async function chatWithAI(message, context = {}) {
+  const prompt = `Context: ${JSON.stringify(context)}\n\nUser: ${message}`;
+  try {
+    const resp = await callOpenRouter(
+      [{ role: "user", content: prompt }],
+      { max_tokens: 300, temperature: 0.7 }
+    );
+    return resp?.choices?.[0]?.message?.content || "";
+  } catch (err) {
+    console.error("chatWithAI error:", err);
+    return "";
+  }
+}
 
-  const data = await callOpenRouter(messages, { max_tokens: 400, temperature: 0.6 });
-  const html = data.choices?.[0]?.message?.content || "";
-  return html;
+/**
+ * editChallengeAI - AI helper to edit challenge content
+ */
+export async function editChallengeAI(content) {
+  const prompt = `Chỉnh sửa và cải thiện nội dung challenge sau:\n\n${content}\n\nTrả về nội dung đã được cải thiện.`;
+  try {
+    const resp = await callOpenRouter(
+      [{ role: "user", content: prompt }],
+      { max_tokens: 500, temperature: 0.5 }
+    );
+    return resp?.choices?.[0]?.message?.content || content;
+  } catch (err) {
+    console.error("editChallengeAI error:", err);
+    return content;
+  }
 }
