@@ -197,10 +197,41 @@ export async function deleteResource(req, res) {
 
 export async function mentorCreateReport(req, res) {
   try {
-    const report = await mentorService.mentorCreateReport(req.body);
+    const { reporter_id, target_id, content } = req.body;
+    
+    // Handle image/video upload
+    let image_url = null;
+    let video_url = null;
+    
+    if (req.files) {
+      if (req.files.image && req.files.image[0]) {
+        image_url = `/uploads/${req.files.image[0].filename}`;
+      }
+      if (req.files.video && req.files.video[0]) {
+        video_url = `/uploads/${req.files.video[0].filename}`;
+      }
+    }
+    
+    const report = await mentorService.mentorCreateReport({ 
+      reporter_id, 
+      target_id, 
+      content,
+      image_url,
+      video_url
+    });
     res.json({ report });
   } catch (err) {
     console.error("mentorCreateReport error - mentorController.js:203", err);
+    if (err.canReport === false) {
+      return res.status(400).json({ 
+        message: err.message,
+        canReport: false,
+        hoursRemaining: err.hoursRemaining
+      });
+    }
+    if (err.message && err.message.includes("24 giờ")) {
+      return res.status(400).json({ message: err.message });
+    }
     if (err.code === "23505") {
       return res.status(400).json({ message: "Bạn đã report học viên này rồi" });
     }
@@ -338,7 +369,7 @@ export async function editChallengeAI(req, res) {
 export async function chatWithAI(req, res) {
   try {
     const { message, context } = req.body || {};
-    const suggestion = await mentorService.chatWithAI(message, context);
+    const suggestion = await mentorAiService.chatWithAI(message, context);
     return res.json({ suggestion });
   } catch (err) {
     console.error("chatWithAI error - mentorController.js:344", err);
@@ -464,7 +495,11 @@ export async function postReview(req, res) {
     const result = await mentorService.saveMentorReview(submissionId, mentorId, payload);
     if (!result.ok) return res.status(result.status || 400).json({ error: result.message || "Cannot save review" });
 
-    return res.json({ success: true, review: result.review });
+    return res.json({ 
+      success: true, 
+      review: result.review,
+      feedback_id: result.feedback_id 
+    });
   } catch (err) {
     console.error("mentorController.postReview error - mentorController.js:469", err);
     return res.status(500).json({ error: "Server error" });

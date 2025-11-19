@@ -1,6 +1,6 @@
 ﻿import { useEffect, useState } from "react";
 import { getAuth } from "../../utils/auth";
-import "../../styles/mentor.css";
+import "../../styles/resources.css";
 import api from "../../api";
 import Modal from "../common/Modal";
 import { FiFileText, FiVideo, FiPlus, FiX } from "react-icons/fi";

@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import AudioRecorder from "../common/AudioRecorder";
 import api from "../../api";
-import "../../styles/learner.css";
+import "../../styles/challenge.css"; 
 
 export default function SubmissionForm({ learnerId, challengeId, onSubmitted = () => {}, onCancel = () => {} }) {
   const [audioBlob, setAudioBlob] = useState(null);
@@ -43,7 +43,6 @@ export default function SubmissionForm({ learnerId, challengeId, onSubmitted = (
       });
       form.append("file", file);
 
-      // Gửi lên server, server trả submissionId ngay (status: pending)
       const resp = await api.post("/learners/submissions", form, {
         headers: { "Content-Type": "multipart/form-data" },
       });
@@ -53,11 +52,7 @@ export default function SubmissionForm({ learnerId, challengeId, onSubmitted = (
       const audio_url = data.audio_url ?? null;
 
       setSubmitSuccess("✅ Nộp bài thành công! Đang chuyển về trang chi tiết...");
-      // Gọi callback parent và truyền submissionId để parent mở detail ngay
       onSubmitted({ submissionId, audio_url });
-
-      // Lưu ý: không chờ backend hoàn tất transcription/analyze — đó là job chạy ngầm.
-      // Bạn vẫn có thể giữ spinner ngắn nếu muốn, nhưng ở đây ta chuyển ngay.
     } catch (err) {
       console.error("❌ Submit error", err);
       setSubmitError("Có lỗi khi nộp bài. Vui lòng thử lại.");
@@ -67,8 +62,8 @@ export default function SubmissionForm({ learnerId, challengeId, onSubmitted = (
   }
 
   return (
-    <div className="submission-card">
-      <div className="submission-header">
+    <div className="challenge-submission-card">
+      <div className="challenge-submission-header">
         <h3 className="submission-title">Nộp bài nói</h3>
         <div style={{ display: "flex", gap: 8 }}>
           <button
@@ -80,20 +75,17 @@ export default function SubmissionForm({ learnerId, challengeId, onSubmitted = (
             {submitting ? <span className="spinner" /> : <span className="icon-send">➤</span>}
             Nộp bài
           </button>
-          <button type="button" className="btn-ghost" onClick={() => onCancel()}>Hủy</button>
+          <button type="button" className="btn-ghost" onClick={onCancel}>Hủy</button>
         </div>
       </div>
 
-      <div className="submission-body">
-        <AudioRecorder
-          onRecorded={(b) => setAudioBlob(b)}
-          isSubmitting={submitting}
-        />
+      <div className="challenge-submission-body">
+        <AudioRecorder onRecorded={setAudioBlob} isSubmitting={submitting} />
 
         {previewUrl && (
           <div style={{ marginTop: 10 }}>
-            <div style={{ fontSize: 13, color: "#6b7280", marginBottom: 6 }}>Xem trước bản ghi</div>
-            <audio controls src={previewUrl} style={{ width: "100%" }} />
+            <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 6 }}>Xem trước bản ghi</div>
+            <audio controls src={previewUrl} style={{ width: "100%", borderRadius: 8 }} />
           </div>
         )}
 
