@@ -15,8 +15,29 @@
 .challenge-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
   margin-bottom: 12px;
+}
+
+.challenge-header .header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.challenge-header .header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.challenge-header .challenge-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
 }
 .challenge-header .badge {
   background: var(--accent);

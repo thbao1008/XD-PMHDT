@@ -29,7 +29,7 @@ export default function SemanticInput({ sessionId, rounds, onComplete, onSkip })
       );
 
       if (res.data.correct) {
-        alert("Chính xác! Bạn đã hiểu đúng nghĩa của đoạn văn.");
+        // Không hiển thị alert, chỉ đánh dấu đã submit
         setSubmittedRounds(prev => new Set([...prev, roundId]));
       } else {
         alert(`Chưa chính xác. ${res.data.feedback || "Hãy thử lại."}`);
@@ -43,12 +43,7 @@ export default function SemanticInput({ sessionId, rounds, onComplete, onSkip })
   };
 
   const handleSkip = () => {
-    if (onSkip) {
-      onSkip();
-    }
-  };
-
-  const handleContinue = () => {
+    // Khi bỏ qua, tự động hiển thị kết quả
     if (onComplete) {
       onComplete();
     }
@@ -61,83 +56,101 @@ export default function SemanticInput({ sessionId, rounds, onComplete, onSkip })
         <p>Viết nghĩa tiếng Việt của các đoạn văn bạn đã nói (không bắt buộc)</p>
       </div>
 
-      <div className="semantic-content">
-        {rounds.filter(round => round.round_id).map((round, idx) => (
-          <div key={round.round_id || idx} className="translation-item" style={{ marginBottom: 30, padding: 20, background: "#f9fafb", borderRadius: 8 }}>
-            <div className="translation-prompt">
-              <strong>Vòng {round.round_number || idx + 1}:</strong>
-              <p style={{ marginTop: 10, fontSize: 16 }}>{round.prompt}</p>
-            </div>
-            <textarea
-              value={translations[round.round_id] || ""}
-              onChange={(e) => handleTranslationChange(round.round_id, e.target.value)}
-              rows="3"
-              placeholder="Viết nghĩa tiếng Việt của đoạn văn trên..."
-              className="translation-input"
-              disabled={submittedRounds.has(round.round_id)}
-              style={{
-                width: "100%",
-                padding: 10,
-                borderRadius: 4,
-                border: "1px solid #ddd",
-                marginTop: 10,
-                marginBottom: 10
-              }}
-            />
-            {submittedRounds.has(round.round_id) ? (
-              <div style={{ color: "#10b981", marginBottom: 15 }}>
-                ✅ Đã nộp
-              </div>
-            ) : (
-              <button
-                onClick={() => handleSubmitTranslation(round.round_id)}
-                disabled={!translations[round.round_id]?.trim() || submitting}
-                style={{
-                  padding: "8px 16px",
-                  background: "#10b981",
-                  color: "white",
-                  border: "none",
-                  borderRadius: 4,
-                  cursor: translations[round.round_id]?.trim() && !submitting ? "pointer" : "not-allowed",
-                  opacity: translations[round.round_id]?.trim() && !submitting ? 1 : 0.5,
-                  marginBottom: 15
-                }}
-              >
-                Gửi
-              </button>
-            )}
+      <div className="semantic-content" style={{ maxHeight: "70vh", overflowY: "auto", padding: "0 10px" }}>
+        {rounds.length === 0 ? (
+          <div style={{ textAlign: "center", padding: 40, color: "#666" }}>
+            <p>Đang tải dữ liệu các vòng...</p>
           </div>
-        ))}
+        ) : (
+          rounds.map((round, idx) => {
+          const roundKey = round.round_id || `round-${idx}`;
+          const roundId = round.round_id;
+          
+          return (
+            <div key={roundKey} className="translation-item" style={{ marginBottom: 30, padding: 20, background: "#f9fafb", borderRadius: 8, border: "1px solid #e5e7eb" }}>
+              <div className="translation-prompt">
+                <strong style={{ fontSize: 18, color: "#10b981" }}>Vòng {round.round_number || idx + 1}:</strong>
+                <p style={{ marginTop: 10, fontSize: 16, color: "#333", lineHeight: 1.6 }}>{round.prompt}</p>
+              </div>
+              <textarea
+                value={translations[roundKey] || ""}
+                onChange={(e) => handleTranslationChange(roundKey, e.target.value)}
+                rows="3"
+                placeholder="Viết nghĩa tiếng Việt của đoạn văn trên (không bắt buộc)..."
+                className="translation-input"
+                disabled={submittedRounds.has(roundKey) || !roundId}
+                style={{
+                  width: "100%",
+                  padding: 12,
+                  borderRadius: 6,
+                  border: submittedRounds.has(roundKey) ? "2px solid #10b981" : "1px solid #ddd",
+                  marginTop: 12,
+                  marginBottom: 10,
+                  fontSize: 14,
+                  fontFamily: "inherit",
+                  resize: "vertical",
+                  opacity: !roundId ? 0.6 : 1
+                }}
+              />
+              {!roundId ? (
+                <div style={{ color: "#999", marginBottom: 15, fontSize: 12 }}>
+                  ⏳ Đang xử lý, vui lòng đợi...
+                </div>
+              ) : submittedRounds.has(roundKey) ? (
+                <div style={{ color: "#10b981", marginBottom: 15, fontSize: 14, fontWeight: 500 }}>
+                  ✅ Đã kiểm tra
+                </div>
+              ) : (
+                <button
+                  onClick={() => handleSubmitTranslation(roundId)}
+                  disabled={!translations[roundKey]?.trim() || submitting}
+                  style={{
+                    padding: "8px 20px",
+                    background: translations[roundKey]?.trim() && !submitting ? "#10b981" : "#9ca3af",
+                    color: "white",
+                    border: "none",
+                    borderRadius: 6,
+                    cursor: translations[roundKey]?.trim() && !submitting ? "pointer" : "not-allowed",
+                    fontSize: 14,
+                    fontWeight: 500,
+                    marginBottom: 15,
+                    transition: "all 0.2s"
+                  }}
+                >
+                  {submitting ? "Đang kiểm tra..." : "Kiểm tra"}
+                </button>
+              )}
+            </div>
+          );
+        })
+        )}
       </div>
 
-      <div className="semantic-actions" style={{ marginTop: 30, display: "flex", gap: 10, justifyContent: "center" }}>
+      <div className="semantic-actions" style={{ marginTop: 30, display: "flex", gap: 10, justifyContent: "center", paddingBottom: "20px" }}>
         <button
           onClick={handleSkip}
-          style={{
-            padding: "12px 24px",
-            background: "#6b7280",
-            color: "white",
-            border: "none",
-            borderRadius: 4,
-            cursor: "pointer",
-            fontSize: 16
-          }}
-        >
-          Bỏ qua
-        </button>
-        <button
-          onClick={handleContinue}
           style={{
             padding: "12px 24px",
             background: "#10b981",
             color: "white",
             border: "none",
-            borderRadius: 4,
+            borderRadius: 8,
             cursor: "pointer",
-            fontSize: 16
+            fontSize: 16,
+            fontWeight: 600,
+            boxShadow: "0 2px 8px rgba(16, 185, 129, 0.3)",
+            transition: "all 0.2s"
+          }}
+          onMouseEnter={(e) => {
+            e.target.style.transform = "translateY(-2px)";
+            e.target.style.boxShadow = "0 4px 12px rgba(16, 185, 129, 0.4)";
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.transform = "translateY(0)";
+            e.target.style.boxShadow = "0 2px 8px rgba(16, 185, 129, 0.3)";
           }}
         >
-          Xem kết quả
+          Bỏ qua
         </button>
       </div>
     </div>

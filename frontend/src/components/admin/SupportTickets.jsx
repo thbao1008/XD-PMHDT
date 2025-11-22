@@ -43,10 +43,12 @@ export default function SupportTickets() {
   };
 
   const filteredTickets = tickets.filter((t) => {
-    const matchSearch =
-      t.name?.toLowerCase().includes(search.toLowerCase()) ||
-      t.email?.toLowerCase().includes(search.toLowerCase()) ||
-      t.note?.toLowerCase().includes(search.toLowerCase());
+    const searchLower = search.toLowerCase().trim();
+    const matchSearch = !searchLower ||
+      t.name?.toLowerCase().includes(searchLower) ||
+      t.email?.toLowerCase().includes(searchLower) ||
+      t.phone?.toLowerCase().includes(searchLower) ||
+      t.note?.toLowerCase().includes(searchLower);
 
     const matchStatus =
       filter === "all" ? true : t.status?.toLowerCase() === filter;
@@ -62,7 +64,7 @@ export default function SupportTickets() {
         <div style={{ marginBottom: 12, display: "flex", gap: 12 }}>
           <input
             className="input"
-            placeholder="Tìm theo tên, email hoặc ghi chú..."
+            placeholder="Tìm theo tên, email, số điện thoại hoặc ghi chú..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />

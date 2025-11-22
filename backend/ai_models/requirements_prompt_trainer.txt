@@ -1,7 +1,0 @@
-# Requirements for Prompt Generator Trainer
-# No external dependencies needed - uses only standard library
-
-# Optional: if you want to use advanced features later
-# numpy>=1.21.0
-# scikit-learn>=1.0.0
-

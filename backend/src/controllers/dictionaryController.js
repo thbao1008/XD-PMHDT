@@ -1,24 +1,47 @@
 // backend/src/controllers/dictionaryController.js
 import * as aiService from "../services/aiService.js";
+import pool from "../config/db.js";
 
 /**
- * Lấy định nghĩa và cách sử dụng của từ
+ * Lấy định nghĩa và cách sử dụng của từ (với cache)
  */
 export async function getWordDefinition(req, res) {
   try {
     const { word } = req.params;
+    const normalizedWord = word.toLowerCase().trim();
 
-    if (!word) {
+    if (!normalizedWord) {
       return res.status(400).json({ message: "Word is required" });
     }
 
+    // Kiểm tra cache trong database trước
+    try {
+      const cacheResult = await pool.query(
+        `SELECT definition_data, updated_at 
+         FROM dictionary_cache 
+         WHERE word = $1 
+         AND updated_at > NOW() - INTERVAL '30 days'`,
+        [normalizedWord]
+      );
+
+      if (cacheResult.rows.length > 0) {
+        const cached = cacheResult.rows[0].definition_data;
+        // Parse JSON nếu là string, hoặc trả về trực tiếp nếu đã là object
+        const result = typeof cached === 'string' ? JSON.parse(cached) : cached;
+        return res.json(result);
+      }
+    } catch (cacheErr) {
+      // Nếu bảng cache chưa tồn tại, bỏ qua và tiếp tục
+      console.warn("Dictionary cache table may not exist, continuing without cache:", cacheErr.message);
+    }
+
     // Dùng AI để lấy định nghĩa
-    const prompt = `Provide a dictionary entry for the English word "${word}".
+    const prompt = `Provide a dictionary entry for the English word "${normalizedWord}".
 
 IMPORTANT: Respond ONLY with valid JSON, no markdown code blocks, no explanations, just the JSON object.
 
 {
-  "word": "${word}",
+  "word": "${normalizedWord}",
   "pronunciation": "<IPA phonetic transcription, e.g., həˈloʊ for 'hello'>",
   "definition": "<Vietnamese definition>",
   "usage": "<How to use this word in a sentence, in Vietnamese>",
@@ -31,9 +54,6 @@ IMPORTANT: Respond ONLY with valid JSON, no markdown code blocks, no explanation
     );
 
     let content = response.choices?.[0]?.message?.content || "{}";
-    
-    // Log raw content để debug
-    console.log("📝 Raw AI response:", content.substring(0, 200));
     
     // Loại bỏ markdown code block nếu có (```json ... ``` hoặc ``` ... ```)
     content = content.trim();
@@ -109,12 +129,25 @@ IMPORTANT: Respond ONLY with valid JSON, no markdown code blocks, no explanation
       console.error("❌ Parse error:", parseErr.message);
       // Fallback: trả về default structure
       result = {
-        word: word,
+        word: normalizedWord,
         definition: "Không tìm thấy định nghĩa",
         usage: "Không có thông tin",
         example: "Không có ví dụ"
       };
     }
+
+    // Lưu vào cache database (async, không đợi)
+    pool.query(
+      `INSERT INTO dictionary_cache (word, definition_data, updated_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (word) DO UPDATE 
+       SET definition_data = EXCLUDED.definition_data, 
+           updated_at = NOW()`,
+      [normalizedWord, JSON.stringify(result)]
+    ).catch(err => {
+      // Ignore cache errors, không ảnh hưởng response
+      console.warn("Failed to save dictionary cache:", err.message);
+    });
 
     res.json(result);
   } catch (err) {

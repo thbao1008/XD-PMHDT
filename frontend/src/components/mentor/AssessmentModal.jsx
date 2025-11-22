@@ -388,10 +388,11 @@ export default function AssessmentModal({ submissionId, onClose, onSaved }) {
         const lc = normalized.learner_challenge;
         
         // Load điểm từ mentor_review (đã chấm) hoặc từ AI assessment
+        // Điểm trong DB là thang 100, chia 10 để hiển thị thang 10 cho mentor
         const rawPron = mr?.pronunciation_score ?? normalized.mentor_pronunciation_score ?? normalized.pronunciation_score ?? 0;
         const rawFlu = mr?.fluency_score ?? normalized.mentor_fluency_score ?? normalized.fluency_score ?? 0;
-        const pronScore = rawPron > 10 ? (rawPron / 10).toFixed(1) : (rawPron || 0);
-        const fluScore = rawFlu > 10 ? (rawFlu / 10).toFixed(1) : (rawFlu || 0);
+        const pronScore = rawPron ? (rawPron / 10).toFixed(1) : "0";
+        const fluScore = rawFlu ? (rawFlu / 10).toFixed(1) : "0";
         setPronunciation(pronScore);
         setFluency(fluScore);
         
@@ -401,7 +402,7 @@ export default function AssessmentModal({ submissionId, onClose, onSaved }) {
           const avg = ((Number(pronScore) + Number(fluScore)) / 2).toFixed(1);
           setFinalScore(avg);
         } else {
-          const finalNorm = existingFinal > 10 ? (existingFinal / 10).toFixed(1) : existingFinal;
+          const finalNorm = existingFinal ? (existingFinal / 10).toFixed(1) : "0";
           setFinalScore(finalNorm);
         }
         
@@ -788,14 +789,15 @@ export default function AssessmentModal({ submissionId, onClose, onSaved }) {
                     className="btn-ghost" 
                     onClick={() => {
                       // Hủy chỉnh sửa: load lại dữ liệu từ submission
+                      // Điểm trong DB là thang 100, chia 10 để hiển thị thang 10 cho mentor
                       const mr = submission.mentor_review;
                       if (mr) {
-                        const pronScore = mr.pronunciation_score > 10 ? (mr.pronunciation_score / 10).toFixed(1) : mr.pronunciation_score;
-                        const fluScore = mr.fluency_score > 10 ? (mr.fluency_score / 10).toFixed(1) : mr.fluency_score;
-                        setPronunciation(pronScore || "0");
-                        setFluency(fluScore || "0");
-                        const finalNorm = mr.final_score > 10 ? (mr.final_score / 10).toFixed(1) : mr.final_score;
-                        setFinalScore(finalNorm || "0");
+                        const pronScore = mr.pronunciation_score ? (mr.pronunciation_score / 10).toFixed(1) : "0";
+                        const fluScore = mr.fluency_score ? (mr.fluency_score / 10).toFixed(1) : "0";
+                        setPronunciation(pronScore);
+                        setFluency(fluScore);
+                        const finalNorm = mr.final_score ? (mr.final_score / 10).toFixed(1) : "0";
+                        setFinalScore(finalNorm);
                         setFeedback(mr.feedback || "");
                         if (mr.audio_url) {
                           let normalizedAudioUrl = mr.audio_url;

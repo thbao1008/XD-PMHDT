@@ -6,19 +6,28 @@ import {
   FiShoppingBag, FiBarChart2, FiLifeBuoy,
   FiMessageCircle, FiShare2
 } from "react-icons/fi";
+import api from "../../api.js";
 
 export default function AdminSidebar({ collapsed = false }) {
   const [stats, setStats] = useState({ traffic: 0, online: 0 });
 
-  function mockStats() {
-    const randomTraffic = 5000;
-    const randomOnline = Math.floor(Math.random() * 500) + 50;
-    setStats({ traffic: randomTraffic, online: randomOnline });
+  async function fetchTrafficStats() {
+    try {
+      const res = await api.get("/admin/dashboard/traffic");
+      if (res.data.success && res.data.stats) {
+        setStats({
+          traffic: res.data.stats.totalTraffic || 0,
+          online: res.data.stats.onlineUsers || 0
+        });
+      }
+    } catch (err) {
+      console.error("❌ Lỗi load traffic stats:", err);
+    }
   }
 
   useEffect(() => {
-    mockStats();
-    const interval = setInterval(mockStats, 30000);
+    fetchTrafficStats();
+    const interval = setInterval(fetchTrafficStats, 30000); // Update mỗi 30 giây
     return () => clearInterval(interval);
   }, []);
 
@@ -30,11 +39,10 @@ export default function AdminSidebar({ collapsed = false }) {
     { id: "reports", label: "Reports", icon: <FiBarChart2 />, to: "/admin/reports" },
     { id: "support", label: "Support", icon: <FiLifeBuoy />, to: "/admin/support" },
     { id: "communicate", label: "Communicate", icon: <FiShare2 />, to: "/admin/communicate" }, // thêm
-    { id: "feedback", label: "Feedback", icon: <FiMessageCircle />, to: "/admin/feedback" } // thêm
   ];
 
   return (
-    <aside className={`shell-sidebar${collapsed ? " collapsed" : ""}`}>
+    <>
       <nav className="sidebar-nav">
         {menu.map((item) => (
           <NavLink
@@ -63,6 +71,6 @@ export default function AdminSidebar({ collapsed = false }) {
       <div className="sidebar-footer">
         {!collapsed && <span>© 2025 AESP Admin</span>}
       </div>
-    </aside>
+    </>
   );
 }

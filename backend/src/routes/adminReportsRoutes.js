@@ -6,7 +6,9 @@ import {
   searchLearnerProgress,
   updateReportStatus,
   updateLearnerNote,
-  checkCanReport
+  checkCanReport,
+  getAllLearnersWithProgress,
+  getAllMentors
 } from "../controllers/reportController.js";
 
 const router = express.Router();
@@ -25,6 +27,12 @@ router.get("/", getReports);
 
 // Tìm kiếm tiến độ đào tạo học viên
 router.get("/learner-progress", searchLearnerProgress);
+
+// Lấy danh sách tất cả learners với progress cho admin
+router.get("/learners-progress", getAllLearnersWithProgress);
+
+// Lấy danh sách tất cả mentors cho dropdown filter
+router.get("/mentors", getAllMentors);
 
 // Cập nhật trạng thái report
 router.patch("/:id/status", updateReportStatus);

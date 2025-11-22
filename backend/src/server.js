@@ -9,6 +9,7 @@ import { spawn } from "child_process";
 // Controllers
 import * as learnerCtrl from "./controllers/learnerController.js";
 import { getLearnersByMentor } from "./controllers/mentorController.js";
+import { getPackages } from "./controllers/packageController.js";
 
 // Multer for file uploads
 import multer from "multer";
@@ -20,12 +21,14 @@ import adminSupportRoutes from "./routes/adminSupportRoutes.js";
 import adminPackagesRoutes from "./routes/adminPackagesRoutes.js";
 import adminPurchasesRoutes from "./routes/adminPurchasesRoutes.js";
 import adminReportRoutes from "./routes/adminReportsRoutes.js";
+import adminDashboardRoutes from "./routes/adminDashboardRoutes.js";
 import learnerRoutes from "./routes/learnerRoutes.js";
 import mentorRoutes from "./routes/mentorRoutes.js";
 
 // Middleware
 import { errorHandler } from "./middleware/errorHandler.js";
 import { requestLogger } from "./middleware/requestLogger.js";
+import { trackTraffic } from "./middleware/trafficTracker.js";
 
 // Seed + Queue
 import { seedAdmins } from "../seed/seedAdminsFromFile.js";
@@ -35,17 +38,26 @@ const app = express();
 const PORT = process.env.PORT || 4002;
 
 // ====== Log trạng thái key ======
+const hasOpenRouterKey = !!process.env.OPENROUTER_API_KEY;
 console.log(
   "🔑 OPENROUTER_API_KEY: - server.js",
-  process.env.OPENROUTER_API_KEY
+  hasOpenRouterKey
     ? process.env.OPENROUTER_API_KEY.slice(0, 8) + "..."
     : "❌ missing"
 );
+
+if (!hasOpenRouterKey) {
+  console.warn("⚠️  WARNING: OPENROUTER_API_KEY is not set in .env file.");
+  console.warn("   AI features (story mode, analysis) will use fallback responses.");
+  console.warn("   To enable AI features, add OPENROUTER_API_KEY=your_key_here to your .env file.");
+  console.warn("   Get your API key from: https://openrouter.ai/keys");
+}
 
 // ====== Middleware ======
 app.use(cors({ origin: "http://localhost:5173", credentials: true }));
 app.use(express.json());
 app.use(requestLogger);
+app.use(trackTraffic); // Track traffic và online users
 
 // ====== Multer config for file uploads ======
 const upload = multer({ dest: "uploads/" });
@@ -65,6 +77,7 @@ app.use("/api/admin/support", adminSupportRoutes);
 app.use("/api/admin/packages", adminPackagesRoutes);
 app.use("/api/admin/purchases", adminPurchasesRoutes);
 app.use("/api/admin/reports", adminReportRoutes);
+app.use("/api/admin/dashboard", adminDashboardRoutes);
 
 app.use("/api/learners", learnerRoutes);
 app.use("/api/mentors", mentorRoutes);
@@ -72,6 +85,9 @@ app.use("/api/mentors", mentorRoutes);
 // Challenge routes
 app.get("/api/challenges", learnerCtrl.listAllChallenges);
 app.get("/api/challenges/:id", learnerCtrl.getChallengeById);
+
+// Public packages route (không cần auth)
+app.get("/api/packages/public", getPackages);
 
 // Mentor learners
 app.get("/api/admin/mentors/:id/learners", getLearnersByMentor);

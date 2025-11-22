@@ -17,21 +17,16 @@ export default function LearnerSidebar({ basePath = "/learn", collapsed = false 
   const role = auth?.user?.role || "guest";
 
   const learnerMenu = [
-    { id: "dashboard", label: "Dashboard", path: `${basePath}/catalog`, icon: <FaHome /> },
+    { id: "dashboard", label: "Dashboard", path: `${basePath}/dashboard`, icon: <FaHome /> },
     { id: "catalog", label: "Learning Catalog", path: `${basePath}/catalog`, icon: <FaBook /> },
     { id: "practice", label: "Speaking Practice", path: `${basePath}/practice`, icon: <FaMicrophone /> },
     { id: "challenges", label: "Challenges", path: `${basePath}/challenges`, icon: <FaBolt /> },
-    { id: "progress", label: "Progress Analytics", path: `${basePath}/progress`, icon: <FaChartLine /> },
     { id: "communicate", label: "Communicate Center", path: `${basePath}/communicate`, icon: <FaComments /> },
     { id: "feedback", label: "Feedback", path: `${basePath}/feedback`, icon: <FaPen /> },
   ];
 
   return (
-    <aside
-      className={`shell-sidebar${collapsed ? " collapsed" : ""}`}
-      role="navigation"
-      aria-label="Learner sidebar"
-    >
+    <>
       <nav className="sidebar-nav" aria-label="Learner navigation">
         {learnerMenu.map((item) => (
           <NavLink
@@ -53,6 +48,6 @@ export default function LearnerSidebar({ basePath = "/learn", collapsed = false 
       <div className="sidebar-footer">
         {!collapsed && <span>© 2025 AESP Learner</span>}
       </div>
-    </aside>
+    </>
   );
 }

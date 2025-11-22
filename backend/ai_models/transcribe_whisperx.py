@@ -41,36 +41,140 @@ def detect_language_per_word(words):
             w["lang"] = "unknown"
     return words
 
-def run_whisperx(audio_path, output_path="outputs/record.json", model_size="base", language=None, compute_type="float32"):
+def run_whisperx(audio_path, output_path="outputs/record.json", model_size="base", language=None, compute_type=None):
     if not os.path.exists(audio_path):
         raise FileNotFoundError(f"Không tìm thấy file audio: {audio_path}")
 
     out_dir = os.path.dirname(output_path) or "."
     os.makedirs(out_dir, exist_ok=True)
 
+    # Tự động phát hiện và ưu tiên GPU, với fallback về CPU nếu lỗi
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"[whisperx] Running on: {audio_path} - transcribe_whisperx.py:52", flush=True)
-    print(f"[whisperx] Model: {model_size} | Device: {device} | compute_type: {compute_type} - transcribe_whisperx.py:53", flush=True)
+    original_device = device
+    
+    # Tự động chọn compute_type dựa trên device
+    # GPU: dùng float16 để nhanh hơn, CPU: dùng float32 để chính xác hơn
+    if compute_type is None:
+        if device == "cuda":
+            compute_type = "float16"  # GPU: ưu tiên tốc độ
+        else:
+            compute_type = "float32"  # CPU: ưu tiên độ chính xác
+    
+    # Log thông tin GPU nếu có - ưu tiên GPU laptop
+    if device == "cuda":
+        try:
+            gpu_name = torch.cuda.get_device_name(0)
+            gpu_memory = torch.cuda.get_device_properties(0).total_memory / (1024**3)  # GB
+            cuda_version = torch.version.cuda
+            print(f"[whisperx] 🚀 GPU detected: {gpu_name} ({gpu_memory:.1f} GB) - transcribe_whisperx.py:68", flush=True)
+            print(f"[whisperx] CUDA version: {cuda_version} - transcribe_whisperx.py:69", flush=True)
+            print(f"[whisperx] PyTorch version: {torch.__version__} - transcribe_whisperx.py:70", flush=True)
+            
+            # Kiểm tra tương thích CUDA 12.x
+            if cuda_version and cuda_version.startswith("12."):
+                print(f"[whisperx] ✅ CUDA 12.x detected - compatible with PyTorch {torch.__version__} - transcribe_whisperx.py:72", flush=True)
+        except Exception as e:
+            print(f"[whisperx] ⚠️  GPU detected but error accessing: {e}, falling back to CPU - transcribe_whisperx.py:74", flush=True)
+            device = "cpu"
+            compute_type = "float32"
+    else:
+        print(f"[whisperx] ⚠️  GPU not available, using CPU - transcribe_whisperx.py:77", flush=True)
+    
+    print(f"[whisperx] Running on: {audio_path} - transcribe_whisperx.py:65", flush=True)
+    print(f"[whisperx] Model: {model_size} | Device: {device} | compute_type: {compute_type} - transcribe_whisperx.py:66", flush=True)
 
-    # Try to set env for ctranslate2 if needed
+    # Set env for ctranslate2 - ưu tiên GPU laptop
     os.environ.setdefault("CT2_COMPUTE_TYPE", compute_type)
+    if device == "cuda":
+        # Ưu tiên GPU laptop (GPU 0) cho ctranslate2
+        os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
+        # Đảm bảo sử dụng GPU cho PyTorch
+        print(f"[whisperx] ✅ Using GPU 0 (laptop GPU) - transcribe_whisperx.py:85", flush=True)
 
-    # Load model — whisperx.load_model may accept compute_type; try both ways
+    # Load model với fallback về CPU nếu GPU lỗi
+    model = None
     try:
-        model = whisperx.load_model(model_size, device, compute_type=compute_type)
-    except TypeError:
-        # older whisperx API may not accept compute_type param; rely on env var
-        model = whisperx.load_model(model_size, device)
+        if device == "cuda":
+            try:
+                # Thử load với GPU
+                model = whisperx.load_model(model_size, device, compute_type=compute_type)
+            except (RuntimeError, OSError) as gpu_err:
+                # Nếu lỗi CUDA (như cublas64_12.dll not found), fallback về CPU
+                error_str = str(gpu_err).lower()
+                if "cublas" in error_str or "cuda" in error_str or "dll" in error_str or "library" in error_str:
+                    print(f"[whisperx] ⚠️  GPU error ({gpu_err}), falling back to CPU - transcribe_whisperx.py:99", flush=True)
+                    print(f"[whisperx] 💡 Tip: Ensure CUDA 12.1 libraries are installed correctly - transcribe_whisperx.py:100", flush=True)
+                    device = "cpu"
+                    compute_type = "float32"
+                    os.environ["CT2_COMPUTE_TYPE"] = compute_type
+                    model = whisperx.load_model(model_size, device, compute_type=compute_type)
+                else:
+                    raise
+        else:
+            # CPU mode
+            try:
+                model = whisperx.load_model(model_size, device, compute_type=compute_type)
+            except TypeError:
+                # older whisperx API may not accept compute_type param; rely on env var
+                model = whisperx.load_model(model_size, device)
+    except Exception as e:
+        # Nếu vẫn lỗi, thử không truyền compute_type
+        print(f"[whisperx] ⚠️  Error loading model with compute_type, trying without: {e} - transcribe_whisperx.py:87", flush=True)
+        try:
+            model = whisperx.load_model(model_size, device)
+        except Exception as e2:
+            print(f"[whisperx] ❌ Failed to load model: {e2} - transcribe_whisperx.py:90", flush=True)
+            raise
 
     # Transcribe (language optional)
-    result = model.transcribe(audio_path, language=language) if language else model.transcribe(audio_path)
+    # For English speaking practice, default to "en" if not specified
+    if not language:
+        language = "en"
+    result = model.transcribe(audio_path, language=language)
 
-    # Align words
-    align_model, metadata = whisperx.load_align_model(language_code=result.get("language"), device=device)
-    aligned_result = whisperx.align(result["segments"], align_model, metadata, audio_path, device)
+    # Align words - handle cases where alignment model doesn't exist for detected language
+    # Sử dụng device hiện tại (có thể đã fallback về CPU)
+    detected_lang = result.get("language", language)
+    aligned_result = None
+    word_segments = []
+    
+    try:
+        align_model, metadata = whisperx.load_align_model(language_code=detected_lang, device=device)
+        aligned_result = whisperx.align(result["segments"], align_model, metadata, audio_path, device)
+        word_segments = aligned_result.get("word_segments") or []
+    except (RuntimeError, OSError) as align_gpu_err:
+        # Nếu lỗi CUDA khi align, thử fallback về CPU
+        if ("cublas" in str(align_gpu_err).lower() or "cuda" in str(align_gpu_err).lower() or "dll" in str(align_gpu_err).lower()) and device == "cuda":
+            print(f"[whisperx] ⚠️  GPU error during alignment ({align_gpu_err}), trying CPU - transcribe_whisperx.py:100", flush=True)
+            try:
+                align_model, metadata = whisperx.load_align_model(language_code=detected_lang, device="cpu")
+                aligned_result = whisperx.align(result["segments"], align_model, metadata, audio_path, "cpu")
+                word_segments = aligned_result.get("word_segments") or []
+            except Exception as cpu_err:
+                print(f"[whisperx] ⚠️  CPU alignment also failed: {cpu_err}, continuing without alignment - transcribe_whisperx.py:105", flush=True)
+        else:
+            raise
+    except ValueError as e:
+        # If alignment model doesn't exist for detected language, try English as fallback
+        if detected_lang != "en":
+            print(f"[whisperx] Warning: No align-model for language '{detected_lang}', trying English fallback - transcribe_whisperx.py:69", flush=True)
+            try:
+                align_model, metadata = whisperx.load_align_model(language_code="en", device=device)
+                aligned_result = whisperx.align(result["segments"], align_model, metadata, audio_path, device)
+                word_segments = aligned_result.get("word_segments") or []
+            except Exception as fallback_err:
+                print(f"[whisperx] Warning: Could not align with English fallback either: {fallback_err} - transcribe_whisperx.py:75", flush=True)
+                # Continue without alignment - still return transcription result
+        else:
+            print(f"[whisperx] Warning: Could not align words: {e} - transcribe_whisperx.py:78", flush=True)
+            # Continue without alignment - still return transcription result
+    except Exception as e:
+        print(f"[whisperx] Warning: Alignment failed: {e}, continuing without alignment - transcribe_whisperx.py:81", flush=True)
+        # Continue without alignment - still return transcription result
 
-    # Attach language per word
-    word_segments = aligned_result.get("word_segments") or []
+    # Attach language per word (use word_segments from alignment if available)
+    if not word_segments and aligned_result:
+        word_segments = aligned_result.get("word_segments") or []
     words_with_lang = detect_language_per_word(word_segments)
 
     # Build segments with words grouped per segment for FE "conversation view"
@@ -85,8 +189,12 @@ def run_whisperx(audio_path, output_path="outputs/record.json", model_size="base
             seg_words = [w for w in words_with_lang if isinstance(w, dict) and float(w.get("start", -1)) >= s and float(w.get("end", -1)) <= e]
             seg["segment_words"] = seg_words
 
+    # Extract full text from segments
+    full_text = " ".join([seg.get("text", "") for seg in segments if seg.get("text")])
+    
     output = {
         "language": result.get("language"),
+        "text": full_text,
         "segments": segments,
         "words": words_with_lang
     }
@@ -103,7 +211,7 @@ def main():
     parser.add_argument("--output", "-o", help="Path to output JSON file (default: outputs/<basename>.json)")
     parser.add_argument("--model", "-m", default="base", help="Whisper model size (tiny, base, small, medium, large)")
     parser.add_argument("--lang", "-l", default=None, help="Language code (e.g., en, vi). If omitted, auto-detect.")
-    parser.add_argument("--compute-type", default="float32", choices=["float16","float32"], help="Compute type; use float32 on CPU")
+    parser.add_argument("--compute-type", default=None, choices=["float16","float32"], help="Compute type (auto-detect: float16 for GPU, float32 for CPU)")
     args = parser.parse_args()
 
     input_path = args.input

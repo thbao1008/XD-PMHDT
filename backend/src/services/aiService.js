@@ -30,10 +30,17 @@ async function getFetch() {
  * opts: {temperature, max_tokens}
  */
 export async function callOpenRouter(messages, opts = {}) {
-  if (!OR_KEY) throw new Error("AI provider not configured (OPENROUTER_API_KEY missing)");
+  if (!OR_KEY) {
+    const err = new Error("AI provider not configured (OPENROUTER_API_KEY missing)");
+    err.status = 503;
+    err.code = "API_KEY_MISSING";
+    throw err;
+  }
+  
   const fetchFn = await getFetch();
+  const model = opts.model || OR_MODEL;
   const body = {
-    model: OR_MODEL,
+    model: model,
     messages,
     temperature: opts.temperature ?? 0.7,
     max_tokens: opts.max_tokens ?? 800
@@ -50,8 +57,55 @@ export async function callOpenRouter(messages, opts = {}) {
 
   if (!res.ok) {
     const txt = await res.text().catch(() => "<no body>");
-    const err = new Error(`AI provider error ${res.status}: ${txt}`);
+    let errorMessage = `AI provider error ${res.status}: ${txt}`;
+    
+    // Provide helpful error messages
+    if (res.status === 401) {
+      try {
+        const errorJson = JSON.parse(txt);
+        if (errorJson.error?.message?.includes("User not found")) {
+          errorMessage = `OpenRouter API key is invalid or expired. Please check your OPENROUTER_API_KEY in .env file. Original error: ${txt}`;
+        } else {
+          errorMessage = `OpenRouter authentication failed. Please verify your OPENROUTER_API_KEY. Original error: ${txt}`;
+        }
+      } catch (e) {
+        errorMessage = `OpenRouter authentication failed (401). Please check your OPENROUTER_API_KEY in .env file.`;
+      }
+    } else if (res.status === 429) {
+      errorMessage = `OpenRouter rate limit exceeded. Please try again later. Original error: ${txt}`;
+    } else if (res.status === 402) {
+      // Parse error để lấy số tokens có thể afford
+      try {
+        const errorJson = JSON.parse(txt);
+        const errorMsg = errorJson.error?.message || txt;
+        // Extract số tokens có thể afford từ message
+        const affordMatch = errorMsg.match(/can only afford (\d+)/i);
+        const maxAffordableTokens = affordMatch ? parseInt(affordMatch[1]) : null;
+        
+        errorMessage = `OpenRouter payment required. Please check your account balance. Original error: ${txt}`;
+        
+        const err = new Error(errorMessage);
+        err.status = res.status;
+        err.code = "PAYMENT_REQUIRED";
+        err.maxAffordableTokens = maxAffordableTokens; // Thêm thông tin tokens có thể afford
+        throw err;
+      } catch (e) {
+        // Nếu e là error đã throw ở trên, re-throw nó
+        if (e.status === 402 && e.code === "PAYMENT_REQUIRED") {
+          throw e;
+        }
+        // Nếu là lỗi parse JSON, tạo error mới
+        errorMessage = `OpenRouter payment required. Please check your account balance. Original error: ${txt}`;
+        const err = new Error(errorMessage);
+        err.status = res.status;
+        err.code = "PAYMENT_REQUIRED";
+        throw err;
+      }
+    }
+    
+    const err = new Error(errorMessage);
     err.status = res.status;
+    err.code = res.status === 401 ? "API_KEY_INVALID" : "API_ERROR";
     throw err;
   }
 

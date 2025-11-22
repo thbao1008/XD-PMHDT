@@ -385,13 +385,36 @@
     return result.rows;
   }
 
-  export async function createChallenge(topicId, title, description, type, level, created_by) {
+  export async function getChallengesByMentor(mentorId) {
     const result = await pool.query(
-      `INSERT INTO challenges (topic_id, title, description, type, level, created_by)
-      VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-      [parseInt(topicId), title, description, type, level, created_by]
+      `SELECT c.* FROM challenges c
+       WHERE c.mentor_id = $1
+       ORDER BY c.created_at DESC`,
+      [parseInt(mentorId)]
     );
-    return result.rows[0];
+    return result.rows;
+  }
+
+  export async function createChallenge(mentorId, title, description, type, level, created_by) {
+    // Tạo challenge trực tiếp với mentor_id
+    const result = await pool.query(
+      `INSERT INTO challenges (mentor_id, title, description, type, level, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [parseInt(mentorId), title, description, type, level, created_by]
+    );
+    
+    const challenge = result.rows[0];
+    
+    // Lưu để AI học (async, không block)
+    try {
+      const challengeLearningService = await import("./challengeLearningService.js");
+      await challengeLearningService.learnFromChallengeCreation(challenge.id, parseInt(mentorId))
+        .catch(err => console.warn("⚠️ Failed to save challenge creation for AI learning:", err));
+    } catch (err) {
+      // Ignore errors, không block response
+    }
+    
+    return challenge;
   }
 
   export async function deleteTopic(topicId) {
@@ -653,9 +676,10 @@
           [
             payload.feedback || null,
             payload.audio_url || null,
-            payload.final_score ?? null,
-            payload.pronunciation_score ?? null,
-            payload.fluency_score ?? null,
+            // Mentor chấm thang 10, nhân 10 để ra thang 100
+            payload.final_score !== null && payload.final_score !== undefined ? (payload.final_score * 10) : null,
+            payload.pronunciation_score !== null && payload.pronunciation_score !== undefined ? (payload.pronunciation_score * 10) : null,
+            payload.fluency_score !== null && payload.fluency_score !== undefined ? (payload.fluency_score * 10) : null,
             submissionId
           ]
         );
@@ -672,9 +696,10 @@
             mentorId, 
             payload.feedback || null, 
             payload.audio_url || null,
-            payload.final_score ?? null,
-            payload.pronunciation_score ?? null,
-            payload.fluency_score ?? null
+            // Mentor chấm thang 10, nhân 10 để ra thang 100
+            payload.final_score !== null && payload.final_score !== undefined ? (payload.final_score * 10) : null,
+            payload.pronunciation_score !== null && payload.pronunciation_score !== undefined ? (payload.pronunciation_score * 10) : null,
+            payload.fluency_score !== null && payload.fluency_score !== undefined ? (payload.fluency_score * 10) : null
           ]
         );
         feedbackId = fRes.rows[0]?.id || null;
@@ -718,6 +743,46 @@
         } catch (err) {
           console.error("⚠️ Failed to queue mentor audio feedback: - mentorService.js:645", err);
           // Không throw error, vì feedback đã được lưu thành công
+        }
+      }
+      
+      // Lưu challenge evaluation để AI học (async, không block)
+      if (payload.final_score !== null && payload.final_score !== undefined) {
+        try {
+          const progressAnalyticsService = await import("./progressAnalyticsService.js");
+          await progressAnalyticsService.learnFromChallengeEvaluation(
+            learner_id,
+            challenge_id,
+            submissionId,
+            {
+              final_score: payload.final_score,
+              pronunciation_score: payload.pronunciation_score,
+              fluency_score: payload.fluency_score
+            },
+            payload.feedback || ""
+          ).catch(err => {
+            console.warn("⚠️ Failed to save challenge evaluation for AI learning:", err);
+          });
+          
+          // Lưu feedback để Challenge Creator AI học
+          const challengeLearningService = await import("./challengeLearningService.js");
+          await challengeLearningService.learnFromMentorFeedback(
+            submissionId,
+            challenge_id,
+            learner_id,
+            mentorId,
+            {
+              final_score: payload.final_score,
+              pronunciation_score: payload.pronunciation_score,
+              fluency_score: payload.fluency_score
+            },
+            payload.feedback || "",
+            payload.audio_url || null
+          ).catch(err => {
+            console.warn("⚠️ Failed to save mentor feedback for Challenge Creator AI learning:", err);
+          });
+        } catch (err) {
+          // Ignore errors, không block response
         }
       }
       
@@ -780,8 +845,43 @@
   }
 
   export async function editChallengeAI(challengeId, content) {
-    // already implemented above
-    return editChallengeAI;
+    try {
+      // Get current challenge
+      const currentChallenge = await pool.query(
+        "SELECT * FROM challenges WHERE id = $1",
+        [parseInt(challengeId)]
+      );
+      
+      if (currentChallenge.rows.length === 0) {
+        throw new Error("Challenge not found");
+      }
+      
+      const existingContent = currentChallenge.rows[0].description || "";
+      
+      // Call AI service to improve challenge
+      const mentorAiService = await import("./mentorAiService.js");
+      const improvedContent = await mentorAiService.editChallengeAI(
+        existingContent || content,
+        content // Use new content as feedback
+      );
+      
+      // Update challenge in database
+      const updated = await pool.query(
+        `UPDATE challenges 
+         SET description = $1, updated_at = NOW()
+         WHERE id = $2
+         RETURNING *`,
+        [improvedContent, parseInt(challengeId)]
+      );
+      
+      return {
+        challenge: updated.rows[0],
+        issues: [] // Can add validation issues here if needed
+      };
+    } catch (err) {
+      console.error("editChallengeAI error in mentorService:", err);
+      throw err;
+    }
   }
 
   export async function updateChallenge(challengeId, fields) {

@@ -11,6 +11,7 @@ import Modal from "../common/Modal.jsx";
 import thumucIcon from "../../assets/icons/thumuc.png";
 import usersIcon from "../../assets/icons/users.png";
 import useExistenceCheck from "../../hooks/useExistenceCheck.js";
+import "../../styles/admin-users.css";
 
 export default function UsersList() {
   const [users, setUsers] = useState([]);
@@ -98,7 +99,7 @@ export default function UsersList() {
     try {
       setPackagesLoading(true);
       setPackagesError("");
-      const res = await api.get("/packages/public");
+      const res = await api.get("/admin/packages/public");
       console.log("📦 Packages từ API:", res.data);
 
       const data = res.data;
@@ -135,10 +136,12 @@ export default function UsersList() {
   const filtered = users.filter((u) => {
     const roleUpper = (u.role || "").toUpperCase();
     const matchesRole = roleUpper === roleFilter;
-    const q = search.toLowerCase();
+    const q = search.toLowerCase().trim();
+    if (!q) return matchesRole;
     const matchesSearch =
       ((u.name || "").toLowerCase().includes(q)) ||
-      ((u.email || "").toLowerCase().includes(q));
+      ((u.email || "").toLowerCase().includes(q)) ||
+      ((u.phone || "").toLowerCase().includes(q));
     return matchesRole && matchesSearch;
   });
   const start = (page - 1) * perPage;
@@ -162,9 +165,9 @@ export default function UsersList() {
     try {
       const res = await api.patch(`/admin/users/${id}/status`, { status: next });
       if (res.data?.user) {
-        setUsers((prev) => prev.map((u) => (u.id === id ? res.data.user : u)));
+        setUsers((prev) => prev.filter(Boolean).map((u) => (u && u.id === id ? res.data.user : u)));
       } else {
-        setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, status: next } : u)));
+        setUsers((prev) => prev.filter(Boolean).map((u) => (u && u.id === id ? { ...u, status: next } : u)));
       }
     } catch (err) {
       console.error("❌ Lỗi cập nhật trạng thái:", err);
@@ -210,7 +213,7 @@ export default function UsersList() {
 
   return (
     <>
-      <div className="panel">
+      <div className="panel users-list">
         <h2>Danh sách Người dùng</h2>
 
         {/* Toolbar */}
@@ -218,7 +221,7 @@ export default function UsersList() {
           <input
             type="text"
             className="input search-input"
-            placeholder="Tìm theo tên / email..."
+            placeholder="Tìm theo tên, email hoặc số điện thoại..."
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           />
@@ -331,7 +334,8 @@ export default function UsersList() {
           userId={selectedUser.id}
           onClose={() => setSelectedUser(null)}
           onStatusChange={(updatedUser) => {
-            setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
+            if (!updatedUser || !updatedUser.id) return;
+            setUsers(prev => prev.filter(Boolean).map(u => u && u.id === updatedUser.id ? updatedUser : u));
             setSelectedUser(updatedUser);
           }}
         />

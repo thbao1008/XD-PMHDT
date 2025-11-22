@@ -90,6 +90,250 @@ export async function reassignMentorService(id) {
   return updatedRes.rows[0].mentor_id;
 }
 
+// Xóa learner khỏi mentor: ban user, set mentor_id = NULL, KHÔNG xóa lịch sử
+export async function removeLearnerFromMentor(learnerId, mentorId) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    // Lấy user_id từ learner_id
+    const learnerRes = await client.query(
+      "SELECT user_id FROM learners WHERE id=$1",
+      [learnerId]
+    );
+    if (!learnerRes.rows[0]) {
+      throw new Error("Learner not found");
+    }
+    const userId = learnerRes.rows[0].user_id;
+
+    // Ban user (set status = 'banned')
+    await client.query(
+      "UPDATE users SET status='banned', updated_at=NOW() WHERE id=$1",
+      [userId]
+    );
+
+    // Set mentor_id = NULL (KHÔNG xóa lịch sử)
+    await client.query(
+      "UPDATE learners SET mentor_id=NULL, updated_at=NOW() WHERE id=$1",
+      [learnerId]
+    );
+
+    // Pause purchases
+    await client.query(
+      `UPDATE purchases SET status='paused' 
+       WHERE learner_id=$1 AND status='active'`,
+      [learnerId]
+    );
+
+    await client.query("COMMIT");
+    return { success: true };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// Đổi mentor: thêm mentor cũ vào blocklist, tự động gán mentor mới
+export async function changeMentor(learnerId, oldMentorId) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    // Thêm mentor cũ vào blocklist
+    if (oldMentorId) {
+      // Kiểm tra xem đã có trong blocklist chưa
+      const existingCheck = await client.query(
+        `SELECT id FROM mentor_blocklist WHERE mentor_id = $1 AND learner_id = $2`,
+        [oldMentorId, learnerId]
+      );
+      if (existingCheck.rows.length === 0) {
+        await client.query(
+          `INSERT INTO mentor_blocklist (mentor_id, learner_id, created_at)
+           VALUES ($1, $2, NOW())`,
+          [oldMentorId, learnerId]
+        );
+      }
+    }
+
+    // Tự động chọn mentor mới (ưu tiên ít học viên, rating cao)
+    const mentorRes = await client.query(`
+      SELECT m.id AS mentor_id
+      FROM mentors m
+      JOIN users u ON m.user_id = u.id
+      LEFT JOIN learners l ON l.mentor_id = m.id
+      WHERE NOT EXISTS (
+        SELECT 1 FROM mentor_blocklist mb
+        WHERE mb.learner_id = $1 AND mb.mentor_id = m.id
+      )
+      AND u.status = 'active'
+      GROUP BY m.id
+      HAVING COUNT(l.id) < 15
+      ORDER BY COUNT(l.id) ASC, m.rating DESC NULLS LAST
+      LIMIT 1
+    `, [learnerId]);
+
+    const newMentorId = mentorRes.rows[0]?.mentor_id || null;
+
+    if (newMentorId) {
+      // Gán mentor mới
+      await client.query(
+        "UPDATE learners SET mentor_id=$1, updated_at=NOW() WHERE id=$2",
+        [newMentorId, learnerId]
+      );
+    } else {
+      // Không có mentor nào có sẵn, set mentor_id = NULL
+      await client.query(
+        "UPDATE learners SET mentor_id=NULL, updated_at=NOW() WHERE id=$1",
+        [learnerId]
+      );
+    }
+
+    await client.query("COMMIT");
+    return { success: true, newMentorId };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// Lấy danh sách mentors có sẵn để gán (không bị blocklist, ưu tiên ít học viên và rating cao)
+export async function getAvailableMentorsForLearner(learnerId) {
+  const result = await pool.query(`
+    SELECT 
+      m.id AS mentor_id,
+      u.id AS user_id,
+      u.name AS mentor_name,
+      m.rating,
+      COUNT(l.id) AS learner_count
+    FROM mentors m
+    JOIN users u ON m.user_id = u.id
+    LEFT JOIN learners l ON l.mentor_id = m.id
+    WHERE NOT EXISTS (
+      SELECT 1 FROM mentor_blocklist mb
+      WHERE mb.learner_id = $1 AND mb.mentor_id = m.id
+    )
+    AND u.status = 'active'
+    GROUP BY m.id, u.id, u.name, m.rating
+    HAVING COUNT(l.id) < 15
+    ORDER BY COUNT(l.id) ASC, m.rating DESC NULLS LAST
+  `, [learnerId]);
+  return result.rows;
+}
+
+// Xử lý khi mentor bị ban: giải phóng learners, thêm vào blocklist, chia đều cho mentors khác
+export async function handleMentorBanned(mentorId) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    // 1. Lấy tất cả learners của mentor này
+    const learnersRes = await client.query(
+      "SELECT id FROM learners WHERE mentor_id = $1",
+      [mentorId]
+    );
+    const learners = learnersRes.rows;
+
+    if (learners.length === 0) {
+      await client.query("COMMIT");
+      return { success: true, reassignedCount: 0 };
+    }
+
+    // 2. Lấy danh sách mentors có sẵn (không bị ban, không quá 15 learners)
+    const availableMentorsRes = await client.query(`
+      SELECT 
+        m.id AS mentor_id,
+        COUNT(l.id) AS learner_count,
+        m.rating
+      FROM mentors m
+      JOIN users u ON m.user_id = u.id
+      LEFT JOIN learners l ON l.mentor_id = m.id
+      WHERE m.id != $1
+        AND u.status = 'active'
+      GROUP BY m.id, m.rating
+      HAVING COUNT(l.id) < 15
+      ORDER BY COUNT(l.id) ASC, m.rating DESC NULLS LAST
+    `, [mentorId]);
+    const availableMentors = availableMentorsRes.rows;
+
+    if (availableMentors.length === 0) {
+      // Không có mentor nào có sẵn, set mentor_id = NULL cho tất cả learners
+      for (const learner of learners) {
+        // Thêm vào blocklist (kiểm tra trước)
+        const existingCheck = await client.query(
+          `SELECT id FROM mentor_blocklist WHERE mentor_id = $1 AND learner_id = $2`,
+          [mentorId, learner.id]
+        );
+        if (existingCheck.rows.length === 0) {
+          await client.query(
+            `INSERT INTO mentor_blocklist (mentor_id, learner_id, created_at)
+             VALUES ($1, $2, NOW())`,
+            [mentorId, learner.id]
+          );
+        }
+        // Set mentor_id = NULL
+        await client.query(
+          "UPDATE learners SET mentor_id = NULL, updated_at = NOW() WHERE id = $1",
+          [learner.id]
+        );
+        // Cập nhật schedules: set mentor_id = NULL hoặc xóa (tùy logic)
+        await client.query(
+          "UPDATE schedules SET mentor_id = NULL, status = 'cancelled', updated_at = NOW() WHERE learner_id = $1 AND mentor_id = $2",
+          [learner.id, mentorId]
+        );
+      }
+      await client.query("COMMIT");
+      return { success: true, reassignedCount: 0, message: "Không có mentor nào có sẵn" };
+    }
+
+    // 3. Chia đều learners cho các mentors có sẵn (round-robin)
+    let reassignedCount = 0;
+    for (let i = 0; i < learners.length; i++) {
+      const learner = learners[i];
+      const mentorIndex = i % availableMentors.length;
+      const newMentor = availableMentors[mentorIndex];
+
+      // Thêm mentor cũ vào blocklist (kiểm tra trước)
+      const existingCheck = await client.query(
+        `SELECT id FROM mentor_blocklist WHERE mentor_id = $1 AND learner_id = $2`,
+        [mentorId, learner.id]
+      );
+      if (existingCheck.rows.length === 0) {
+        await client.query(
+          `INSERT INTO mentor_blocklist (mentor_id, learner_id, created_at)
+           VALUES ($1, $2, NOW())`,
+          [mentorId, learner.id]
+        );
+      }
+
+      // Gán mentor mới
+      await client.query(
+        "UPDATE learners SET mentor_id = $1, updated_at = NOW() WHERE id = $2",
+        [newMentor.mentor_id, learner.id]
+      );
+
+      // Cập nhật schedules: chuyển mentor_id sang mentor mới
+      await client.query(
+        "UPDATE schedules SET mentor_id = $1, updated_at = NOW() WHERE learner_id = $2 AND mentor_id = $3",
+        [newMentor.mentor_id, learner.id, mentorId]
+      );
+
+      reassignedCount++;
+    }
+
+    await client.query("COMMIT");
+    return { success: true, reassignedCount, totalLearners: learners.length };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 export async function deleteLearner(id) {
   await pool.query("DELETE FROM learners WHERE id=$1", [id]);
   return true;
@@ -410,7 +654,22 @@ export async function createSubmission({
      RETURNING *`,
     [learnerId, challengeId, assignmentId, attemptNumber, audioUrl, transcript]
   );
-  return r.rows[0];
+  
+  const submission = r.rows[0];
+  
+  // Lưu để Challenge Creator AI học (async, không block)
+  try {
+    const challengeLearningService = await import("./challengeLearningService.js");
+    await challengeLearningService.learnFromLearnerSubmission(
+      submission.id,
+      challengeId,
+      learnerId
+    ).catch(err => console.warn("⚠️ Failed to save learner submission for AI learning:", err));
+  } catch (err) {
+    // Ignore errors, không block response
+  }
+  
+  return submission;
 }
 
 export async function getSubmissionById(id) {
@@ -727,6 +986,29 @@ export async function reviewSubmissionByMentor(submissionId, {
     );
 
     await client.query("COMMIT");
+    
+    // Lưu challenge evaluation để AI học (async, không block)
+    if (finalScore !== null && finalScore !== undefined) {
+      try {
+        const progressAnalyticsService = await import("./progressAnalyticsService.js");
+        await progressAnalyticsService.learnFromChallengeEvaluation(
+          learner_id,
+          challenge_id,
+          submissionId,
+          {
+            final_score: finalScore,
+            pronunciation_score: pronunciation_score,
+            fluency_score: fluency_score
+          },
+          feedback || ""
+        ).catch(err => {
+          console.warn("⚠️ Failed to save challenge evaluation for AI learning:", err);
+        });
+      } catch (err) {
+        // Ignore errors, không block response
+      }
+    }
+    
     return {
       ok: true,
       learner_challenge: lcRes.rows[0],

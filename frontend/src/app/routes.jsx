@@ -27,18 +27,17 @@ import SupportTickets from "../components/admin/SupportTickets";
 
 // Learner pages
 import LearningCatalog from "../components/learner/LearningCatalog";
+import LearnerDashboard from "../components/learner/LearnerDashboard";
 import SpeakingPractice from "../components/learner/SpeakingPractice";
 import Challenges from "../components/learner/Challenges";
 import ChallengeDetail from "../components/learner/ChallengeDetail";
-import ProgressAnalytics from "../components/learner/ProgressAnalytics";
 import LearnerFeedback from "../components/learner/LearnerFeedback";
 
 // Mentor pages
 import MentorDashboard from "../components/mentor/MentorDashboard";
 import AssessmentPanel from "../components/mentor/AssessmentPanel";
-import FeedbackPanel from "../components/mentor/FeedbackPanel";
-import TopicManager from "../components/mentor/TopicManager";
-import MentorSessions from "../components/mentor/MentorSessions";
+import ChallengeCreator from "../components/mentor/ChallengeCreator";
+import MentorSchedules from "../components/mentor/MentorSchedules";
 import MentorLearners from "../components/mentor/MentorLearners";
 import MentorResources from "../components/mentor/MentorResources";
 
@@ -97,14 +96,14 @@ export default function AppRoutes() {
         }
       >
         <Route index element={<LearningCatalog />} />
+        <Route path="dashboard" element={<LearnerDashboard />} />
         <Route path="catalog" element={<LearningCatalog />} />
         <Route path="practice" element={<SpeakingPractice />} />
         <Route path="challenges" element={<Challenges />} />
         <Route path="challenges/:id" element={<ChallengeDetail />} />
-        <Route path="progress" element={<ProgressAnalytics />} />
         <Route path="feedback" element={<LearnerFeedback />} />
         <Route path="communicate" element={<CommunicateCenter />} />
-        <Route path="*" element={<Navigate to="/learn/catalog" replace />} />
+        <Route path="*" element={<Navigate to="/learn/dashboard" replace />} />
       </Route>
 
       {/* Mentor routes */}
@@ -119,9 +118,8 @@ export default function AppRoutes() {
         <Route index element={<MentorDashboard />} />
         <Route path="dashboard" element={<MentorDashboard />} />
         <Route path="assessment" element={<AssessmentPanel />} />
-        <Route path="feedback" element={<FeedbackPanel />} />
-        <Route path="topics" element={<TopicManager />} />
-        <Route path="sessions" element={<MentorSessions />} />
+        <Route path="challenge-creator" element={<ChallengeCreator />} />
+        <Route path="schedules" element={<MentorSchedules />} />
         <Route path="learners" element={<MentorLearners />} />
         <Route path="resources" element={<MentorResources />} />
         <Route path="communicate" element={<CommunicateCenter />} />

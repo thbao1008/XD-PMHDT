@@ -1,5 +1,6 @@
 import React from "react";
 import Modal from "../common/Modal.jsx";
+import "../../styles/admin-packages.css";
 
 export default function PackageEditor({ pkg, onClose, onSave }) {
   const [name, setName] = React.useState(pkg?.name || "");
@@ -14,25 +15,43 @@ export default function PackageEditor({ pkg, onClose, onSave }) {
 
   return (
     <Modal title={pkg ? "Chỉnh sửa gói" : "Tạo gói mới"} onClose={onClose}>
-      <form onSubmit={handleSave} style={{ display: "grid", gap: 12 }}>
-        <div>
-          <label style={{ fontSize: 13, fontWeight: 700 }}>Tên gói</label>
-          <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
-        </div>
-        <div>
-          <label style={{ fontSize: 13, fontWeight: 700 }}>Giá</label>
-          <input className="input" type="number" value={price} onChange={(e) => setPrice(Number(e.target.value))} />
-        </div>
-        <div>
-          <label style={{ fontSize: 13, fontWeight: 700 }}>Mô tả</label>
-          <textarea className="input" style={{ height: 80 }} value={description} onChange={(e) => setDescription(e.target.value)} />
-        </div>
-
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-          <button type="button" className="btn btn-ghost" onClick={onClose}>Hủy</button>
-          <button type="submit" className="btn btn-primary">Lưu</button>
-        </div>
-      </form>
+      <div className="package-editor">
+        <form onSubmit={handleSave}>
+          <div className="form-group">
+            <label>Tên gói</label>
+            <input 
+              className="input" 
+              value={name} 
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </div>
+          <div className="form-group">
+            <label>Giá (VNĐ)</label>
+            <input 
+              className="input" 
+              type="number" 
+              value={price} 
+              onChange={(e) => setPrice(Number(e.target.value))}
+              required
+              min="0"
+            />
+          </div>
+          <div className="form-group">
+            <label>Mô tả</label>
+            <textarea 
+              className="input" 
+              value={description} 
+              onChange={(e) => setDescription(e.target.value)}
+              rows="4"
+            />
+          </div>
+          <div className="form-actions">
+            <button type="button" className="btn btn-ghost" onClick={onClose}>Hủy</button>
+            <button type="submit" className="btn btn-primary">Lưu</button>
+          </div>
+        </form>
+      </div>
     </Modal>
   );
 }

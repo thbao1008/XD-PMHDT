@@ -162,7 +162,7 @@ export default function AssessmentPanel() {
                     {graded && s.final_score !== null && s.final_score !== undefined && (
                       <div className="submission-info-row">
                         <span className="info-label">Điểm:</span>
-                        <span className="info-value score">{s.final_score}/10</span>
+                        <span className="info-value score">{(s.final_score / 10).toFixed(1)}/10</span>
                       </div>
                     )}
                   </div>

@@ -6,15 +6,17 @@ import UserForPage from "../admin/UserForPage.jsx";
 export default function AssignedLearnersModal({ mentorId, onClose }) {
   const [learners, setLearners] = useState([]);
   const [selectedLearnerId, setSelectedLearnerId] = useState(null);
+  const [realMentorId, setRealMentorId] = useState(null);
 
   useEffect(() => {
     if (!mentorId) return;
     const fetchLearners = async () => {
       try {
         const mentorRes = await api.get(`/mentors/by-user/${mentorId}`);
-        const realMentorId = mentorRes.data.mentor_id || mentorRes.data.id;
+        const mentorIdValue = mentorRes.data.mentor_id || mentorRes.data.id;
+        setRealMentorId(mentorIdValue);
 
-        const learnersRes = await api.get(`/admin/mentors/${realMentorId}/learners`);
+        const learnersRes = await api.get(`/admin/mentors/${mentorIdValue}/learners`);
         setLearners(learnersRes.data.learners || []);
       } catch (err) {
         console.error("❌ Lỗi load learners:", err);
@@ -22,6 +24,26 @@ export default function AssignedLearnersModal({ mentorId, onClose }) {
     };
     fetchLearners();
   }, [mentorId]);
+
+  const handleRemoveLearner = async (learnerId) => {
+    if (!window.confirm("Bạn có chắc chắn muốn xóa học viên này khỏi giảng viên? Học viên sẽ bị ban tạm thời và không được tự động gán lại.")) {
+      return;
+    }
+
+    try {
+      await api.post("/admin/users/learners/remove-from-mentor", {
+        learnerId,
+        mentorId: realMentorId,
+      });
+      alert("Đã xóa học viên khỏi giảng viên thành công");
+      // Refresh danh sách
+      const learnersRes = await api.get(`/admin/mentors/${realMentorId}/learners`);
+      setLearners(learnersRes.data.learners || []);
+    } catch (err) {
+      console.error("❌ Lỗi xóa learner:", err);
+      alert("Có lỗi xảy ra khi xóa học viên");
+    }
+  };
 
   return (
     <Modal title="Danh sách học viên được bổ nhiệm" onClose={onClose}>
@@ -43,8 +65,24 @@ export default function AssignedLearnersModal({ mentorId, onClose }) {
               <td>{l.email}</td>
               <td>{l.phone}</td>
               <td>
-                <button onClick={() => setSelectedLearnerId(l.user_id)}>
+                <button 
+                  onClick={() => setSelectedLearnerId(l.user_id)}
+                  style={{ marginRight: "8px" }}
+                >
                   Xem
+                </button>
+                <button 
+                  onClick={() => handleRemoveLearner(l.learner_id || l.id)}
+                  style={{ 
+                    backgroundColor: "#dc3545", 
+                    color: "white",
+                    border: "none",
+                    padding: "4px 12px",
+                    borderRadius: "4px",
+                    cursor: "pointer"
+                  }}
+                >
+                  Xóa
                 </button>
               </td>
             </tr>

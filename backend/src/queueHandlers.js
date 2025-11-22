@@ -10,10 +10,22 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Đọc sampleTranscripts từ JSON bằng fs (không dùng assert)
-const sampleTranscriptsPath = path.resolve(__dirname, "../ai_models/sampleTranscripts.json");
-const sampleTranscripts = JSON.parse(fs.readFileSync(sampleTranscriptsPath, "utf-8"));
-const sampleTexts = Array.isArray(sampleTranscripts) ? sampleTranscripts.map(s => s.text) : [];
+// Đọc sampleTranscripts từ JSON bằng fs (không dùng assert) - optional
+let sampleTranscripts = [];
+let sampleTexts = [];
+try {
+  const sampleTranscriptsPath = path.resolve(__dirname, "../ai_models/sampleTranscripts.json");
+  if (fs.existsSync(sampleTranscriptsPath)) {
+    sampleTranscripts = JSON.parse(fs.readFileSync(sampleTranscriptsPath, "utf-8"));
+    sampleTexts = Array.isArray(sampleTranscripts) ? sampleTranscripts.map(s => s.text) : [];
+  } else {
+    console.warn("⚠️ sampleTranscripts.json not found, using empty array");
+  }
+} catch (err) {
+  console.warn("⚠️ Failed to load sampleTranscripts.json:", err.message);
+  sampleTranscripts = [];
+  sampleTexts = [];
+}
 
 function audioUrlToLocalPath(audioUrl) {
   const m = String(audioUrl || "").match(/\/uploads\/(.+)$/);
@@ -240,6 +252,8 @@ registerProcessor("processSpeakingRound", async (job) => {
     let feedback = "";
     let errors = [];
     let correctedText = "";
+    let speechRate = 0;
+    let missingWords = [];
 
     if (transcript) {
       const transcriptText =
@@ -248,67 +262,157 @@ registerProcessor("processSpeakingRound", async (job) => {
           .map((s) => s.text || "")
           .join(" ");
 
-      try {
-        // Phân tích phát âm và so sánh với prompt
-        const expectedWords = prompt.toLowerCase().split(/\s+/).filter(w => w.length > 0);
-        const spokenWords = transcriptText.toLowerCase().split(/\s+/).filter(w => w.length > 0);
-        const missingWords = expectedWords.filter(w => !spokenWords.includes(w.replace(/[.,!?;:]/g, "")));
-        
-        // Tính tốc độ nói (từ/phút)
-        const timeTaken = job.data.time_taken || 30; // seconds
-        const speechRate = Math.round((spokenWords.length / timeTaken) * 60);
-        
-        const analysisPrompt = `You are an English pronunciation and speaking tutor. Analyze the learner's speaking performance.
+      // QUAN TRỌNG: Kiểm tra nếu không nói gì (transcript rỗng hoặc không có từ nào) thì score = 0
+      if (!transcriptText || !transcriptText.trim()) {
+        score = 0;
+        feedback = "Bạn chưa nói gì. Hãy thử lại và nói to, rõ ràng.";
+        missingWords = prompt.toLowerCase().split(/\s+/).filter(w => w.length > 0);
+        // Đảm bảo missing_words được lưu vào analysis ngay cả khi không nói gì
+        analysis = {
+          feedback,
+          grammar_errors: [],
+          speaking_score: 0,
+          vocabulary_score: 0,
+          speech_rate: 0,
+          missing_words: missingWords
+        };
+      } else {
+        try {
+          // Phân tích phát âm và so sánh với prompt
+          const expectedWords = prompt.toLowerCase().split(/\s+/).filter(w => w.length > 0);
+          const spokenWords = transcriptText.toLowerCase().split(/\s+/).filter(w => w.length > 0);
+          
+          // Tính missing_words: từ nào trong expected không có trong spoken
+          missingWords = expectedWords.filter(ew => {
+            const cleanExpected = ew.replace(/[.,!?;:]/g, "");
+            return !spokenWords.some(sw => {
+              const cleanSpoken = sw.replace(/[.,!?;:]/g, "");
+              return cleanSpoken === cleanExpected || 
+                     cleanSpoken.includes(cleanExpected) || 
+                     cleanExpected.includes(cleanSpoken);
+            });
+          });
+          
+          // QUAN TRỌNG: Nếu không match từ nào, score = 0
+          const matchedWords = expectedWords.filter(ew => {
+            const cleanExpected = ew.replace(/[.,!?;:]/g, "");
+            return spokenWords.some(sw => {
+              const cleanSpoken = sw.replace(/[.,!?;:]/g, "");
+              return cleanSpoken === cleanExpected || 
+                     cleanSpoken.includes(cleanExpected) || 
+                     cleanExpected.includes(cleanSpoken);
+            });
+          });
+          
+          if (matchedWords.length === 0) {
+            // Không nói đúng từ nào = 0 điểm
+            score = 0;
+            feedback = "Bạn chưa nói đúng từ nào. Hãy nghe lại và nói theo prompt.";
+          } else {
+            // Tính điểm dựa trên phần trăm từ đọc đúng (0-100 điểm)
+            const totalWords = expectedWords.length;
+            const correctWords = matchedWords.length;
+            const percentage = totalWords > 0 ? (correctWords / totalWords) * 100 : 0;
+            // Tính điểm: phần trăm từ 0-100, làm tròn 1 chữ số thập phân
+            score = Math.round(percentage * 10) / 10;
+            score = Math.min(100, Math.max(0, score)); // Đảm bảo điểm trong khoảng 0-100
+            
+            // Tính tốc độ nói (từ/phút)
+            const timeTaken = job.data.time_taken || 30; // seconds
+            speechRate = Math.round((spokenWords.length / timeTaken) * 60);
+            
+            // Tạo feedback dựa trên điểm số (thang 100)
+            let feedbackText = "";
+            if (score >= 90) {
+              feedbackText = "Xuất sắc! Bạn đã đọc gần như hoàn hảo. Hãy tiếp tục phát huy!";
+            } else if (score >= 70) {
+              feedbackText = "Tốt! Bạn đã đọc đúng phần lớn các từ. Hãy cố gắng đọc đầy đủ hơn.";
+            } else if (score >= 50) {
+              feedbackText = "Khá tốt! Bạn đã đọc đúng hơn một nửa. Hãy luyện tập thêm để cải thiện.";
+            } else if (score >= 30) {
+              feedbackText = "Cần cải thiện. Bạn đã đọc đúng một số từ. Hãy lắng nghe kỹ và luyện tập nhiều hơn.";
+            } else {
+              feedbackText = "Cần luyện tập nhiều hơn. Hãy nghe kỹ phát âm và thử lại.";
+            }
+            
+            if (missingWords.length > 0) {
+              feedbackText += ` Các từ cần luyện tập: ${missingWords.slice(0, 5).join(", ")}${missingWords.length > 5 ? "..." : ""}.`;
+            }
+            
+            const analysisPrompt = `You are an English pronunciation and speaking tutor. Provide detailed feedback for the learner.
 
 Expected text: "${prompt}"
 Learner's transcript: "${transcriptText}"
 Time taken: ${timeTaken} seconds
 Speech rate: ${speechRate} words/minute
 Missing words: ${missingWords.length > 0 ? missingWords.join(", ") : "None"}
+Score: ${score}/100 (based on ${correctWords}/${totalWords} words correct)
 
 Please provide a comprehensive analysis in JSON format:
 {
-  "speaking_score": <number 0-10, based on pronunciation accuracy, fluency, and correctness>,
-  "vocabulary_score": <number 0-10, based on vocabulary usage and word accuracy>,
+  "vocabulary_score": <number 0-100, based on vocabulary usage and word accuracy>,
   "speech_rate": ${speechRate},
   "missing_words": ${JSON.stringify(missingWords)},
   "grammar_errors": ["<grammar error 1>", "<grammar error 2>", ...],
-  "feedback": "<detailed feedback in Vietnamese about pronunciation, grammar, and overall performance>"
+  "feedback": "<detailed feedback in Vietnamese about pronunciation, grammar, and overall performance. Include encouragement and specific suggestions>"
 }
 
 IMPORTANT: Respond ONLY with valid JSON, no markdown code blocks, no explanations.`;
 
-        const response = await aiService.callOpenRouter(
-          [{ role: "user", content: analysisPrompt }],
-          { model: "openai/gpt-4o-mini", temperature: 0.7 }
-        );
+            const response = await aiService.callOpenRouter(
+              [{ role: "user", content: analysisPrompt }],
+              { model: "openai/gpt-4o-mini", temperature: 0.7 }
+            );
 
-        let content = response.choices?.[0]?.message?.content || "{}";
-        
-        // Parse JSON (handle markdown code blocks if any)
-        content = content.trim();
-        const codeBlockRegex = /```(?:json)?\s*([\s\S]*?)```/;
-        const codeBlockMatch = content.match(codeBlockRegex);
-        if (codeBlockMatch && codeBlockMatch[1]) {
-          content = codeBlockMatch[1].trim();
+            let content = response.choices?.[0]?.message?.content || "{}";
+            
+            // Parse JSON (handle markdown code blocks if any)
+            content = content.trim();
+            const codeBlockRegex = /```(?:json)?\s*([\s\S]*?)```/;
+            const codeBlockMatch = content.match(codeBlockRegex);
+            if (codeBlockMatch && codeBlockMatch[1]) {
+              content = codeBlockMatch[1].trim();
+            }
+            
+            analysis = JSON.parse(content);
+            feedback = analysis.feedback || feedbackText;
+            errors = analysis.grammar_errors || analysis.errors || [];
+            
+            // Lưu thêm các thông tin mới
+            analysis.speech_rate = speechRate;
+            analysis.missing_words = missingWords; // Đảm bảo missing_words luôn được lưu
+            analysis.vocabulary_score = analysis.vocabulary_score ? (analysis.vocabulary_score * 10) : 0; // Convert từ thang 10 sang 100
+            analysis.speaking_score = score; // Sử dụng điểm đã tính từ phần trăm (thang 100)
+          }
+          
+          // Đảm bảo missing_words luôn được lưu vào analysis
+          if (analysis && (!analysis.missing_words || analysis.missing_words.length === 0)) {
+            analysis.missing_words = missingWords;
+          } else if (!analysis) {
+            analysis = { missing_words: missingWords };
+          }
+        } catch (err) {
+          console.error("❌ AI analysis error:", err);
+          feedback = "Không thể phân tích. Vui lòng thử lại.";
         }
-        
-        analysis = JSON.parse(content);
-        score = analysis.speaking_score || analysis.score || 0;
-        feedback = analysis.feedback || "";
-        errors = analysis.grammar_errors || analysis.errors || [];
-        
-        // Lưu thêm các thông tin mới
-        analysis.speech_rate = speechRate;
-        analysis.missing_words = missingWords;
-        analysis.vocabulary_score = analysis.vocabulary_score || 0;
-        analysis.speaking_score = analysis.speaking_score || score;
-      } catch (err) {
-        console.error("❌ AI analysis error:", err);
-        feedback = "Không thể phân tích. Vui lòng thử lại.";
       }
     }
 
+    // Đảm bảo analysis có đầy đủ thông tin, đặc biệt là missing_words
+    const finalAnalysis = analysis || {
+      feedback,
+      grammar_errors: errors,
+      speaking_score: score,
+      vocabulary_score: 0,
+      speech_rate: speechRate,
+      missing_words: missingWords
+    };
+    
+    // Đảm bảo missing_words luôn có trong analysis
+    if (!finalAnalysis.missing_words || finalAnalysis.missing_words.length === 0) {
+      finalAnalysis.missing_words = missingWords;
+    }
+    
     // Cập nhật database với kết quả
     await pool.query(
       `UPDATE speaking_practice_rounds 
@@ -316,15 +420,8 @@ IMPORTANT: Respond ONLY with valid JSON, no markdown code blocks, no explanation
        WHERE id = $4`,
       [
         JSON.stringify(transcript),
-        analysis?.speaking_score || score,
-        JSON.stringify(analysis || {
-          feedback,
-          grammar_errors: errors,
-          speaking_score: score,
-          vocabulary_score: analysis?.vocabulary_score || 0,
-          speech_rate: speechRate,
-          missing_words: missingWords
-        }),
+        finalAnalysis.speaking_score || score,
+        JSON.stringify(finalAnalysis),
         roundId
       ]
     );

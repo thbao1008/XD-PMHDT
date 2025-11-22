@@ -16,16 +16,15 @@ export default function MentorSidebar({ collapsed = false }) {
   const menu = [
     { id: "dashboard", label: "Dashboard", icon: <FiHome />, to: "/mentor/dashboard" },
     { id: "assessment", label: "Assessment", icon: <FiClipboard />, to: "/mentor/assessment" },
-    { id: "feedback", label: "Feedback", icon: <FiMessageCircle />, to: "/mentor/feedback" },
-    { id: "topics", label: "Topics", icon: <FiBookOpen />, to: "/mentor/topics" },
-    { id: "sessions", label: "Sessions", icon: <FiCalendar />, to: "/mentor/sessions" },
+    { id: "challenge-creator", label: "Challenge Creator", icon: <FiBookOpen />, to: "/mentor/challenge-creator" },
+    { id: "schedules", label: "Schedules", icon: <FiCalendar />, to: "/mentor/schedules" },
     { id: "learners", label: "Learners", icon: <FiUsers />, to: "/mentor/learners" },
     { id: "resources", label: "Resources", icon: <FiFolder />, to: "/mentor/resources" },
-    { id: "communicate", label: "Communicate", icon: <FiShare2 />, to: "/mentor/communicate" } // thêm
+    { id: "communicate", label: "Communicate", icon: <FiShare2 />, to: "/mentor/communicate" }
   ];
 
   return (
-    <aside className={`shell-sidebar${collapsed ? " collapsed" : ""}`}>
+    <>
       <nav className="sidebar-nav">
         {menu.map((item) => (
           <NavLink
@@ -42,6 +41,6 @@ export default function MentorSidebar({ collapsed = false }) {
       <div className="sidebar-footer">
         {!collapsed && <span>© 2025 AESP Mentor</span>}
       </div>
-    </aside>
+    </>
   );
 }

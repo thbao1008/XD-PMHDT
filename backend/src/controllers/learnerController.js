@@ -1,6 +1,7 @@
 ﻿// backend/src/controllers/learnerController.js
 import * as learnerService from "../services/learnerService.js";
 import * as aiService from "../services/aiService.js";
+import * as progressAnalyticsService from "../services/progressAnalyticsService.js";
 import { enqueue } from "../utils/queue.js";
 import { runWhisperX } from "../utils/whisperxRunner.js";
 import * as reportController from "./reportController.js";
@@ -675,4 +676,25 @@ function compareTranscript(transcript = "", sample = "") {
   });
 
   return { tokens: result, transcriptTokens: tTokens.length, sampleTokens: sTokens.length };
+}
+
+/* ========== Progress Analytics ========== */
+
+/**
+ * GET /api/learners/:learnerId/progress-analytics
+ * Lấy progress analytics với AI recommendations
+ */
+export async function getProgressAnalytics(req, res) {
+  try {
+    const learnerId = parseInt(req.params.learnerId);
+    if (Number.isNaN(learnerId)) {
+      return res.status(400).json({ message: "Invalid learner id" });
+    }
+
+    const analytics = await progressAnalyticsService.getProgressAnalytics(learnerId);
+    return res.json(analytics);
+  } catch (err) {
+    console.error("Error getProgressAnalytics: - learnerController.js", err);
+    return res.status(500).json({ message: "Server error" });
+  }
 }
