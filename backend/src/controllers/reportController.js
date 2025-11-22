@@ -111,6 +111,29 @@ export async function searchLearnerProgress(req, res) {
   }
 }
 
+export async function getAllLearnersWithProgress(req, res) {
+  try {
+    const { mentor_id, search } = req.query;
+    const mentorId = mentor_id ? parseInt(mentor_id) : null;
+    const searchQuery = search || null;
+    const learners = await reportService.getAllLearnersWithProgress(mentorId, searchQuery);
+    res.json({ success: true, learners });
+  } catch (err) {
+    console.error("Error getAllLearnersWithProgress: - reportController.js", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+}
+
+export async function getAllMentors(req, res) {
+  try {
+    const mentors = await reportService.getAllMentors();
+    res.json({ success: true, mentors });
+  } catch (err) {
+    console.error("Error getAllMentors: - reportController.js", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+}
+
 
 export async function updateReportStatus(req, res) {
   try {

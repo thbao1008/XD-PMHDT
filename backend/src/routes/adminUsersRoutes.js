@@ -8,6 +8,9 @@ import {
   updateUser,
   deleteUser,
   toggleUserStatus,
+  removeLearnerFromMentor,
+  changeLearnerMentor,
+  getAvailableMentors,
 } from "../controllers/adminController.js";
 import { findUserByIdentifier } from "../models/userModel.js";
 
@@ -49,4 +52,10 @@ router.post("/", createUser);
 router.put("/:id", updateUser);
 router.delete("/:id", deleteUser);
 router.put("/:id/status", toggleUserStatus);
+
+// Route quản lý mentor-learner
+router.post("/learners/remove-from-mentor", removeLearnerFromMentor);
+router.post("/learners/change-mentor", changeLearnerMentor);
+router.get("/learners/:learnerId/available-mentors", getAvailableMentors);
+
 export default router;

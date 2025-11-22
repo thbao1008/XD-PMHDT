@@ -96,58 +96,6 @@ export async function updateLearnerNote(req, res) {
   }
 }
 
-/* ========== Sessions ========== */
-
-export async function getSessions(req, res) {
-  try {
-    const sessions = await mentorService.getSessions(req.params.id);
-    res.json({ sessions });
-  } catch (err) {
-    console.error("getSessions error - mentorController.js:106", err);
-    res.status(500).json({ message: err.message });
-  }
-}
-
-export async function addSessionController(req, res) {
-  try {
-    const sessions = await mentorService.addSession(req.params.id, req.body);
-    res.json({ sessions });
-  } catch (err) {
-    console.error("addSessionController error - mentorController.js:116", err);
-    res.status(400).json({ message: err.message });
-  }
-}
-
-export async function updateSessionController(req, res) {
-  try {
-    const sessions = await mentorService.updateSession(req.params.id, req.params.sessionId, req.body);
-    res.json({ sessions });
-  } catch (err) {
-    console.error("updateSessionController error - mentorController.js:126", err);
-    res.status(400).json({ message: err.message });
-  }
-}
-
-export async function deleteSessionController(req, res) {
-  try {
-    const sessions = await mentorService.deleteSession(req.params.id, req.params.sessionId);
-    res.json({ sessions });
-  } catch (err) {
-    console.error("deleteSessionController error - mentorController.js:136", err);
-    res.status(400).json({ message: err.message });
-  }
-}
-
-export async function addSessionsBatchController(req, res) {
-  try {
-    const sessions = await mentorService.addSessionsBatch(req.params.id, req.body);
-    res.json({ sessions });
-  } catch (err) {
-    console.error("addSessionsBatchController error - mentorController.js:146", err);
-    res.status(400).json({ message: err.message });
-  }
-}
-
 /* ========== Resources ========== */
 
 export async function getResources(req, res) {
@@ -287,19 +235,37 @@ export async function getChallengesByTopic(req, res) {
   }
 }
 
+export async function getChallengesByMentor(req, res) {
+  const { mentorId } = req.params;
+  try {
+    const mid = parseInt(mentorId);
+    if (isNaN(mid)) {
+      return res.status(400).json({ message: "Mentor ID không hợp lệ" });
+    }
+    const challenges = await mentorService.getChallengesByMentor(mid);
+    res.json({ challenges });
+  } catch (err) {
+    console.error("getChallengesByMentor error - mentorController.js", err);
+    res.status(500).json({ message: "Không thể lấy challenges" });
+  }
+}
+
 export async function createChallenge(req, res) {
-  const { topicId } = req.params;
+  const { mentorId } = req.params;
   const { title, description, type, level, created_by } = req.body;
   try {
-    const tid = parseInt(topicId);
-    if (isNaN(tid)) {
-      return res.status(400).json({ message: "Topic ID không hợp lệ" });
+    const mid = parseInt(mentorId);
+    if (isNaN(mid)) {
+      return res.status(400).json({ message: "Mentor ID không hợp lệ" });
     }
-    const challenge = await mentorService.createChallenge(tid, title, description, type, level, created_by);
+    if (!title?.trim() || !description?.trim()) {
+      return res.status(400).json({ message: "Tiêu đề và nội dung không được để trống" });
+    }
+    const challenge = await mentorService.createChallenge(mid, title, description, type || "speaking", level || "medium", created_by);
     res.json({ challenge });
   } catch (err) {
-    console.error("createChallenge error - mentorController.js:270", err);
-    res.status(500).json({ message: "Không thể tạo challenge" });
+    console.error("createChallenge error - mentorController.js", err);
+    res.status(500).json({ message: "Không thể tạo challenge", error: err.message });
   }
 }
 

@@ -19,6 +19,9 @@ CREATE TABLE IF NOT EXISTS practice_history (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Unique constraint để tránh duplicate session
+CREATE UNIQUE INDEX IF NOT EXISTS idx_practice_history_session_unique ON practice_history(session_id) WHERE session_id IS NOT NULL;
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_practice_history_learner ON practice_history(learner_id);
 CREATE INDEX IF NOT EXISTS idx_practice_history_date ON practice_history(practice_date DESC);

@@ -3,6 +3,7 @@ import api from "../../api.js";
 import { FaCommentDots, FaSearch } from "react-icons/fa";
 import "../../styles/reportpage.css";
 import UserForPage from "../admin/UserForPage.jsx";
+import ProgressAnalytics from "../learner/ProgressAnalytics.jsx";
 
 export default function ReportsPage() {
   const [filters, setFilters] = useState({ from: "", to: "", status: "pending" });
@@ -11,11 +12,27 @@ export default function ReportsPage() {
   const [progress, setProgress] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedUserId, setSelectedUserId] = useState(null);
+  
+  // State cho learners progress
+  const [learnersProgress, setLearnersProgress] = useState([]);
+  const [loadingLearners, setLoadingLearners] = useState(true);
+  const [selectedLearnerId, setSelectedLearnerId] = useState(null);
+  const [selectedLearnerAnalytics, setSelectedLearnerAnalytics] = useState(null);
+  const [loadingAnalytics, setLoadingAnalytics] = useState(false);
+  
+  // State cho filter và search
+  const [mentorFilter, setMentorFilter] = useState("");
+  const [learnerSearch, setLearnerSearch] = useState("");
+  const [mentors, setMentors] = useState([]);
 
   // State cho modal reply
   const [showReplyModal, setShowReplyModal] = useState(false);
   const [selectedReport, setSelectedReport] = useState(null);
   const [replyContent, setReplyContent] = useState("");
+  
+  // State cho modal phóng to hình ảnh/video
+  const [showMediaModal, setShowMediaModal] = useState(false);
+  const [selectedMedia, setSelectedMedia] = useState({ type: null, url: null });
 
   // Load summary (chỉ để lọc theo thời gian)
   const fetchSummary = async () => {
@@ -107,87 +124,120 @@ export default function ReportsPage() {
     setShowReplyModal(true);
   };
 
+  // Load mentors
+  const fetchMentors = async () => {
+    try {
+      const res = await api.get("/admin/reports/mentors");
+      setMentors(res.data.mentors || []);
+    } catch (err) {
+      console.error("❌ Lỗi load mentors:", err);
+    }
+  };
+
+  // Load learners progress với filter và search
+  const fetchLearnersProgress = async () => {
+    try {
+      setLoadingLearners(true);
+      const params = {};
+      if (mentorFilter) params.mentor_id = mentorFilter;
+      if (learnerSearch.trim()) params.search = learnerSearch.trim();
+      
+      const res = await api.get("/admin/reports/learners-progress", { params });
+      setLearnersProgress(res.data.learners || []);
+    } catch (err) {
+      console.error("❌ Lỗi load learners progress:", err);
+    } finally {
+      setLoadingLearners(false);
+    }
+  };
+
+  // Load analytics cho learner được chọn
+  const fetchLearnerAnalytics = async (learnerId) => {
+    try {
+      setLoadingAnalytics(true);
+      const res = await api.get(`/learners/${learnerId}/progress-analytics`);
+      setSelectedLearnerAnalytics(res.data);
+    } catch (err) {
+      console.error("❌ Lỗi load analytics:", err);
+    } finally {
+      setLoadingAnalytics(false);
+    }
+  };
+
+  const handleLearnerClick = (learnerId) => {
+    setSelectedLearnerId(learnerId);
+    fetchLearnerAnalytics(learnerId);
+  };
+
   useEffect(() => {
     fetchSummary();
     fetchReports(filters.status);
+    fetchMentors();
   }, []);
+
+  // Load learners progress khi component mount và khi filter/search thay đổi
+  useEffect(() => {
+    fetchLearnersProgress();
+  }, [mentorFilter, learnerSearch]);
+
+  // Check URL params sau khi learners đã load
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const learnerIdParam = urlParams.get('learnerId');
+    if (learnerIdParam && learnersProgress.length > 0) {
+      const learner = learnersProgress.find(l => String(l.learner_id) === String(learnerIdParam));
+      if (learner && !selectedLearnerId) {
+        handleLearnerClick(learner.learner_id);
+        // Clean URL
+        window.history.replaceState({}, '', '/admin/reports');
+      }
+    }
+  }, [learnersProgress]);
+
+  // Hàm mở modal phóng to hình ảnh/video
+  const openMediaModal = (type, url) => {
+    const fullUrl = url.startsWith("/uploads/") ? `http://localhost:4002${url}` : url;
+    setSelectedMedia({ type, url: fullUrl });
+    setShowMediaModal(true);
+  };
 
   return (
     <div className="report-page">
       <h1>Báo cáo học viên, giảng viên & feedback</h1>
 
-      {/* Bộ lọc thời gian */}
-      <div className="filters">
-        <label>Từ ngày:
-          <input
-            type="date"
-            value={filters.from}
-            onChange={e => setFilters({ ...filters, from: e.target.value })}
-          />
-        </label>
-        <label>Đến ngày:
-          <input
-            type="date"
-            value={filters.to}
-            onChange={e => {
-              const newFilters = { ...filters, to: e.target.value };
-              setFilters(newFilters);
-              if (newFilters.from && newFilters.to) {
-                fetchSummary();
-              }
-            }}
-          />
-        </label>
-      </div>
-
-      {/* Cards tổng quan - chỉ hiển thị reports (learners/mentors đã đưa lên dashboard) */}
-      <div className="summary-cards" style={{ display: "flex", gap: "20px", margin: "20px 0" }}>
-        <div className="card"><FaCommentDots size={30} color="orange" /><p>Tố cáo (theo thời gian)</p><h3>{summary.total_reports}</h3></div>
-      </div>
-
-      {/* Tiến độ đào tạo */}
-      <section>
-        <h2>Tiến độ đào tạo</h2>
-        <div className="search-box">
-          <FaSearch style={{ marginRight: "8px" }} />
-          <input
-            type="text"
-            placeholder="Tìm học viên theo tên hoặc số điện thoại..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-          />
-          <button onClick={fetchProgress}>Tìm kiếm</button>
-        </div>
-
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Học viên</th>
-              <th>Kỹ năng</th>
-              <th>Điểm</th>
-              <th>Mentor</th>
-              <th>Feedback</th>
-              <th>Ngày cập nhật</th>
-            </tr>
-          </thead>
-          <tbody>
-            {progress.map(p => (
-              <tr key={p.learner_id + p.stage}>
-                <td>{p.name} ({p.phone})</td>
-                <td>{p.stage}</td>
-                <td>{p.score}</td>
-                <td>{p.mentor_name}</td>
-                <td>{p.feedback}</td>
-                <td>{new Date(p.updated_at).toLocaleDateString("vi-VN")}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
-
-      {/* Phản hồi & tố cáo */}
+      {/* Phản hồi & tố cáo - Đưa lên trước */}
       <section>
         <h2>Phản hồi & Tố cáo</h2>
+        
+        {/* Bộ lọc thời gian - Di chuyển vào trong section */}
+        <div className="filters" style={{ marginBottom: "20px" }}>
+          <label>Từ ngày:
+            <input
+              type="date"
+              value={filters.from}
+              onChange={e => setFilters({ ...filters, from: e.target.value })}
+            />
+          </label>
+          <label>Đến ngày:
+            <input
+              type="date"
+              value={filters.to}
+              onChange={e => {
+                const newFilters = { ...filters, to: e.target.value };
+                setFilters(newFilters);
+                if (newFilters.from && newFilters.to) {
+                  fetchSummary();
+                }
+              }}
+            />
+          </label>
+        </div>
+        
+        {/* Cards tổng quan - gộp vào section Phản hồi & Tố cáo */}
+        <div className="summary-cards" style={{ display: "flex", gap: "20px", margin: "20px 0" }}>
+          <div className="card"><FaCommentDots size={30} color="orange" /><p>Tố cáo (theo thời gian)</p><h3>{summary.total_reports}</h3></div>
+        </div>
+        
         <div className="filters">
           <select
             name="status-select"
@@ -236,7 +286,17 @@ export default function ReportsPage() {
                       <img 
                         src={f.image_url.startsWith("/uploads/") ? `http://localhost:4002${f.image_url}` : f.image_url}
                         alt="Report image"
-                        style={{ maxWidth: "200px", maxHeight: "200px", borderRadius: 4 }}
+                        onClick={() => openMediaModal("image", f.image_url)}
+                        style={{ 
+                          maxWidth: "200px", 
+                          maxHeight: "200px", 
+                          borderRadius: 4,
+                          cursor: "pointer",
+                          transition: "transform 0.2s",
+                          objectFit: "cover"
+                        }}
+                        onMouseEnter={(e) => e.target.style.transform = "scale(1.05)"}
+                        onMouseLeave={(e) => e.target.style.transform = "scale(1)"}
                       />
                     </div>
                   )}
@@ -245,7 +305,16 @@ export default function ReportsPage() {
                       <video 
                         src={f.video_url.startsWith("/uploads/") ? `http://localhost:4002${f.video_url}` : f.video_url}
                         controls
-                        style={{ maxWidth: "300px", maxHeight: "200px", borderRadius: 4 }}
+                        onClick={() => openMediaModal("video", f.video_url)}
+                        style={{ 
+                          maxWidth: "300px", 
+                          maxHeight: "200px", 
+                          borderRadius: 4,
+                          cursor: "pointer",
+                          transition: "transform 0.2s"
+                        }}
+                        onMouseEnter={(e) => e.target.style.transform = "scale(1.05)"}
+                        onMouseLeave={(e) => e.target.style.transform = "scale(1)"}
                       />
                     </div>
                   )}
@@ -289,6 +358,114 @@ export default function ReportsPage() {
             ))}
           </tbody>
         </table>
+      </section>
+
+      {/* Tiến độ đào tạo - Danh sách learners với progress - Đưa xuống dưới */}
+      <section>
+        <h2>Tiến độ đào tạo</h2>
+        
+        {/* Bộ lọc và tìm kiếm */}
+        <div className="filters" style={{ marginBottom: "20px", display: "flex", gap: "16px", alignItems: "center", flexWrap: "wrap" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <span>Lọc theo giảng viên:</span>
+            <select
+              value={mentorFilter}
+              onChange={(e) => setMentorFilter(e.target.value)}
+              style={{ padding: "6px 12px", borderRadius: "4px", border: "1px solid #ddd", minWidth: "200px" }}
+            >
+              <option value="">Tất cả giảng viên</option>
+              {mentors.map(mentor => (
+                <option key={mentor.mentor_id} value={mentor.mentor_id}>
+                  {mentor.mentor_name}
+                </option>
+              ))}
+            </select>
+          </label>
+          
+          <label style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1, minWidth: "250px" }}>
+            <FaSearch />
+            <input
+              type="text"
+              placeholder="Tìm theo tên hoặc số điện thoại học viên..."
+              value={learnerSearch}
+              onChange={(e) => setLearnerSearch(e.target.value)}
+              style={{ padding: "6px 12px", borderRadius: "4px", border: "1px solid #ddd", flex: 1 }}
+            />
+          </label>
+        </div>
+        
+        {loadingLearners ? (
+          <div>Đang tải...</div>
+        ) : (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Học viên</th>
+                <th>Giảng viên hỗ trợ</th>
+                <th>Tổng điểm trung bình</th>
+                <th>Số lần luyện nói</th>
+                <th>Số lần làm challenge</th>
+                <th>Thao tác</th>
+              </tr>
+            </thead>
+            <tbody>
+              {learnersProgress.length === 0 ? (
+                <tr>
+                  <td colSpan="6" style={{ textAlign: "center" }}>Chưa có dữ liệu</td>
+                </tr>
+              ) : (
+                learnersProgress.map(learner => (
+                  <tr key={learner.learner_id}>
+                    <td>
+                      <span
+                        className="clickable-learner-name"
+                        onClick={() => setSelectedUserId(learner.user_id)}
+                        style={{ 
+                          color: "#3b82f6", 
+                          cursor: "pointer", 
+                          textDecoration: "underline",
+                          fontWeight: 500
+                        }}
+                      >
+                        {learner.learner_name || "N/A"}
+                      </span>
+                    </td>
+                    <td>
+                      {learner.mentor_name ? (
+                        <span
+                          className="clickable-learner-name"
+                          onClick={() => learner.mentor_user_id && setSelectedUserId(learner.mentor_user_id)}
+                          style={{ 
+                            color: "#3b82f6", 
+                            cursor: learner.mentor_user_id ? "pointer" : "default", 
+                            textDecoration: learner.mentor_user_id ? "underline" : "none",
+                            fontWeight: 500
+                          }}
+                        >
+                          {learner.mentor_name}
+                        </span>
+                      ) : (
+                        "Chưa gán"
+                      )}
+                    </td>
+                    <td>{parseFloat(learner.average_score || 0).toFixed(1)}/100</td>
+                    <td>{learner.practice_attempts || 0}</td>
+                    <td>{learner.challenge_attempts || 0}</td>
+                    <td>
+                      <button 
+                        className="btn-ghost"
+                        onClick={() => handleLearnerClick(learner.learner_id)}
+                        style={{ padding: "4px 8px", fontSize: 12 }}
+                      >
+                        Xem chi tiết
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        )}
       </section>
 
       {/* Modal hiển thị thông tin user qua UserForPage */}
@@ -344,7 +521,16 @@ export default function ReportsPage() {
                   <img 
                     src={selectedReport.image_url.startsWith("/uploads/") ? `http://localhost:4002${selectedReport.image_url}` : selectedReport.image_url}
                     alt="Report"
-                    style={{ maxWidth: "100%", maxHeight: "300px", borderRadius: 4 }}
+                    onClick={() => openMediaModal("image", selectedReport.image_url)}
+                    style={{ 
+                      maxWidth: "100%", 
+                      maxHeight: "300px", 
+                      borderRadius: 4,
+                      cursor: "pointer",
+                      transition: "transform 0.2s"
+                    }}
+                    onMouseEnter={(e) => e.target.style.transform = "scale(1.02)"}
+                    onMouseLeave={(e) => e.target.style.transform = "scale(1)"}
                   />
                 </div>
               </div>
@@ -357,7 +543,16 @@ export default function ReportsPage() {
                   <video 
                     src={selectedReport.video_url.startsWith("/uploads/") ? `http://localhost:4002${selectedReport.video_url}` : selectedReport.video_url}
                     controls
-                    style={{ maxWidth: "100%", maxHeight: "300px", borderRadius: 4 }}
+                    onClick={() => openMediaModal("video", selectedReport.video_url)}
+                    style={{ 
+                      maxWidth: "100%", 
+                      maxHeight: "300px", 
+                      borderRadius: 4,
+                      cursor: "pointer",
+                      transition: "transform 0.2s"
+                    }}
+                    onMouseEnter={(e) => e.target.style.transform = "scale(1.02)"}
+                    onMouseLeave={(e) => e.target.style.transform = "scale(1)"}
                   />
                 </div>
               </div>
@@ -399,6 +594,144 @@ export default function ReportsPage() {
                 Hủy
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal hiển thị chi tiết progress của learner */}
+      {selectedLearnerId && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: "rgba(0,0,0,0.5)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 1000,
+          overflowY: "auto"
+        }}>
+          <div style={{
+            background: "#fff",
+            borderRadius: 8,
+            padding: 24,
+            maxWidth: "90%",
+            width: "1200px",
+            maxHeight: "90vh",
+            overflowY: "auto",
+            margin: "20px 0"
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+              <h3 style={{ margin: 0 }}>
+                Chi tiết tiến độ học tập - {learnersProgress.find(l => l.learner_id === selectedLearnerId)?.learner_name || "N/A"}
+              </h3>
+              <button
+                className="btn-ghost"
+                onClick={() => {
+                  setSelectedLearnerId(null);
+                  setSelectedLearnerAnalytics(null);
+                }}
+                style={{ padding: "8px 16px" }}
+              >
+                Đóng
+              </button>
+            </div>
+            
+            {loadingAnalytics ? (
+              <div>Đang tải dữ liệu phân tích...</div>
+            ) : selectedLearnerAnalytics ? (
+              <ProgressAnalytics analytics={selectedLearnerAnalytics} hideRecommendations={false} />
+            ) : (
+              <div>Không có dữ liệu phân tích</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal phóng to hình ảnh/video */}
+      {showMediaModal && selectedMedia.url && (
+        <div 
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0,0,0,0.9)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 2000,
+            cursor: "pointer"
+          }}
+          onClick={() => {
+            setShowMediaModal(false);
+            setSelectedMedia({ type: null, url: null });
+          }}
+        >
+          <div 
+            style={{
+              position: "relative",
+              maxWidth: "90vw",
+              maxHeight: "90vh",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center"
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {selectedMedia.type === "image" ? (
+              <img 
+                src={selectedMedia.url}
+                alt="Phóng to"
+                style={{
+                  maxWidth: "100%",
+                  maxHeight: "90vh",
+                  borderRadius: 8,
+                  boxShadow: "0 4px 20px rgba(0,0,0,0.5)"
+                }}
+              />
+            ) : (
+              <video 
+                src={selectedMedia.url}
+                controls
+                autoPlay
+                style={{
+                  maxWidth: "100%",
+                  maxHeight: "90vh",
+                  borderRadius: 8,
+                  boxShadow: "0 4px 20px rgba(0,0,0,0.5)"
+                }}
+              />
+            )}
+            <button
+              onClick={() => {
+                setShowMediaModal(false);
+                setSelectedMedia({ type: null, url: null });
+              }}
+              style={{
+                position: "absolute",
+                top: 20,
+                right: 20,
+                background: "rgba(255,255,255,0.9)",
+                border: "none",
+                borderRadius: "50%",
+                width: "40px",
+                height: "40px",
+                fontSize: "24px",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontWeight: "bold",
+                color: "#333",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.3)"
+              }}
+            >
+              ×
+            </button>
           </div>
         </div>
       )}

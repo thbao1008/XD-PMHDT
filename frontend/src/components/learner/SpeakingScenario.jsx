@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import api from "../../api";
 import { FaMicrophone } from "react-icons/fa";
-import "../../styles/speaking-practice.css";
+import "../../styles/speaking-scenario.css";
 
 export default function SpeakingScenario({ sessionId, scenario, onComplete, onCancel }) {
   const [vocabulary, setVocabulary] = useState([]);
@@ -12,6 +12,12 @@ export default function SpeakingScenario({ sessionId, scenario, onComplete, onCa
   const [taskCompleted, setTaskCompleted] = useState(false);
   const [audioBlob, setAudioBlob] = useState(null);
   const [isPlayingAI, setIsPlayingAI] = useState(false);
+  const [hint, setHint] = useState(null);
+  const [loadingHint, setLoadingHint] = useState(false);
+  const [finalScore, setFinalScore] = useState(null);
+  const [showScoreModal, setShowScoreModal] = useState(false);
+  const [currentScore, setCurrentScore] = useState(100);
+  const [hintsUsed, setHintsUsed] = useState(0);
   
   const mediaRecorderRef = useRef(null);
   const mediaStreamRef = useRef(null);
@@ -148,15 +154,8 @@ export default function SpeakingScenario({ sessionId, scenario, onComplete, onCa
       // Kiểm tra xem task đã hoàn thành chưa
       if (res.data.task_completed) {
         setTaskCompleted(true);
-        if (onComplete) {
-          setTimeout(() => {
-            onComplete({
-              sessionId,
-              scenario: scenario,
-              conversation: [...conversation, userMessage]
-            });
-          }, 2000);
-        }
+        // Tự động chấm điểm cuối cùng
+        handleEvaluateFinalScore();
       }
     } catch (err) {
       console.error("❌ Error sending message:", err);
@@ -192,6 +191,62 @@ export default function SpeakingScenario({ sessionId, scenario, onComplete, onCa
       stopRecording();
     } else {
       startRecording();
+    }
+  };
+
+  const handleGetHint = async () => {
+    if (loadingHint) return;
+    
+    setLoadingHint(true);
+    try {
+      const res = await api.get(
+        `/learners/speaking-practice/scenario/sessions/${sessionId}/hint`
+      );
+      
+      setHint({
+        english: res.data.hint_english || "",
+        vietnamese: res.data.hint_vietnamese || "",
+        context: res.data.context || ""
+      });
+      
+      // Cập nhật điểm và số lần dùng gợi ý
+      if (res.data.current_score !== undefined) {
+        setCurrentScore(res.data.current_score);
+      }
+      if (res.data.hints_used !== undefined) {
+        setHintsUsed(res.data.hints_used);
+      }
+    } catch (err) {
+      console.error("❌ Error getting hint:", err);
+      alert("Không thể lấy gợi ý. Vui lòng thử lại.");
+    } finally {
+      setLoadingHint(false);
+    }
+  };
+
+  const handleEvaluateFinalScore = async () => {
+    try {
+      const res = await api.post(
+        `/learners/speaking-practice/scenario/sessions/${sessionId}/evaluate`
+      );
+      
+      setFinalScore(res.data);
+      setShowScoreModal(true);
+      
+      // Gọi onComplete sau khi hiển thị điểm
+      if (onComplete) {
+        setTimeout(() => {
+          onComplete({
+            sessionId,
+            scenario: scenario,
+            conversation: conversation,
+            finalScore: res.data
+          });
+        }, 5000); // Cho người dùng xem điểm 5 giây
+      }
+    } catch (err) {
+      console.error("❌ Error evaluating final score:", err);
+      alert("Không thể chấm điểm. Vui lòng thử lại.");
     }
   };
 
@@ -308,6 +363,13 @@ export default function SpeakingScenario({ sessionId, scenario, onComplete, onCa
           <div style={{ textAlign: "center", padding: 30, background: "#f0fdf4", borderRadius: 8 }}>
             <h3 style={{ color: "#10b981", marginBottom: 10 }}>🎉 Chúc mừng!</h3>
             <p>Bạn đã hoàn thành nhiệm vụ!</p>
+            {finalScore && (
+              <div style={{ marginTop: 20 }}>
+                <p style={{ fontSize: 18, fontWeight: "bold", color: "#10b981" }}>
+                  Điểm số: {finalScore.final_score}/100
+                </p>
+              </div>
+            )}
           </div>
         ) : (
           <div className="message-input-section" style={{ textAlign: "center" }}>
@@ -322,7 +384,52 @@ export default function SpeakingScenario({ sessionId, scenario, onComplete, onCa
               </div>
             ) : (
               <>
-                <div style={{ marginBottom: 20 }}>
+                {/* Hiển thị điểm hiện tại và số lần dùng gợi ý */}
+                <div style={{ 
+                  marginBottom: 15, 
+                  padding: "10px 15px", 
+                  background: "#f9fafb", 
+                  borderRadius: 8,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center"
+                }}>
+                  <div>
+                    <span style={{ fontSize: 14, color: "#666" }}>Điểm hiện tại: </span>
+                    <span style={{ fontSize: 18, fontWeight: "bold", color: "#10b981" }}>
+                      {currentScore}/100
+                    </span>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: 14, color: "#666" }}>Gợi ý đã dùng: </span>
+                    <span style={{ fontSize: 16, fontWeight: "600", color: "#ef4444" }}>
+                      {hintsUsed}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Hiển thị gợi ý nếu có */}
+                {hint && (
+                  <div style={{ 
+                    marginBottom: 15, 
+                    padding: 15, 
+                    background: "#fff3cd", 
+                    borderRadius: 8,
+                    border: "1px solid #ffc107"
+                  }}>
+                    <div style={{ fontSize: 12, color: "#856404", marginBottom: 8, fontWeight: "600" }}>
+                      💡 Gợi ý (mất 15 điểm mỗi lần dùng):
+                    </div>
+                    <div style={{ fontSize: 16, color: "#333", marginBottom: 8, fontStyle: "italic" }}>
+                      "{hint.english}"
+                    </div>
+                    <div style={{ fontSize: 14, color: "#666" }}>
+                      {hint.vietnamese}
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ marginBottom: 20, display: "flex", gap: 10, justifyContent: "center" }}>
                   <button
                     onClick={handleRecordClick}
                     disabled={isProcessing || isPlayingAI}
@@ -336,12 +443,32 @@ export default function SpeakingScenario({ sessionId, scenario, onComplete, onCa
                       display: "flex",
                       alignItems: "center",
                       gap: 10,
-                      fontSize: 16,
-                      margin: "0 auto"
+                      fontSize: 16
                     }}
                   >
                     <FaMicrophone size={20} />
                     {isRecording ? "Dừng ghi âm" : "Nhấn để nói"}
+                  </button>
+                  
+                  <button
+                    onClick={handleGetHint}
+                    disabled={isProcessing || isPlayingAI || loadingHint}
+                    style={{
+                      padding: "15px 20px",
+                      background: "#ffc107",
+                      color: "#333",
+                      border: "none",
+                      borderRadius: 50,
+                      cursor: loadingHint ? "not-allowed" : "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      fontSize: 14,
+                      fontWeight: "600",
+                      opacity: loadingHint ? 0.6 : 1
+                    }}
+                  >
+                    💡 Gợi ý {loadingHint ? "(Đang tải...)" : ""}
                   </button>
                 </div>
                 
@@ -382,6 +509,129 @@ export default function SpeakingScenario({ sessionId, scenario, onComplete, onCa
           </div>
         )}
       </div>
+
+      {/* Modal hiển thị điểm cuối cùng */}
+      {showScoreModal && finalScore && (
+        <div 
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            zIndex: 1000
+          }}
+          onClick={() => setShowScoreModal(false)}
+        >
+          <div 
+            style={{
+              background: "white",
+              borderRadius: 16,
+              padding: 30,
+              maxWidth: 500,
+              width: "90%",
+              boxShadow: "0 10px 40px rgba(0,0,0,0.2)"
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ marginBottom: 20, color: "#10b981", textAlign: "center" }}>
+              🎉 Kết quả chấm điểm
+            </h2>
+            
+            <div style={{ textAlign: "center", marginBottom: 25 }}>
+              <div style={{ fontSize: 48, fontWeight: "bold", color: "#10b981", marginBottom: 10 }}>
+                {finalScore.final_score}/100
+              </div>
+              <div style={{ fontSize: 18, color: "#666" }}>Điểm tổng kết</div>
+            </div>
+
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ 
+                display: "flex", 
+                justifyContent: "space-between", 
+                padding: "10px 0",
+                borderBottom: "1px solid #e5e7eb"
+              }}>
+                <span style={{ color: "#666" }}>Độ hợp lý:</span>
+                <span style={{ fontWeight: "600" }}>{finalScore.reasonableness_score || 0}/40</span>
+              </div>
+              <div style={{ 
+                display: "flex", 
+                justifyContent: "space-between", 
+                padding: "10px 0",
+                borderBottom: "1px solid #e5e7eb"
+              }}>
+                <span style={{ color: "#666" }}>Khả năng phản xạ:</span>
+                <span style={{ fontWeight: "600" }}>{finalScore.reflex_score || 0}/30</span>
+              </div>
+              <div style={{ 
+                display: "flex", 
+                justifyContent: "space-between", 
+                padding: "10px 0",
+                borderBottom: "1px solid #e5e7eb"
+              }}>
+                <span style={{ color: "#666" }}>Phát âm:</span>
+                <span style={{ fontWeight: "600" }}>{finalScore.pronunciation_score || 0}/20</span>
+              </div>
+              <div style={{ 
+                display: "flex", 
+                justifyContent: "space-between", 
+                padding: "10px 0"
+              }}>
+                <span style={{ color: "#666" }}>Độc lập (không dùng gợi ý):</span>
+                <span style={{ fontWeight: "600" }}>{finalScore.independence_score || 0}/10</span>
+              </div>
+            </div>
+
+            {finalScore.feedback && (
+              <div style={{ 
+                padding: 15, 
+                background: "#f9fafb", 
+                borderRadius: 8,
+                marginBottom: 20
+              }}>
+                <div style={{ fontSize: 14, fontWeight: "600", marginBottom: 8, color: "#333" }}>
+                  Nhận xét:
+                </div>
+                <div style={{ fontSize: 14, color: "#666", lineHeight: 1.6 }}>
+                  {finalScore.feedback}
+                </div>
+              </div>
+            )}
+
+            <button
+              onClick={() => {
+                setShowScoreModal(false);
+                if (onComplete) {
+                  onComplete({
+                    sessionId,
+                    scenario: scenario,
+                    conversation: conversation,
+                    finalScore: finalScore
+                  });
+                }
+              }}
+              style={{
+                width: "100%",
+                padding: "12px 24px",
+                background: "#10b981",
+                color: "white",
+                border: "none",
+                borderRadius: 8,
+                cursor: "pointer",
+                fontSize: 16,
+                fontWeight: "600"
+              }}
+            >
+              Đóng
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

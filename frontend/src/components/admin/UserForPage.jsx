@@ -2,7 +2,8 @@ import React, { useEffect, useState } from "react";
 import api from "../../api.js";
 import Modal from "../common/Modal.jsx";
 import AssignedLearnersModal from "../common/AssignedLearnersModal.jsx";
-import { getAuth } from "../../utils/auth.js"; // giả sử bạn có hàm này
+import { getAuth } from "../../utils/auth.js";
+import "../../styles/user-for-page.css";
 
 export default function UserForPage({ userId, onClose, onStatusChange }) {
   const [user, setUser] = useState(null);
@@ -10,6 +11,7 @@ export default function UserForPage({ userId, onClose, onStatusChange }) {
   const [loading, setLoading] = useState(true);
   const [showAssigned, setShowAssigned] = useState(false);
   const [showMentorInfo, setShowMentorInfo] = useState(false);
+  const [learnerTotalRating, setLearnerTotalRating] = useState(null);
 
   const auth = getAuth();
   const isAdmin = auth?.user?.role?.toUpperCase() === "ADMIN";
@@ -26,14 +28,46 @@ export default function UserForPage({ userId, onClose, onStatusChange }) {
           if (learnerId) {
             const purchaseRes = await api.get(`/learners/${learnerId}/latest-purchase`);
             setLatestPurchase(purchaseRes.data.purchase || null);
+            
+            // Load total rating (average from practice + challenges)
+            try {
+              const ratingRes = await api.get(`/learners/${learnerId}/progress-analytics`);
+              if (ratingRes.data?.overall?.average_score) {
+                setLearnerTotalRating(ratingRes.data.overall.average_score);
+              }
+            } catch (err) {
+              // Use rating from user object if available
+              if (u.learner_average_score) {
+                setLearnerTotalRating(u.learner_average_score);
+              }
+            }
           }
         }
+        
+        // Set rating for mentor
+        if (u.role?.toUpperCase() === "MENTOR" && u.mentor_rating !== undefined) {
+          // Rating already in user object
+        }
       } catch (err) {
-        if (err.response?.status === 403) {
+        if (err.response?.status === 403 || err.response?.status === 404) {
           try {
-            const res = await api.get(`/mentors/${userId}`);
-            const u = res.data.mentor || res.data;
-            setUser(u);
+            // Try to get mentor by userId
+            const res = await api.get(`/mentors/by-user/${userId}`);
+            const mentor = res.data.mentor || res.data;
+            if (mentor) {
+              setUser({
+                ...mentor,
+                role: "MENTOR",
+                user_id: mentor.user_id || userId,
+                id: mentor.user_id || userId,
+                name: mentor.name,
+                email: mentor.email,
+                phone: mentor.phone,
+                dob: mentor.dob,
+                status: mentor.status,
+                mentor_rating: mentor.rating
+              });
+            }
           } catch (e2) {
             console.error("❌ Fallback load mentor error:", e2);
           }
@@ -67,110 +101,207 @@ export default function UserForPage({ userId, onClose, onStatusChange }) {
   const isMentor = user.role?.toUpperCase() === "MENTOR";
 
   return (
-    <Modal title="Thông tin người dùng" onClose={onClose}>
-      <div style={{ display: "flex", gap: 16, position: "relative" }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ display: "grid", rowGap: "6px", marginBottom: "12px" }}>
-            <div><strong>Tên:</strong> {user.name}</div>
-            <div><strong>Email:</strong> {user.email}</div>
-            <div><strong>SĐT:</strong> {user.phone || "-"}</div>
-            <div><strong>Ngày sinh:</strong> {user.dob ? new Date(user.dob).toLocaleDateString("vi-VN") : "-"}</div>
-            {!isMentor && <div><strong>Vai trò:</strong> {user.role}</div>}
+    <Modal title="Thông tin người dùng" onClose={onClose} className="user-for-page-modal">
+      <div className="user-for-page-content">
+        <div className="user-for-page-main">
+          <div className="user-for-page-info">
+            <div className="user-for-page-info-item">
+              <span className="user-for-page-info-label">Tên:</span>
+              <span className="user-for-page-info-value">{user.name}</span>
+            </div>
+            <div className="user-for-page-info-item">
+              <span className="user-for-page-info-label">Email:</span>
+              <span className="user-for-page-info-value">{user.email}</span>
+            </div>
+            <div className="user-for-page-info-item">
+              <span className="user-for-page-info-label">SĐT:</span>
+              <span className="user-for-page-info-value">{user.phone || "-"}</span>
+            </div>
+            <div className="user-for-page-info-item">
+              <span className="user-for-page-info-label">Ngày sinh:</span>
+              <span className="user-for-page-info-value">
+                {user.dob ? new Date(user.dob).toLocaleDateString("vi-VN") : "-"}
+              </span>
+            </div>
+            {!isMentor && (
+              <div className="user-for-page-info-item">
+                <span className="user-for-page-info-label">Vai trò:</span>
+                <span className="user-for-page-info-value">{user.role}</span>
+              </div>
+            )}
           </div>
+
+          {/* Rating Section */}
+          {user.role?.toUpperCase() === "LEARNER" && learnerTotalRating !== null && (
+            <div className="user-for-page-section">
+              <h4>Điểm đánh giá tổng</h4>
+              <div className="user-for-page-rating-box">
+                <div className="user-for-page-rating-value">
+                  {parseFloat(learnerTotalRating).toFixed(1)}/100
+                </div>
+                <div className="user-for-page-rating-label">
+                  Điểm trung bình từ luyện nói và challenge
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {user.role?.toUpperCase() === "MENTOR" && user.mentor_rating !== null && user.mentor_rating !== undefined && (
+            <div className="user-for-page-section">
+              <h4>Điểm đánh giá</h4>
+              <div className="user-for-page-rating-box">
+                <div className="user-for-page-rating-value">
+                  {parseFloat(user.mentor_rating).toFixed(1)}/10
+                </div>
+                <div className="user-for-page-rating-label">
+                  Điểm đánh giá từ học viên
+                </div>
+              </div>
+            </div>
+          )}
 
           {user.role?.toUpperCase() === "LEARNER" && (
             <>
-              <div style={{ marginTop: "1rem" }}>
+              <div className="user-for-page-section">
                 <h4>Gói học đã đăng ký</h4>
                 {latestPurchase ? (
                   <>
-                    <p>
-                      <strong>Tên gói:</strong> {latestPurchase.package_name || "Không rõ"}{" "}
-                      <span style={{ color: user.status === "banned" ? "#fd7e14" : latestPurchase.status === "active" ? "green" : "gray" }}>
-                        {user.status === "banned"
-                          ? "Tạm ngưng"
-                          : latestPurchase.status === "active"
-                          ? "Còn hạn"
-                          : "Hết hạn"}
-                      </span>
-                      <br />
+                    <div className="user-for-page-package-info">
+                      <p>
+                        <strong>Tên gói:</strong> {latestPurchase.package_name || "Không rõ"}{" "}
+                        <span className={`user-for-page-package-status ${
+                          user.status === "banned" 
+                            ? "paused" 
+                            : latestPurchase.status === "active" 
+                            ? "active" 
+                            : "expired"
+                        }`}>
+                          {user.status === "banned"
+                            ? "Tạm ngưng"
+                            : latestPurchase.status === "active"
+                            ? "Còn hạn"
+                            : "Hết hạn"}
+                        </span>
+                      </p>
                       {latestPurchase.created_at && (
-                        <small>
+                        <span className="user-for-page-small">
                           Ngày mua: {new Date(latestPurchase.created_at).toLocaleDateString("vi-VN")}
-                        </small>
+                        </span>
                       )}
                       {latestPurchase.expiry_date && (
-                        <small>
+                        <span className="user-for-page-small">
                           {" "}– Hết hạn: {new Date(latestPurchase.expiry_date).toLocaleDateString("vi-VN")}
-                        </small>
+                        </span>
                       )}
-                    </p>
+                    </div>
                     <button
-                      className="btn btn-primary"
+                      className="user-for-page-btn user-for-page-btn-primary"
                       onClick={() => window.location.href = `/admin/learners/${user.learner_id}/purchases`}
                     >
                       Xem chi tiết gói học
                     </button>
                   </>
                 ) : (
-                  <p className="muted">Chưa có gói học nào</p>
+                  <p className="user-for-page-muted">Chưa có gói học nào</p>
                 )}
               </div>
 
-              <div style={{ marginTop: "1rem" }}>
+              <div className="user-for-page-section">
                 <h4>Được hướng dẫn bởi giảng viên</h4>
                 {user.mentor_name ? (
                   <p>
                     <span
-                      style={{ color: "blue", cursor: "pointer", textDecoration: "underline" }}
+                      className="user-for-page-mentor-link"
                       onClick={() => setShowMentorInfo(true)}
                     >
                       {user.mentor_name}
                     </span>
                   </p>
                 ) : (
-                  <p className="muted">Chưa được gán giảng viên</p>
+                  <p className="user-for-page-muted">Chưa được gán giảng viên</p>
                 )}
+                {isAdmin && user.mentor_name && (
+                  <button
+                    className="user-for-page-btn user-for-page-btn-secondary"
+                    onClick={async () => {
+                      if (!user.learner_id) return;
+                      if (!window.confirm("Bạn có chắc chắn muốn đổi mentor? Mentor cũ sẽ được thêm vào danh sách blocklist và hệ thống sẽ tự động gán mentor mới.")) {
+                        return;
+                      }
+                      try {
+                        const res = await api.post("/admin/users/learners/change-mentor", {
+                          learnerId: user.learner_id,
+                        });
+                        if (res.data.success) {
+                          alert(res.data.message);
+                          // Refresh user data
+                          const userRes = await api.get(`/admin/users/${userId}`);
+                          const u = userRes.data.user || userRes.data;
+                          setUser(u);
+                          if (onStatusChange) onStatusChange();
+                        }
+                      } catch (err) {
+                        console.error("Lỗi đổi mentor:", err);
+                        alert("Có lỗi xảy ra khi đổi mentor");
+                      }
+                    }}
+                    style={{ marginTop: "8px", width: "100%" }}
+                  >
+                    Đổi mentor
+                  </button>
+                )}
+              </div>
+
+              <div className="user-for-page-section">
+                <button
+                  className="user-for-page-btn user-for-page-btn-primary"
+                  onClick={() => {
+                    if (user.learner_id) {
+                      // Mở ReportsPage với filter learnerId
+                      window.location.href = `/admin/reports?learnerId=${user.learner_id}`;
+                    }
+                  }}
+                  style={{ width: "100%" }}
+                >
+                  Xem tiến độ học tập
+                </button>
               </div>
             </>
           )}
 
           {isMentor && isAdmin && (
-            <div style={{ marginTop: "1rem" }}>
-              <button className="btn btn-secondary" onClick={() => setShowAssigned(true)}>
+            <div className="user-for-page-actions">
+              <button 
+                className="user-for-page-btn user-for-page-btn-secondary" 
+                onClick={() => setShowAssigned(true)}
+              >
                 Danh sách học viên được bổ nhiệm
               </button>
             </div>
           )}
         </div>
 
-        <div style={{ width: 120 }}>
-          <img
-            src={user.avatarUrl || "/default-avatar.png"}
-            alt="Avatar"
-            style={{ width: 120, height: 120, borderRadius: "50%", objectFit: "cover", background: "#eee" }}
-          />
+        <div className="user-for-page-avatar-section">
+          <div className="user-for-page-avatar">
+            <img
+              src={user.avatarUrl || "/default-avatar.png"}
+              alt="Avatar"
+              onError={(e) => {
+                e.target.src = "/default-avatar.png";
+              }}
+            />
+          </div>
+          
+          {isAdmin && (
+            <button
+              onClick={toggleBan}
+              className="user-for-page-btn user-for-page-btn-danger"
+              style={{ marginTop: "16px", width: "100%" }}
+            >
+              {user.status === "active" ? "Ban user" : "Unban user"}
+            </button>
+          )}
         </div>
-
-        {isAdmin && !isMentor && (
-          <button
-            onClick={toggleBan}
-            style={{
-              position: "absolute",
-              bottom: "16px",
-              right: "16px",
-              backgroundColor: "#dc3545",
-              border: "none",
-              color: "#fff",
-              padding: "10px 20px",
-              borderRadius: "6px",
-              cursor: "pointer",
-              fontWeight: "bold"
-            }}
-          >
-            {user.status === "active" ? "Ban user" : "Unban user"}
-          </button>
-        )}
       </div>
 
       {showAssigned && (

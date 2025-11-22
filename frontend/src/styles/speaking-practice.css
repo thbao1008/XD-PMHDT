@@ -546,177 +546,6 @@
   background: var(--primary-dark);
 }
 
-/* Tell Me Your Story Styles */
-
-.tell-me-story {
-  padding: 24px;
-  max-width: 900px;
-  margin: 0 auto;
-}
-
-.story-header {
-  margin-bottom: 24px;
-}
-
-.btn-back {
-  padding: 8px 16px;
-  background: #f5f5f5;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  cursor: pointer;
-  margin-bottom: 16px;
-}
-
-.btn-back:hover {
-  background: #e5e5e5;
-}
-
-.story-header h2 {
-  font-size: 28px;
-  color: var(--primary);
-  margin-bottom: 8px;
-}
-
-.story-header p {
-  color: var(--muted);
-}
-
-.story-conversation {
-  display: flex;
-  flex-direction: column;
-  height: calc(100vh - 300px);
-  min-height: 500px;
-}
-
-.messages-container {
-  flex: 1;
-  overflow-y: auto;
-  padding: 16px;
-  background: #f9fafb;
-  border-radius: 12px;
-  margin-bottom: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.message {
-  display: flex;
-  flex-direction: column;
-  max-width: 70%;
-}
-
-.user-message {
-  align-self: flex-end;
-}
-
-.ai-message {
-  align-self: flex-start;
-}
-
-.message-content {
-  padding: 12px 16px;
-  border-radius: 12px;
-  background: white;
-}
-
-.user-message .message-content {
-  background: var(--primary);
-  color: white;
-}
-
-.ai-message .message-content {
-  background: white;
-  border: 1px solid var(--border);
-}
-
-.message-content p {
-  margin: 0;
-  line-height: 1.5;
-}
-
-.message-content audio {
-  margin-top: 8px;
-}
-
-.message-time {
-  font-size: 11px;
-  color: var(--muted);
-  margin-top: 4px;
-  padding: 0 4px;
-}
-
-.story-input {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.text-input-form {
-  display: flex;
-  gap: 8px;
-}
-
-.text-input-form input {
-  flex: 1;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  font-size: 14px;
-}
-
-.text-input-form button {
-  padding: 12px 24px;
-  background: var(--primary);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: 600;
-}
-
-.text-input-form button:hover:not(:disabled) {
-  background: var(--primary-dark);
-}
-
-.text-input-form button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.audio-input {
-  padding: 12px;
-  background: white;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-}
-
-.audio-preview {
-  margin-top: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.btn-send-audio {
-  padding: 8px 16px;
-  background: var(--primary);
-  color: white;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  align-self: flex-start;
-}
-
-.btn-send-audio:hover:not(:disabled) {
-  background: var(--primary-dark);
-}
-
-.btn-send-audio:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
 /* Countdown Styles */
 .countdown-overlay {
   position: fixed;
@@ -776,12 +605,32 @@
 }
 
 .prompt-word.word-highlighted {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  color: white;
+  background-color: #d1fae5;
+  color: #059669;
   font-weight: 600;
-  transform: scale(1.05);
-  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
-  animation: wordHighlight 0.5s ease;
+}
+
+.prompt-word.word-missing {
+  background-color: #fee2e2;
+  color: #dc2626;
+  font-weight: bold;
+}
+
+/* Circular Progress Indicator - Vòng tròn nhỏ quay một vòng */
+@keyframes progressCircleComplete {
+  0% {
+    stroke-dashoffset: 125.66; /* 2 * π * 20 */
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+.time-progress-border {
+  border-width: 4px;
+  border-style: solid;
+  border-color: #10b981;
+  box-sizing: border-box;
 }
 
 @keyframes wordHighlight {

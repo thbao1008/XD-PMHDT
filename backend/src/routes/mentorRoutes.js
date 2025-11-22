@@ -2,6 +2,8 @@
 import express from "express";
 import multer from "multer";
 import * as mentorCtrl from "../controllers/mentorController.js";
+import * as scheduleCtrl from "../controllers/scheduleController.js";
+import * as dashboardCtrl from "../controllers/mentorDashboardController.js";
 
 const router = express.Router();
 const upload = multer({ dest: "uploads/" });
@@ -9,6 +11,11 @@ const upload = multer({ dest: "uploads/" });
 /* -----------------------
    Specific routes first
    ----------------------- */
+
+// Dashboard endpoints (specific paths before generic /:id)
+router.get("/:mentorId/dashboard/stats", dashboardCtrl.getDashboardStats);
+router.get("/:mentorId/dashboard/pending-submissions", dashboardCtrl.getPendingSubmissions);
+router.get("/:mentorId/dashboard/schedules", dashboardCtrl.getSchedules);
 
 // AI endpoints and topic/challenge specific (specific paths before generic /:id)
 router.post("/topics/:topicId/challenges/ai", mentorCtrl.createChallengeAI);
@@ -22,6 +29,9 @@ router.post("/:id/topics", mentorCtrl.createTopic);
 router.delete("/topics/:topicId", mentorCtrl.deleteTopic);
 router.get("/topics/:topicId/challenges", mentorCtrl.getChallengesByTopic);
 router.post("/topics/:topicId/challenges", mentorCtrl.createChallenge);
+// New endpoints for Challenge Creator (without topic)
+router.get("/:mentorId/challenges", mentorCtrl.getChallengesByMentor);
+router.post("/:mentorId/challenges", mentorCtrl.createChallenge);
 router.delete("/challenges/:id", mentorCtrl.deleteChallenge);
 router.put("/challenges/:id", mentorCtrl.updateChallenge);
 
@@ -39,12 +49,12 @@ router.get("/by-user/:userId", mentorCtrl.getMentorByUserId);
 router.get("/:id/learners", mentorCtrl.getLearnersByMentor);
 router.put("/learners/:learnerId/note", mentorCtrl.updateLearnerNote);
 
-// Sessions
-router.get("/:id/sessions", mentorCtrl.getSessions);
-router.post("/:id/sessions", mentorCtrl.addSessionController);
-router.put("/:id/sessions/:sessionId", mentorCtrl.updateSessionController);
-router.delete("/:id/sessions/:sessionId", mentorCtrl.deleteSessionController);
-router.post("/:id/sessions/batch", mentorCtrl.addSessionsBatchController);
+// Schedules (Lịch học mới - thay thế sessions cũ)
+router.get("/:mentorId/schedules", scheduleCtrl.getMentorSchedules);
+router.post("/:mentorId/schedules", scheduleCtrl.createSchedule);
+router.put("/schedules/:scheduleId", scheduleCtrl.updateSchedule);
+router.delete("/schedules/:scheduleId", scheduleCtrl.deleteSchedule);
+router.get("/schedules/:scheduleId", scheduleCtrl.getScheduleById);
 
 // Mentor CRUD (generic id route placed after specific ones)
 router.post("/", mentorCtrl.createMentor);

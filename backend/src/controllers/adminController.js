@@ -7,6 +7,7 @@ import {
   deleteUserInDb,
   toggleUserStatusInDb
 } from "../models/userModel.js";
+import * as learnerService from "../services/learnerService.js";
 
 // Lấy danh sách user (JOIN learners + view + mentor)
 export async function listUsers(req, res) {
@@ -49,7 +50,17 @@ export async function getUser(req, res) {
     lp.expiry_date,
     lp.days_left,
     mu.id AS mentor_id,
-    mu.name AS mentor_name
+    mu.name AS mentor_name,
+    m.id AS mentor_mentor_id,
+    m.rating AS mentor_rating,
+    COALESCE(
+      (SELECT AVG(average_score) 
+       FROM practice_history 
+       WHERE learner_id = l.id 
+         AND practice_type = 'speaking_practice' 
+         AND average_score IS NOT NULL),
+      0
+    ) AS learner_average_score
   FROM users u
   LEFT JOIN learners l ON l.user_id = u.id
   LEFT JOIN learner_package_view lp ON lp.learner_id = l.id
@@ -57,6 +68,18 @@ export async function getUser(req, res) {
   LEFT JOIN users mu ON m.user_id = mu.id
   WHERE u.id = $1
     `, [id]);
+    
+    // Nếu là mentor, lấy thêm rating
+    if (result.rows.length > 0 && result.rows[0].role?.toUpperCase() === "MENTOR") {
+      const mentorRes = await pool.query(`
+        SELECT m.rating
+        FROM mentors m
+        WHERE m.user_id = $1
+      `, [id]);
+      if (mentorRes.rows.length > 0) {
+        result.rows[0].mentor_rating = mentorRes.rows[0].rating;
+      }
+    }
 
     if (result.rows.length === 0) {
       return res.status(404).json({ success: false, message: "Not found" });
@@ -174,7 +197,6 @@ export async function deleteUser(req, res) {
 export async function toggleUserStatus(req, res) {
   try {
     const { id } = req.params;
-``
     // Đổi trạng thái user
     const updated = await toggleUserStatusInDb(id);
     if (!updated) return res.status(404).json({ success: false, message: "Not found" });
@@ -204,10 +226,106 @@ export async function toggleUserStatus(req, res) {
       }
     }
 
+    // Nếu là mentor bị ban → giải phóng learners và chia đều
+    if (updated.role === "mentor" && updated.status === "banned") {
+      try {
+        // Lấy mentor_id từ user_id
+        const mentorRes = await pool.query(
+          "SELECT id FROM mentors WHERE user_id = $1",
+          [updated.id]
+        );
+        if (mentorRes.rows.length > 0) {
+          const mentorId = mentorRes.rows[0].id;
+          const result = await learnerService.handleMentorBanned(mentorId);
+          console.log(`✅ Đã xử lý mentor bị ban: ${result.reassignedCount}/${result.totalLearners} learners được gán lại`);
+        }
+      } catch (err) {
+        console.error("❌ Lỗi khi xử lý mentor bị ban:", err);
+        // Không throw error để không block việc ban mentor
+      }
+    }
+
     const { password, ...safe } = updated;
     return res.json({ success: true, user: safe });
   } catch (err) {
     console.error("toggleUserStatus error - adminController.js:210", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+}
+
+// Xóa learner khỏi mentor (ban user, set mentor_id = NULL, KHÔNG xóa lịch sử)
+export async function removeLearnerFromMentor(req, res) {
+  try {
+    const { learnerId, mentorId } = req.body;
+    if (!learnerId || !mentorId) {
+      return res.status(400).json({ success: false, message: "Thiếu learnerId hoặc mentorId" });
+    }
+
+    const result = await learnerService.removeLearnerFromMentor(
+      parseInt(learnerId),
+      parseInt(mentorId)
+    );
+    return res.json({ success: true, message: "Đã xóa learner khỏi mentor và ban tạm thời" });
+  } catch (err) {
+    console.error("removeLearnerFromMentor error - adminController.js", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+}
+
+// Đổi mentor cho learner (tự động chọn mentor mới)
+export async function changeLearnerMentor(req, res) {
+  try {
+    const { learnerId } = req.body;
+    if (!learnerId) {
+      return res.status(400).json({ success: false, message: "Thiếu learnerId" });
+    }
+
+    // Lấy mentor cũ
+    const learnerRes = await pool.query(
+      "SELECT mentor_id FROM learners WHERE id=$1",
+      [parseInt(learnerId)]
+    );
+    if (!learnerRes.rows[0]) {
+      return res.status(404).json({ success: false, message: "Learner not found" });
+    }
+    const oldMentorId = learnerRes.rows[0].mentor_id;
+
+    const result = await learnerService.changeMentor(
+      parseInt(learnerId),
+      oldMentorId
+    );
+    
+    if (result.newMentorId) {
+      return res.json({ 
+        success: true, 
+        message: "Đã đổi mentor thành công",
+        newMentorId: result.newMentorId
+      });
+    } else {
+      return res.json({ 
+        success: true, 
+        message: "Đã xóa mentor cũ, nhưng không có mentor nào có sẵn để gán",
+        newMentorId: null
+      });
+    }
+  } catch (err) {
+    console.error("changeLearnerMentor error - adminController.js", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+}
+
+// Lấy danh sách mentors có sẵn để gán
+export async function getAvailableMentors(req, res) {
+  try {
+    const { learnerId } = req.params;
+    if (!learnerId) {
+      return res.status(400).json({ success: false, message: "Thiếu learnerId" });
+    }
+
+    const mentors = await learnerService.getAvailableMentorsForLearner(parseInt(learnerId));
+    return res.json({ success: true, mentors });
+  } catch (err) {
+    console.error("getAvailableMentors error - adminController.js", err);
     return res.status(500).json({ success: false, message: "Server error" });
   }
 }

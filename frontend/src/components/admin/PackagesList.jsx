@@ -2,6 +2,7 @@
 import api from "../../api";
 import Modal from "../common/Modal.jsx";
 import { FiPlus, FiTrash2, FiEdit } from "react-icons/fi";
+import "../../styles/admin-packages.css";
 
 export default function PackagesList() {
   const [packages, setPackages] = useState([]);
@@ -73,7 +74,7 @@ export default function PackagesList() {
   };
 
   return (
-    <div className="panel">
+    <div className="panel packages-list">
       <h2>Danh sách Gói học</h2>
       <button
         className="btn btn-primary"

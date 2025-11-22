@@ -76,7 +76,7 @@ export default function ChallengeDetail({ id, learnerId, onClose = () => {} }) {
     if (submission.mentor_review) {
       return (
         <span className="challenge-status-pill success">
-          <FiUserCheck /> Mentor: {submission.mentor_review.final_score}/10
+          <FiUserCheck /> Mentor: {(submission.mentor_review.final_score / 10).toFixed(1)}/10
         </span>
       );
     }
@@ -493,6 +493,7 @@ return (
   <div className="challenge-detail-page">
     <div className="challenge-header">
       <div className="header-left">
+        <h2 className="challenge-title">{challenge.title ?? "Challenge"}</h2>
         <span className="badge">{challenge.level ?? "-"}</span>
         {challenge.mentor_name && (
           <span
@@ -504,6 +505,22 @@ return (
         )}
       </div>
       <div className="header-right">
+        {!showSubmit && !selectedSubmission && learnerId && (
+          <button
+            className="btn-primary"
+            disabled={isSubmitButtonLocked}
+            onClick={() => {
+              if (isSubmitButtonLocked) return;
+              setSubmitButtonLocked(true);
+              setShowSubmit(true);
+              setShowHistory(false);
+              setSelectedSubmission(null);
+            }}
+            style={{ marginRight: "8px" }}
+          >
+            {isSubmitButtonLocked ? "Đang xử lý..." : "Nộp bài"}
+          </button>
+        )}
         <button className="btn-ghost" onClick={onClose}>Đóng</button>
       </div>
     </div>
@@ -596,9 +613,9 @@ return (
                     {selectedSubmission.mentor_review ? (
                       <div className="text-sm">
                         <div className="score-grid">
-                          <div><span className="label">Điểm tổng</span><div className="value">{selectedSubmission.mentor_review.final_score ?? "—"}/10</div></div>
-                          <div><span className="label">Phát âm</span><div className="value">{selectedSubmission.mentor_review.pronunciation_score ?? "—"}/10</div></div>
-                          <div><span className="label">Trôi chảy</span><div className="value">{selectedSubmission.mentor_review.fluency_score ?? "—"}/10</div></div>
+                          <div><span className="label">Điểm tổng</span><div className="value">{selectedSubmission.mentor_review.final_score ? (selectedSubmission.mentor_review.final_score / 10).toFixed(1) : "—"}/10</div></div>
+                          <div><span className="label">Phát âm</span><div className="value">{selectedSubmission.mentor_review.pronunciation_score ? (selectedSubmission.mentor_review.pronunciation_score / 10).toFixed(1) : "—"}/10</div></div>
+                          <div><span className="label">Trôi chảy</span><div className="value">{selectedSubmission.mentor_review.fluency_score ? (selectedSubmission.mentor_review.fluency_score / 10).toFixed(1) : "—"}/10</div></div>
                         </div>
                         {(() => {
                           // Normalize audio_url - có thể là relative path hoặc full URL
@@ -666,21 +683,6 @@ return (
           <div className="info-card">
             <h3 className="info-title">{challenge.title ?? "Thông tin challenge"}</h3>
             <div className="info-content" dangerouslySetInnerHTML={{ __html: challenge.long_description ?? challenge.description ?? "" }} />
-            <div className="info-actions">
-              <button
-                className="btn-primary"
-                disabled={isSubmitButtonLocked}
-                onClick={() => {
-                  if (isSubmitButtonLocked) return;
-                  setSubmitButtonLocked(true);
-                  setShowSubmit(true);
-                  setShowHistory(false);
-                  setSelectedSubmission(null);
-                }}
-              >
-                {isSubmitButtonLocked ? "Đang xử lý..." : "Nộp bài"}
-              </button>
-            </div>
           </div>
         )}
       </div>

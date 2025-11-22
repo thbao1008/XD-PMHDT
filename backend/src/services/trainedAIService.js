@@ -7,6 +7,7 @@ import * as aiService from "./aiService.js";
 import { spawn } from "child_process";
 import path from "path";
 import { promisify } from "util";
+import { findPythonExecutable } from "../utils/whisperxRunner.js";
 
 /**
  * Gọi Python trainer để tạo training data trước khi gọi OpenRouter
@@ -46,13 +47,22 @@ async function getTrainingDataFromPython(trainingType, options = {}) {
         };
       }
       
+      // Tự động tìm Python executable (giống như whisperxRunner)
+      const pythonCmd = findPythonExecutable();
+      console.log(`[trainedAIService] Using Python command: ${pythonCmd}`);
+      
+      // Nếu pythonCmd có flag (như "py -3"), split ra
+      const [pythonExec, ...pythonFlags] = pythonCmd.split(' ');
+      const finalArgs = [...pythonFlags, trainerPath];
+      
       // Spawn Python process với stdin và set UTF-8 encoding
-      const pythonProcess = spawn('python', [trainerPath], {
+      const pythonProcess = spawn(pythonExec, finalArgs, {
         stdio: ['pipe', 'pipe', 'pipe'],
-        shell: true,
+        shell: process.platform === 'win32', // Windows cần shell để tìm py launcher
         env: {
           ...process.env,
-          PYTHONIOENCODING: 'utf-8'
+          PYTHONIOENCODING: 'utf-8',
+          PYTHONUTF8: '1'
         }
       });
       
@@ -75,7 +85,17 @@ async function getTrainingDataFromPython(trainingType, options = {}) {
         }
         
         try {
-          const result = JSON.parse(stdout);
+          // Extract JSON from stdout (Python may output debug messages before JSON)
+          // Find the first '{' and last '}' to extract the JSON object
+          const firstBrace = stdout.indexOf('{');
+          const lastBrace = stdout.lastIndexOf('}');
+          
+          if (firstBrace === -1 || lastBrace === -1 || firstBrace >= lastBrace) {
+            throw new Error("No valid JSON found in Python output");
+          }
+          
+          const jsonString = stdout.substring(firstBrace, lastBrace + 1);
+          const result = JSON.parse(jsonString);
           resolve(result);
         } catch (err) {
           console.error("❌ Error parsing Python output:", err);
@@ -190,28 +210,77 @@ RANDOMIZATION PARAMETERS (Critical for diversity):
     const enhancedTemperature = Math.min(1.2, baseTemperature + 0.1);
     
     // Gọi OpenRouter với trained messages và enhanced sampling
-    const response = await aiService.callOpenRouter(
-      trainedMessages,
-      {
-        model: aiOpts.model || 'openai/gpt-4o-mini',
-        temperature: enhancedTemperature,
-        max_tokens: aiOpts.max_tokens || (trainingData.config?.max_tokens || 250),
-        top_p: 0.95, // Nucleus sampling để tăng đa dạng
-        frequency_penalty: 0.5, // Penalty cho repetition
-        presence_penalty: 0.5 // Penalty cho presence của từ đã dùng
+    let maxTokens = aiOpts.max_tokens || (trainingData.config?.max_tokens || (trainingType === 'quick_analysis' ? 500 : 250));
+    
+    try {
+      const response = await aiService.callOpenRouter(
+        trainedMessages,
+        {
+          model: aiOpts.model || 'openai/gpt-4o-mini',
+          temperature: enhancedTemperature,
+          max_tokens: maxTokens,
+          top_p: 0.95, // Nucleus sampling để tăng đa dạng
+          frequency_penalty: 0.5, // Penalty cho repetition
+          presence_penalty: 0.5 // Penalty cho presence của từ đã dùng
+        }
+      );
+      
+      // Log để debug
+      console.log(`🎲 Generated topic with seed: ${randomSeed}, temperature: ${enhancedTemperature}`);
+      
+      return response;
+    } catch (err) {
+      // Xử lý lỗi payment required (402) - tự động giảm max_tokens và retry
+      if (err.status === 402 && err.code === 'PAYMENT_REQUIRED' && err.maxAffordableTokens) {
+        console.warn(`⚠️ Payment required. Retrying with reduced max_tokens: ${err.maxAffordableTokens}`);
+        
+        // Retry với max_tokens giảm xuống (trừ 10 để đảm bảo an toàn)
+        const reducedTokens = Math.max(50, err.maxAffordableTokens - 10);
+        
+        try {
+          const retryResponse = await aiService.callOpenRouter(
+            trainedMessages,
+            {
+              model: aiOpts.model || 'openai/gpt-4o-mini',
+              temperature: enhancedTemperature,
+              max_tokens: reducedTokens,
+              top_p: 0.95,
+              frequency_penalty: 0.5,
+              presence_penalty: 0.5
+            }
+          );
+          
+          console.log(`✅ Retry successful with max_tokens: ${reducedTokens}`);
+          return retryResponse;
+        } catch (retryErr) {
+          console.error("❌ Retry failed:", retryErr);
+          // Nếu retry vẫn fail, fallback về direct call hoặc throw error
+          if (messages) {
+            try {
+              return await aiService.callOpenRouter(messages, { ...aiOpts, max_tokens: reducedTokens });
+            } catch (fallbackErr) {
+              console.error("❌ Fallback also failed:", fallbackErr);
+              throw err; // Throw original error
+            }
+          }
+          throw err;
+        }
       }
-    );
-    
-    // Log để debug
-    console.log(`🎲 Generated topic with seed: ${randomSeed}, temperature: ${enhancedTemperature}`);
-    
-    return response;
-  } catch (err) {
-    console.error("❌ Error in callTrainedAI:", err);
-    // Fallback về direct call nếu có messages
-    if (messages) {
-      return await aiService.callOpenRouter(messages, aiOpts);
+      
+      // Xử lý các lỗi khác
+      console.error("❌ Error in callTrainedAI:", err);
+      // Fallback về direct call nếu có messages
+      if (messages) {
+        try {
+          return await aiService.callOpenRouter(messages, aiOpts);
+        } catch (fallbackErr) {
+          throw err; // Throw original error nếu fallback cũng fail
+        }
+      }
+      throw err;
     }
+  } catch (err) {
+    console.error("❌ Error in callTrainedAI (outer catch):", err);
     throw err;
   }
 }

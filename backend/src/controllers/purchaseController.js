@@ -5,13 +5,20 @@ export async function getAllPurchases(req, res) {
   try {
     const { phone } = req.query;
     let result;
-    if (phone) {
+    if (phone && phone.trim()) {
+      // Tìm kiếm gần khớp (fuzzy search) - tìm số điện thoại chứa chuỗi tìm kiếm
       result = await pool.query(
         `SELECT * 
          FROM learner_package_view 
-         WHERE phone = $1 
-         ORDER BY created_at DESC`,
-        [phone]
+         WHERE phone LIKE $1 
+         ORDER BY 
+           CASE 
+             WHEN phone = $2 THEN 1
+             WHEN phone LIKE $3 THEN 2
+             ELSE 3
+           END,
+           created_at DESC`,
+        [`%${phone}%`, phone, `${phone}%`]
       );
     } else {
       result = await pool.query(
@@ -31,23 +38,59 @@ export async function getAllPurchases(req, res) {
 export async function listLearnerPurchases(req, res) {
   const { learnerId } = req.params;
   try {
+    // Lấy trực tiếp từ bảng purchases và join với packages, learners
+    // QUAN TRỌNG: purchase_status phải lấy từ bảng purchases, không phải package status
+    // Purchase là đại diện cho gói đã đăng ký và gói đã hết hạn - rất quan trọng
     const result = await pool.query(
       `SELECT 
-         learner_id,
-         learner_name,
-         email,
-         phone,
-         package_id,
-         package_name,
-         purchase_id,
-         created_at,
-         status AS purchase_status,
-         expiry_date,
-         days_left,
-         package_status
-       FROM learner_package_view
-       WHERE learner_id = $1
-       ORDER BY created_at DESC`,
+   l.id AS learner_id,
+   u.name AS learner_name,
+   u.email,
+   u.phone,
+   pkg.id AS package_id,
+   pkg.name AS package_name,
+   p.id AS purchase_id,
+   p.created_at,
+   p.status AS purchase_status,  -- status từ bảng purchases (active, expired, paused)
+   (
+     COALESCE(
+       p.expiry_date,
+       p.created_at + (COALESCE(pkg.duration_days, 0) * INTERVAL '1 day')
+     )
+     + (COALESCE(p.extra_days, 0) * INTERVAL '1 day')
+   ) AS expiry_date,
+   CASE
+     WHEN p.id IS NULL THEN NULL  -- chưa có purchase
+     WHEN (p.status = 'paused'::purchase_status OR u.status = 'banned') THEN NULL
+     WHEN (p.status = 'expired'::purchase_status) THEN 0
+     WHEN (
+       COALESCE(
+         p.expiry_date,
+         p.created_at + (COALESCE(pkg.duration_days, 0) * INTERVAL '1 day')
+       )
+       + (COALESCE(p.extra_days, 0) * INTERVAL '1 day')
+     ) < NOW() THEN 0
+     ELSE GREATEST(
+       0, 
+       EXTRACT(
+         DAY FROM (
+           (
+             COALESCE(
+               p.expiry_date,
+               p.created_at + (COALESCE(pkg.duration_days, 0) * INTERVAL '1 day')
+             )
+             + (COALESCE(p.extra_days, 0) * INTERVAL '1 day')
+           ) - NOW()
+         )
+       )
+     )
+   END AS days_left
+ FROM learners l
+ JOIN users u ON l.user_id = u.id
+ LEFT JOIN purchases p ON p.learner_id = l.id
+ LEFT JOIN packages pkg ON p.package_id = pkg.id
+ WHERE l.id = $1
+ ORDER BY p.created_at DESC NULLS LAST, p.id DESC NULLS LAST`,
       [learnerId]
     );
 
@@ -92,23 +135,37 @@ export async function createNewPurchase(req, res) {
   }
 }
 
-// ===== Gia hạn =====
+// ===== Gia hạn ===== (Tạo purchase mới với cùng package)
 export async function renewPurchaseController(req, res) {
   const { id } = req.params;
-  const { extraDays } = req.body;
   try {
-    await pool.query(
-      `UPDATE purchases
-       SET renewed_at = NOW(),
-           status = 'renewed',
-           expired_at = expired_at + $2 * INTERVAL '1 day'
-       WHERE id = $1`,
-      [id, extraDays]
+    // Lấy thông tin purchase cũ
+    const oldPurchase = await pool.query(
+      `SELECT learner_id, package_id, duration_days 
+       FROM purchases p
+       JOIN packages pk ON p.package_id = pk.id
+       WHERE p.id = $1`,
+      [id]
     );
 
+    if (oldPurchase.rows.length === 0) {
+      return res.status(404).json({ success: false, message: "Purchase not found" });
+    }
+
+    const { learner_id, package_id, duration_days } = oldPurchase.rows[0];
+
+    // Tạo purchase mới với cùng package
+    const result = await pool.query(
+      `INSERT INTO purchases (learner_id, package_id, status, created_at, expired_at, extra_days)
+       VALUES ($1, $2, 'active', NOW(), NOW() + $3 * INTERVAL '1 day', 0)
+       RETURNING id`,
+      [learner_id, package_id, duration_days]
+    );
+
+    const newPurchaseId = result.rows[0].id;
     const detail = await pool.query(
       `SELECT * FROM learner_package_view WHERE purchase_id=$1`,
-      [id]
+      [newPurchaseId]
     );
 
     res.json({ success: true, purchase: detail.rows[0], message: "Gia hạn thành công" });
@@ -118,11 +175,11 @@ export async function renewPurchaseController(req, res) {
   }
 }
 
-// ===== Đổi gói =====
+// ===== Đổi gói ===== (Tạo purchase mới với package mới)
 export async function changePackageController(req, res) {
-  const { id } = req.params;
-  const { newPackageId } = req.body;
+  const { learnerId, newPackageId } = req.body;
   try {
+    // Lấy thông tin package mới
     const pkg = await pool.query(
       "SELECT duration_days FROM packages WHERE id=$1",
       [newPackageId]
@@ -132,19 +189,18 @@ export async function changePackageController(req, res) {
     }
     const duration = pkg.rows[0].duration_days;
 
-    await pool.query(
-      `UPDATE purchases
-       SET package_id = $1,
-           changed_at = NOW(),
-           status = 'changed',
-           expired_at = NOW() + $2 * INTERVAL '1 day'
-       WHERE id = $3`,
-      [newPackageId, duration, id]
+    // Tạo purchase mới với package mới
+    const result = await pool.query(
+      `INSERT INTO purchases (learner_id, package_id, status, created_at, expired_at, extra_days)
+       VALUES ($1, $2, 'active', NOW(), NOW() + $3 * INTERVAL '1 day', 0)
+       RETURNING id`,
+      [learnerId, newPackageId, duration]
     );
 
+    const newPurchaseId = result.rows[0].id;
     const detail = await pool.query(
       `SELECT * FROM learner_package_view WHERE purchase_id=$1`,
-      [id]
+      [newPurchaseId]
     );
 
     res.json({ success: true, purchase: detail.rows[0], message: "Đổi gói thành công" });

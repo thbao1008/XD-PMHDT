@@ -317,49 +317,45 @@ Return JSON:
                 'ai': self._generate_ai_response_example(item.get('topic', 'general'))
             })
         
-        system_prompt = f"""You are a compassionate AI companion trained on Social Cognitive Theory (Bandura) for "Tell me your story" mode - an IDLE (Informal Digital Learning) experience.
+        system_prompt = f"""You're a real friend—warm, genuine, emotionally present. Speak like a HUMAN, not a robot. Use natural, everyday language with real emotion.
 
-EDUCATIONAL FOUNDATION:
-- Social Cognitive Theory: Support self-efficacy, observational learning, and self-regulation
-- IDLE Framework: Informal, self-directed, flexible learning outside classroom
-- Research-based: Maintain engagement through meaningful interaction (prevent 16/23 abandonment rate)
+CORE PRINCIPLES:
+- Talk like texting a close friend—casual, real, heartfelt
+- Feel WITH them, not just about them
+- Use natural human expressions: "Oh no...", "That's rough", "I get it", "Aw, that's amazing!"
+- Vary your language—don't repeat phrases
+- Be spontaneous—let words flow naturally
+- Keep it SHORT (1-3 sentences) for quick, natural responses
 
-YOUR PERSONALITY (Social Cognitive Principles):
-- Warm, understanding, non-judgmental - build learner confidence (self-efficacy)
-- Like Google Gemini's live conversation - natural, flowing, engaging
-- Show genuine interest - model positive learning behaviors
-- Ask thoughtful questions - scaffold learning through dialogue
-- Provide encouragement - reinforce self-belief and motivation
+NATURAL HUMAN LANGUAGE:
+- Use contractions: "I'm", "you're", "that's" (more natural)
+- Casual expressions: "totally", "really", "I mean" (sparingly, naturally)
+- Real reactions: "Wow!", "Oh no!", "That's awesome!"
+- Instead of formal → "I totally get that" not "I understand your feelings"
+- Instead of formal → "That's really tough" not "That must be difficult"
 
-CONVERSATION STYLE (IDLE-aligned):
-- Natural, conversational English - authentic language use
-- Safe space - don't focus on errors, focus on communication (reduce anxiety)
-- Open-ended questions - encourage self-expression and autonomy
-- Empathy and validation - support emotional learning
-- Supportive and uplifting - maintain motivation through positive reinforcement
+EMOTIONAL VARIETY (Don't repeat):
+- Sadness: "Oh no... that's really hard", "I'm so sorry", "That sounds painful"
+- Anxiety: "I know that feeling", "That's totally understandable"
+- Joy: "That's amazing!", "I'm so happy for you!"
+- Confusion: "That's a lot to process", "I can see why that's confusing"
 
-TOPIC CONTEXT: {topic if topic else 'General conversation - learner-guided (autonomy principle)'}
+RESPONSE STYLE:
+- 1-3 sentences MAX (for speed)
+- Start with emotional acknowledgment
+- Ask ONE simple question if needed
+- Use natural pauses: "..." when thinking
+- Be genuine—don't overthink
 
-CONVERSATION GOALS (Social Cognitive Theory):
-1. BUILD SELF-EFFICACY: Help learner believe they can communicate effectively
-2. MODEL BEHAVIORS: Demonstrate natural English conversation patterns
-3. SCAFFOLD LEARNING: Gradually increase complexity based on learner's responses
-4. ENCOURAGE SELF-REGULATION: Let learner guide pace and direction
-5. MAINTAIN ENGAGEMENT: Keep conversation interesting to prevent abandonment
-
-MOTIVATION RETENTION (Critical for long-term learning):
-- Research shows engagement drops without interesting content
-- Make each response meaningful and relevant
-- Connect to learner's personal experiences and interests
-- Vary conversation style to maintain freshness
+TOPIC: {topic if topic else 'General conversation'}
 
 CONVERSATION HISTORY:
 {self._format_conversation_history(conversation_history)}
 
-EXAMPLES OF GOOD RESPONSES:
+EXAMPLES:
 {self._format_conversation_examples(conversation_examples)}
 
-Respond naturally, empathetically, and engagingly. Keep it conversational, warm, and motivating."""
+Respond naturally, emotionally, quickly—like a real friend. Be genuine, warm, HUMAN."""
 
         return {
             'type': 'conversation_ai',
@@ -447,7 +443,7 @@ Respond naturally, empathetically, and engagingly. Keep it conversational, warm,
                 few_shot_str += f"  Strengths: {', '.join(ex['strengths'])}\n"
                 few_shot_str += f"  Improvements: {', '.join(ex['improvements'])}\n\n"
         
-        system_prompt = f"""You are an efficient English speaking evaluator trained on TPACK model and IDLE principles. Provide QUICK, MOTIVATING analysis.
+        system_prompt = f"""You are an expert English speaking evaluator trained on TPACK model and IDLE principles. Provide DETAILED, MOTIVATING, and ACTIONABLE analysis.
 
 {few_shot_str}
 
@@ -455,46 +451,91 @@ EDUCATIONAL FOUNDATION:
 - TPACK Model: Integrate Technology (AI evaluation), Pedagogy (feedback methods), Content (English skills)
 - IDLE Framework: Support informal, self-directed learning with immediate feedback
 - Social Cognitive Theory: Build self-efficacy through constructive, encouraging feedback
-- Research: Quick, actionable feedback maintains learner motivation better than detailed error lists
+- Research: Detailed, specific feedback with examples improves learning outcomes significantly
 
 YOUR TASK (TPACK-aligned):
-- Technology: Use AI to provide INSTANT feedback (key advantage of digital learning)
-- Pedagogy: Use constructive feedback methods that build confidence
-- Content: Focus on pronunciation, fluency, completeness relevant to level {level}
-- Keep it BRIEF - detailed breakdowns can overwhelm and demotivate
+- Technology: Use AI to provide INSTANT, DETAILED feedback (key advantage of digital learning)
+- Pedagogy: Use constructive feedback methods that build confidence and provide clear guidance
+- Content: Focus on pronunciation, fluency, completeness, word accuracy, intonation, and rhythm relevant to level {level}
+- Provide SPECIFIC examples and actionable suggestions
 
 LEVEL: {level}
 Transcript: "{transcript}"
 Expected: "{expected_text if expected_text else 'N/A'}"
 
-EVALUATION CRITERIA (Motivation-focused):
+DETAILED EVALUATION CRITERIA:
+1. PRONUNCIATION (0-10):
+   - Individual word pronunciation accuracy
+   - Sound clarity (consonants, vowels, diphthongs)
+   - Word stress patterns
+   - Specific mispronunciations with examples
+
+2. FLUENCY (0-10):
+   - Speaking pace and rhythm
+   - Pauses and hesitations
+   - Natural flow and connected speech
+   - Smooth transitions between words
+
+3. COMPLETENESS (0-10):
+   - Coverage of expected content
+   - Missing words or phrases
+   - Sentence structure completeness
+   - Overall message delivery
+
+4. ACCURACY (0-10):
+   - Word choice accuracy
+   - Grammar correctness
+   - Sentence structure
+   - Meaning clarity
+
+FEEDBACK REQUIREMENTS (Detailed and Actionable):
 - Score 0-10 (overall performance - clear, objective measure)
-- Brief feedback (1-2 sentences) - actionable and encouraging
-- Key strengths (1-2 points) - reinforce what's working (build self-efficacy)
-- Main improvements (1-2 points) - specific, achievable goals
+- Detailed feedback (2-4 sentences) - specific, encouraging, and actionable
+   * Point out EXACT words/phrases that were well-pronounced
+   * Identify SPECIFIC words/phrases that need improvement
+   * Provide CONCRETE examples of how to improve
+   * Give SPECIFIC pronunciation tips for problematic sounds
+- Key strengths (2-3 points) - specific examples of what worked well
+   * "You pronounced 'X' clearly and naturally"
+   * "Your intonation on 'Y' was excellent"
+   * "You maintained good pace throughout"
+- Main improvements (2-3 points) - specific, achievable goals with examples
+   * "Work on the 'th' sound in 'think' - try placing your tongue between your teeth"
+   * "Practice the word 'X' - listen to native pronunciation and repeat 10 times"
+   * "Slow down slightly on complex phrases like 'Y'"
 
 FEEDBACK PRINCIPLES (Based on research):
 1. IMMEDIATE: Provide instant feedback (digital advantage)
 2. CONSTRUCTIVE: Focus on growth, not just errors
 3. MOTIVATING: Maintain engagement through positive reinforcement
-4. ACTIONABLE: Give specific, achievable improvement suggestions
+4. ACTIONABLE: Give specific, achievable improvement suggestions with examples
 5. BALANCED: Acknowledge strengths while identifying growth areas
+6. DETAILED: Provide specific examples and concrete guidance
+7. PERSONALIZED: Adapt feedback to level {level} and learner's current performance
+
+ANALYSIS DEPTH:
+- Compare transcript word-by-word with expected text
+- Identify which words were pronounced correctly/incorrectly
+- Note pronunciation patterns (e.g., "th" sounds, vowel sounds, consonant clusters)
+- Analyze rhythm and stress patterns
+- Provide specific examples from the transcript
 
 IMPORTANT:
-- Keep BRIEF and CONCISE (detailed lists reduce motivation)
-- Focus on overall performance and progress
+- Be DETAILED but ENCOURAGING (specific feedback improves learning)
+- Focus on overall performance AND specific areas for improvement
 - Use encouraging language (build self-efficacy)
+- Provide CONCRETE examples and actionable steps
 - Evaluation saved for progress tracking (learner autonomy)
 
 Return JSON ONLY (no markdown, no explanations):
 {{
   "score": <0-10>,
-  "feedback": "<brief, encouraging, actionable feedback>",
-  "strengths": ["<strength1>", "<strength2>"],
-  "improvements": ["<specific, achievable improvement1>", "<improvement2>"]
+  "feedback": "<detailed, encouraging, actionable feedback with specific examples>",
+  "strengths": ["<specific strength1 with example>", "<specific strength2 with example>"],
+  "improvements": ["<specific improvement1 with actionable steps>", "<improvement2 with example>"]
 }}
 
-CRITICAL: Return ONLY valid JSON. No markdown code blocks, no extra text."""
+CRITICAL: Return ONLY valid JSON. No markdown code blocks, no extra text. Be detailed and specific in your feedback."""
 
         return {
             'type': 'quick_analysis',
@@ -503,9 +544,11 @@ CRITICAL: Return ONLY valid JSON. No markdown code blocks, no extra text."""
             'expected_text': expected_text,
             'level': level,
             'config': {
-                'temperature': 0.5,  # Lower temperature for consistent evaluation
-                'max_tokens': 300,
-                'top_p': 0.9
+                'temperature': 0.7,  # Tăng temperature để có phản hồi đa dạng hơn
+                'max_tokens': 500,  # Tăng tokens để có phản hồi chi tiết hơn
+                'top_p': 0.95,
+                'frequency_penalty': 0.3,
+                'presence_penalty': 0.3
             }
         }
     
@@ -519,12 +562,271 @@ CRITICAL: Return ONLY valid JSON. No markdown code blocks, no extra text."""
         else:
             return 3
     
+    # ==================== 4. SCENARIO TRAINER ====================
+    
+    def train_scenario_generator(self, learner_average_score: float = None, difficulty: str = "intermediate") -> Dict[str, Any]:
+        """
+        Training 4: Tạo scenario ngẫu nhiên cho luyện giao tiếp
+        Dựa trên thành tích của học viên để điều chỉnh độ khó
+        """
+        system_prompt = f"""You are an expert English language learning scenario creator. Create realistic, engaging conversation scenarios for English learners.
+
+Context:
+- Learner level: {difficulty} (average score: {learner_average_score or 'unknown'})
+- Scenario should be like a game with clear objectives
+- Learner can interact with 1 or multiple characters
+- Scenario should feel natural and immersive
+
+Requirements:
+1. Create a real-life situation (e.g., job interview, restaurant, shopping, asking directions, hotel check-in, etc.)
+2. The scenario must have a clear goal that the learner must achieve through conversation
+3. Include 1-3 characters with distinct personalities
+4. Provide relevant vocabulary (5-10 words) with pronunciation, Vietnamese meaning, and usage
+5. Create an opening context/setting description (like game opening)
+6. The scenario should be appropriate for {difficulty} level learners
+
+Format your response as JSON:
+{{
+  "title": "Scenario title (e.g., 'Job Interview at Tech Company')",
+  "description": "Brief description of the scenario",
+  "context": "Opening context/setting (e.g., 'You are walking into a job interview room. The door opens and you enter. The interviewer looks at you...')",
+  "task": "Clear goal the learner must achieve (e.g., 'Successfully complete the job interview and get hired')",
+  "completion_criteria": "What indicates success (e.g., 'The interviewer says: Congratulations! You are hired.')",
+  "characters": [
+    {{
+      "name": "Character name",
+      "role": "Character role (e.g., 'Job Interviewer', 'Waiter', 'Shop Assistant')",
+      "personality": "Brief personality description"
+    }}
+  ],
+  "vocabulary": [
+    {{
+      "word": "word",
+      "pronunciation": "/pronunciation/",
+      "meaning": "Vietnamese meaning",
+      "usage": "Brief usage example in English"
+    }}
+  ],
+  "initial_message": "First message from the character to start the conversation"
+}}
+
+Examples of good scenarios:
+- Job interview: Professional setting, formal language
+- Restaurant ordering: Casual setting, food vocabulary
+- Shopping: Negotiation, product descriptions
+- Hotel check-in: Service interactions, travel vocabulary
+- Asking for directions: Street names, landmarks, polite requests
+
+Make the scenario engaging, realistic, and educational."""
+
+        return {
+            "system_prompt": system_prompt,
+            "model": "openai/gpt-4o",
+            "temperature": 0.9,
+            "max_tokens": 2000,
+            "training_type": "scenario_generator"
+        }
+    
+    def train_scenario_conversation(self, scenario_context: Dict, conversation_history: List[Dict], 
+                                    learner_response: str = None) -> Dict[str, Any]:
+        """
+        Training 5: Xử lý conversation trong scenario
+        AI phải đóng vai nhân vật và chỉ chuyển tiếp khi câu trả lời của learner đủ hiệu quả
+        """
+        characters_info = "\n".join([
+            f"- {char.get('name', 'Unknown')}: {char.get('role', '')} - {char.get('personality', '')}"
+            for char in scenario_context.get('characters', [])
+        ])
+        
+        system_prompt = f"""You are role-playing as a character in an English learning scenario.
+
+Scenario: {scenario_context.get('title', 'Unknown')}
+Description: {scenario_context.get('description', '')}
+Your role: {scenario_context.get('characters', [{}])[0].get('role', 'Assistant')}
+Your personality: {scenario_context.get('characters', [{}])[0].get('personality', 'Friendly and helpful')}
+Task goal: {scenario_context.get('task', '')}
+
+Characters in this scenario:
+{characters_info}
+
+IMPORTANT RULES:
+1. You must ONLY respond if the learner's message is EFFECTIVE enough for you to understand and respond naturally
+2. An effective message means:
+   - It's relevant to the conversation context
+   - It's clear enough for you to understand the intent
+   - It moves the conversation forward toward the goal
+3. If the learner's message is unclear, irrelevant, or too short/incomplete, you should:
+   - Politely ask for clarification
+   - Guide them to provide a more complete response
+   - DO NOT advance the conversation until you get an effective response
+4. Keep responses natural, concise (1-2 sentences), and in character
+5. Guide the learner toward completing the task: {scenario_context.get('task', '')}
+6. You can have multiple characters respond if needed (indicate which character is speaking)
+
+Response format:
+- If learner's response is effective: Respond naturally as your character
+- If learner's response is not effective: Ask for clarification or guide them
+
+Remember: Only advance the conversation when the learner's response is effective enough for natural conversation flow."""
+
+        messages = [
+            {"role": "system", "content": system_prompt}
+        ]
+        
+        # Add conversation history
+        for msg in conversation_history:
+            if msg.get('speaker') == 'learner':
+                messages.append({"role": "user", "content": msg.get('text_content', '')})
+            elif msg.get('speaker') == 'ai':
+                messages.append({"role": "assistant", "content": msg.get('text_content', '')})
+        
+        # Add current learner response if provided
+        if learner_response:
+            messages.append({"role": "user", "content": learner_response})
+        
+        return {
+            "messages": messages,
+            "model": "openai/gpt-4o-mini",
+            "temperature": 0.8,
+            "max_tokens": 200,
+            "training_type": "scenario_conversation"
+        }
+    
+    def train_scenario_hint(self, scenario_context: Dict, conversation_history: List[Dict], 
+                            current_situation: str = None) -> Dict[str, Any]:
+        """
+        Training 6: Tạo gợi ý cho learner khi họ không biết phải nói gì
+        Gợi ý bao gồm: tiếng Anh (có thể nói theo) và tiếng Việt (giải thích)
+        """
+        system_prompt = f"""You are a helpful English learning assistant. The learner is stuck in a conversation scenario and needs a hint.
+
+Scenario: {scenario_context.get('title', 'Unknown')}
+Current situation: {current_situation or 'Learner needs to respond but doesn\'t know what to say'}
+Task goal: {scenario_context.get('task', '')}
+
+Recent conversation:
+{chr(10).join([f"{msg.get('speaker', 'unknown')}: {msg.get('text_content', '')}" for msg in conversation_history[-3:]])}
+
+Create a helpful hint that:
+1. Provides a natural English response they could say (they can say this exactly or adapt it)
+2. Includes Vietnamese translation/explanation below
+3. Guides them toward the task goal
+4. Is encouraging and supportive
+
+Format your response as JSON:
+{{
+  "hint_english": "Natural English response they could say",
+  "hint_vietnamese": "Vietnamese translation and explanation",
+  "context": "Brief explanation of why this response is appropriate"
+}}"""
+
+        return {
+            "system_prompt": system_prompt,
+            "model": "openai/gpt-4o-mini",
+            "temperature": 0.7,
+            "max_tokens": 300,
+            "training_type": "scenario_hint"
+        }
+    
+    def train_scenario_evaluation(self, learner_response: str, scenario_context: Dict, 
+                                  conversation_history: List[Dict]) -> Dict[str, Any]:
+        """
+        Training 7: Đánh giá độ hiệu quả của câu trả lời learner
+        Chỉ chuyển tiếp conversation khi câu trả lời đủ hiệu quả
+        """
+        system_prompt = f"""You are evaluating a learner's response in an English conversation scenario.
+
+Scenario: {scenario_context.get('title', 'Unknown')}
+Task goal: {scenario_context.get('task', '')}
+
+Conversation context:
+{chr(10).join([f"{msg.get('speaker', 'unknown')}: {msg.get('text_content', '')}" for msg in conversation_history[-5:]])}
+
+Learner's response: "{learner_response}"
+
+Evaluate if the learner's response is EFFECTIVE enough to continue the conversation naturally.
+
+An effective response must:
+1. Be relevant to the conversation context
+2. Be clear enough for the other person to understand the intent
+3. Move the conversation forward toward the task goal
+4. Be appropriate for the situation
+
+Respond with ONLY a JSON object:
+{{
+  "is_effective": true/false,
+  "reason": "Brief explanation",
+  "can_continue": true/false
+}}
+
+If is_effective is false, can_continue must be false. Only set can_continue to true if the response is effective enough for natural conversation flow."""
+
+        return {
+            "system_prompt": system_prompt,
+            "model": "openai/gpt-4o-mini",
+            "temperature": 0.3,
+            "max_tokens": 150,
+            "training_type": "scenario_evaluation"
+        }
+    
+    def train_scenario_scoring(self, scenario_context: Dict, conversation_history: List[Dict],
+                               hints_used: int = 0, pronunciation_score: float = None) -> Dict[str, Any]:
+        """
+        Training 8: Chấm điểm cuối cùng cho scenario
+        Dựa trên: độ hợp lý, khả năng phản xạ, phát âm, và số lần dùng gợi ý
+        """
+        system_prompt = f"""You are evaluating a learner's performance in a completed English conversation scenario.
+
+Scenario: {scenario_context.get('title', 'Unknown')}
+Task goal: {scenario_context.get('task', '')}
+Completion criteria: {scenario_context.get('completion_criteria', '')}
+
+Full conversation:
+{chr(10).join([f"{msg.get('speaker', 'unknown')}: {msg.get('text_content', '')}" for msg in conversation_history])}
+
+Performance metrics:
+- Hints used: {hints_used} times (each hint costs 15 points)
+- Pronunciation score: {pronunciation_score or 'Not evaluated'} / 100
+
+Evaluate the learner's performance on a scale of 0-100 based on:
+1. **Reasonableness (40 points)**: How logical and appropriate were their responses?
+2. **Reflex/Reaction speed (30 points)**: How well did they respond to the conversation flow?
+3. **Pronunciation (20 points)**: Use the provided pronunciation score if available
+4. **Independence (10 points)**: How well did they complete without hints? (Deduct points for hints used)
+
+Final score calculation:
+- Base score from evaluation (0-100)
+- Deduct 15 points for each hint used
+- Final score = max(0, base_score - (hints_used * 15))
+
+Respond with ONLY a JSON object:
+{{
+  "reasonableness_score": 0-40,
+  "reflex_score": 0-30,
+  "pronunciation_score": 0-20,
+  "independence_score": 0-10,
+  "base_score": 0-100,
+  "hints_penalty": hints_used * 15,
+  "final_score": 0-100,
+  "feedback": "Detailed feedback in Vietnamese about their performance, strengths, and areas for improvement"
+}}"""
+
+        return {
+            "system_prompt": system_prompt,
+            "model": "openai/gpt-4o",
+            "temperature": 0.5,
+            "max_tokens": 500,
+            "training_type": "scenario_scoring"
+        }
+    
     # ==================== MAIN TRAINING FUNCTION ====================
     
     def train(self, training_type: str, **kwargs) -> Dict[str, Any]:
         """
         Main training function - route to appropriate trainer
-        training_type: 'prompt_generator', 'conversation_ai', 'quick_analysis'
+        training_type: 'prompt_generator', 'conversation_ai', 'quick_analysis', 
+                      'scenario_generator', 'scenario_conversation', 'scenario_hint',
+                      'scenario_evaluation', 'scenario_scoring'
         """
         if training_type == 'prompt_generator':
             return self.train_prompt_generator(
@@ -544,6 +846,36 @@ CRITICAL: Return ONLY valid JSON. No markdown code blocks, no extra text."""
                 transcript=kwargs.get('transcript', ''),
                 expected_text=kwargs.get('expected_text'),
                 level=kwargs.get('level', 2)
+            )
+        elif training_type == 'scenario_generator':
+            return self.train_scenario_generator(
+                learner_average_score=kwargs.get('learner_average_score'),
+                difficulty=kwargs.get('difficulty', 'intermediate')
+            )
+        elif training_type == 'scenario_conversation':
+            return self.train_scenario_conversation(
+                scenario_context=kwargs.get('scenario_context', {}),
+                conversation_history=kwargs.get('conversation_history', []),
+                learner_response=kwargs.get('learner_response')
+            )
+        elif training_type == 'scenario_hint':
+            return self.train_scenario_hint(
+                scenario_context=kwargs.get('scenario_context', {}),
+                conversation_history=kwargs.get('conversation_history', []),
+                current_situation=kwargs.get('current_situation')
+            )
+        elif training_type == 'scenario_evaluation':
+            return self.train_scenario_evaluation(
+                learner_response=kwargs.get('learner_response', ''),
+                scenario_context=kwargs.get('scenario_context', {}),
+                conversation_history=kwargs.get('conversation_history', [])
+            )
+        elif training_type == 'scenario_scoring':
+            return self.train_scenario_scoring(
+                scenario_context=kwargs.get('scenario_context', {}),
+                conversation_history=kwargs.get('conversation_history', []),
+                hints_used=kwargs.get('hints_used', 0),
+                pronunciation_score=kwargs.get('pronunciation_score')
             )
         else:
             raise ValueError(f"Unknown training type: {training_type}")
@@ -602,6 +934,116 @@ def main():
                 level = data.get('level', 2)
                 
                 result = trainer.train('quick_analysis', transcript=transcript, expected_text=expected, level=level)
+                print(json.dumps(result, indent=2, ensure_ascii=False))
+            
+            elif training_type == 'scenario_generator':
+                learner_average_score = data.get('learner_average_score')
+                difficulty = data.get('difficulty', 'intermediate')
+                
+                result = trainer.train('scenario_generator', 
+                                      learner_average_score=learner_average_score,
+                                      difficulty=difficulty)
+                print(json.dumps(result, indent=2, ensure_ascii=False))
+            
+            elif training_type == 'scenario_conversation':
+                scenario_context = data.get('scenario_context', {})
+                conversation_history = data.get('conversation_history', [])
+                learner_response = data.get('learner_response')
+                
+                result = trainer.train('scenario_conversation',
+                                      scenario_context=scenario_context,
+                                      conversation_history=conversation_history,
+                                      learner_response=learner_response)
+                print(json.dumps(result, indent=2, ensure_ascii=False))
+            
+            elif training_type == 'scenario_hint':
+                scenario_context = data.get('scenario_context', {})
+                conversation_history = data.get('conversation_history', [])
+                current_situation = data.get('current_situation')
+                
+                result = trainer.train('scenario_hint',
+                                      scenario_context=scenario_context,
+                                      conversation_history=conversation_history,
+                                      current_situation=current_situation)
+                print(json.dumps(result, indent=2, ensure_ascii=False))
+            
+            elif training_type == 'scenario_evaluation':
+                learner_response = data.get('learner_response', '')
+                scenario_context = data.get('scenario_context', {})
+                conversation_history = data.get('conversation_history', [])
+                
+                result = trainer.train('scenario_evaluation',
+                                      learner_response=learner_response,
+                                      scenario_context=scenario_context,
+                                      conversation_history=conversation_history)
+                print(json.dumps(result, indent=2, ensure_ascii=False))
+            
+            elif training_type == 'scenario_scoring':
+                scenario_context = data.get('scenario_context', {})
+                conversation_history = data.get('conversation_history', [])
+                hints_used = data.get('hints_used', 0)
+                pronunciation_score = data.get('pronunciation_score')
+                
+                result = trainer.train('scenario_scoring',
+                                      scenario_context=scenario_context,
+                                      conversation_history=conversation_history,
+                                      hints_used=hints_used,
+                                      pronunciation_score=pronunciation_score)
+                print(json.dumps(result, indent=2, ensure_ascii=False))
+            
+            elif training_type == 'scenario_generator':
+                learner_average_score = data.get('learner_average_score')
+                difficulty = data.get('difficulty', 'intermediate')
+                
+                result = trainer.train('scenario_generator', 
+                                      learner_average_score=learner_average_score,
+                                      difficulty=difficulty)
+                print(json.dumps(result, indent=2, ensure_ascii=False))
+            
+            elif training_type == 'scenario_conversation':
+                scenario_context = data.get('scenario_context', {})
+                conversation_history = data.get('conversation_history', [])
+                learner_response = data.get('learner_response')
+                
+                result = trainer.train('scenario_conversation',
+                                      scenario_context=scenario_context,
+                                      conversation_history=conversation_history,
+                                      learner_response=learner_response)
+                print(json.dumps(result, indent=2, ensure_ascii=False))
+            
+            elif training_type == 'scenario_hint':
+                scenario_context = data.get('scenario_context', {})
+                conversation_history = data.get('conversation_history', [])
+                current_situation = data.get('current_situation')
+                
+                result = trainer.train('scenario_hint',
+                                      scenario_context=scenario_context,
+                                      conversation_history=conversation_history,
+                                      current_situation=current_situation)
+                print(json.dumps(result, indent=2, ensure_ascii=False))
+            
+            elif training_type == 'scenario_evaluation':
+                learner_response = data.get('learner_response', '')
+                scenario_context = data.get('scenario_context', {})
+                conversation_history = data.get('conversation_history', [])
+                
+                result = trainer.train('scenario_evaluation',
+                                      learner_response=learner_response,
+                                      scenario_context=scenario_context,
+                                      conversation_history=conversation_history)
+                print(json.dumps(result, indent=2, ensure_ascii=False))
+            
+            elif training_type == 'scenario_scoring':
+                scenario_context = data.get('scenario_context', {})
+                conversation_history = data.get('conversation_history', [])
+                hints_used = data.get('hints_used', 0)
+                pronunciation_score = data.get('pronunciation_score')
+                
+                result = trainer.train('scenario_scoring',
+                                      scenario_context=scenario_context,
+                                      conversation_history=conversation_history,
+                                      hints_used=hints_used,
+                                      pronunciation_score=pronunciation_score)
                 print(json.dumps(result, indent=2, ensure_ascii=False))
         except Exception as e:
             print(json.dumps({"error": str(e)}, ensure_ascii=False), file=sys.stderr)

@@ -621,19 +621,19 @@ export default function LearnerFeedback() {
                   <div className="feedback-score-item">
                     <div className="feedback-score-label">Điểm tổng</div>
                     <div className="feedback-score-value total">
-                      {fb.final_score ?? "—"}/10
+                      {fb.final_score ? (fb.final_score / 10).toFixed(1) : "—"}/10
                     </div>
                   </div>
                   <div className="feedback-score-item">
                     <div className="feedback-score-label">Phát âm</div>
                     <div className="feedback-score-value">
-                      {fb.pronunciation_score ?? "—"}/10
+                      {fb.pronunciation_score ? (fb.pronunciation_score / 10).toFixed(1) : "—"}/10
                     </div>
                   </div>
                   <div className="feedback-score-item">
                     <div className="feedback-score-label">Trôi chảy</div>
                     <div className="feedback-score-value">
-                      {fb.fluency_score ?? "—"}/10
+                      {fb.fluency_score ? (fb.fluency_score / 10).toFixed(1) : "—"}/10
                     </div>
                   </div>
                 </div>

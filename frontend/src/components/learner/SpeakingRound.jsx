@@ -14,13 +14,30 @@ export default function SpeakingRound({
   const [prompt, setPrompt] = useState("");
   const [timeLimit, setTimeLimit] = useState(30);
   const [timeRemaining, setTimeRemaining] = useState(timeLimit);
+  const [progressAnimationKey, setProgressAnimationKey] = useState(0); // Key để restart animation
+  const timeRemainingRef = useRef(timeLimit); // Ref để track timeRemaining cho progress
   const [isRecording, setIsRecording] = useState(false);
   const [audioBlob, setAudioBlob] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [wordTooltip, setWordTooltip] = useState(null);
+  const [openWordTooltip, setOpenWordTooltip] = useState(null); // Word đang mở tooltip
+  const [wordDefinitionsCache, setWordDefinitionsCache] = useState(() => {
+    // Load cache từ localStorage khi component mount
+    try {
+      const cached = localStorage.getItem('wordDefinitionsCache');
+      return cached ? JSON.parse(cached) : {};
+    } catch {
+      return {};
+    }
+  });
+  const [loadingWords, setLoadingWords] = useState({}); // Loading state cho từng từ
+  const [preloadingWords, setPreloadingWords] = useState(false); // Đang preload từ
   const [countdown, setCountdown] = useState(null);
   const [showPrompt, setShowPrompt] = useState(false); // Chỉ hiển thị prompt sau countdown
   const [highlightedWords, setHighlightedWords] = useState(new Set()); // Từ đã được nói đúng
+  const [missingWords, setMissingWords] = useState(new Set()); // Từ không nói được (sau khi kiểm tra)
+  const [loadingPrompt, setLoadingPrompt] = useState(true); // Loading state cho prompt
+  const [promptError, setPromptError] = useState(null); // Error state cho prompt
   const timerRef = useRef(null);
   const countdownRef = useRef(null);
   const startTimeRef = useRef(null);
@@ -31,20 +48,27 @@ export default function SpeakingRound({
   const mediaRecorderRef = useRef(null); // MediaRecorder instance
   const mediaStreamRef = useRef(null); // MediaStream from getUserMedia
   const audioChunksRef = useRef([]); // Audio chunks for MediaRecorder
+  const progressIntervalRef = useRef(null); // Ref cho progress interval
 
   // Lấy prompt từ backend và tự động bắt đầu
   useEffect(() => {
+    setLoadingPrompt(true);
+    setPromptError(null);
     fetchPrompt();
-    // Tự động bắt đầu sau khi fetch prompt (không cần countdown và nút "Bắt đầu")
-    const autoStartTimer = setTimeout(() => {
-      if (promptDataRef.current && !isRecording && !showPrompt) {
-        console.log("🚀 Auto-starting round...");
-        startRecording();
-      }
-    }, 800); // Đợi một chút để prompt data được set
-    
-    return () => clearTimeout(autoStartTimer);
   }, [sessionId, roundNumber, level]);
+  
+  // Auto-start sau khi prompt được load
+  useEffect(() => {
+    if (promptDataRef.current && !isRecording && !showPrompt && !loadingPrompt && !promptError) {
+      const autoStartTimer = setTimeout(() => {
+        if (promptDataRef.current && !isRecording) {
+          startRecording();
+        }
+      }, 500); // Đợi một chút để prompt data được set
+      
+      return () => clearTimeout(autoStartTimer);
+    }
+  }, [loadingPrompt, promptError, isRecording, showPrompt]);
 
   // Bỏ countdown - không cần nữa vì tự động bắt đầu
 
@@ -53,76 +77,57 @@ export default function SpeakingRound({
     if (isRecording && timeRemaining > 0) {
       timerRef.current = setInterval(() => {
         setTimeRemaining((prev) => {
+          const newValue = prev <= 1 ? 0 : prev - 1;
+          timeRemainingRef.current = newValue;
           if (prev <= 1) {
             // Khi hết thời gian, đánh dấu để submit sau khi audio được tạo
             finishEarlyRef.current = true;
             stopRecording();
-            return 0;
           }
-          return prev - 1;
+          return newValue;
         });
       }, 1000);
+      
+      // Trigger CSS animation bằng cách thay đổi key
+      setProgressAnimationKey(prev => prev + 1);
     } else {
       if (timerRef.current) {
         clearInterval(timerRef.current);
         timerRef.current = null;
       }
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+        progressIntervalRef.current = null;
+      }
+      setProgressAnimationKey(0);
     }
 
     return () => {
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+      }
     };
-  }, [isRecording, timeRemaining]);
+  }, [isRecording, timeLimit]);
 
-  // Tự động submit khi đã highlight hết tất cả từ
-  useEffect(() => {
-    if (!isRecording || submitting) {
-      console.log("⏸️ Auto-submit check skipped:", { isRecording, submitting });
-      return;
-    }
-    
-    const currentPrompt = prompt || promptDataRef.current?.prompt || "";
-    if (!currentPrompt) {
-      console.log("⏸️ No prompt available for auto-submit check");
-      return;
-    }
-    
-    const expectedWords = currentPrompt.toLowerCase().split(/\s+/).filter(w => w.length > 0);
-    console.log("🔍 Auto-submit check:", {
-      highlighted: highlightedWords.size,
-      expected: expectedWords.length,
-      isComplete: highlightedWords.size >= expectedWords.length
-    });
-    
-    // Kiểm tra nếu đã highlight hết
-    if (highlightedWords.size >= expectedWords.length) {
-      console.log("🎉 All words completed! Stopping recording and will auto-submit...");
-      // Đánh dấu để submit
-      finishEarlyRef.current = true;
-      
-      // Đợi một chút rồi dừng recording để đảm bảo audio đã được ghi đủ
-      setTimeout(() => {
-        console.log("🛑 Stopping recording (all words completed)...");
-        // Stop MediaRecorder directly (không cần ref)
-        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-          console.log("✅ Stopping MediaRecorder...");
-          mediaRecorderRef.current.stop();
-        } else {
-          console.log("⚠️ MediaRecorder not active, calling stopRecording()");
-          stopRecording(); // Dừng speech recognition và cleanup
-        }
-      }, 500);
-    }
-  }, [highlightedWords.size, isRecording, submitting, prompt, audioBlob]);
+  // Bỏ auto-submit khi highlight hết - không highlight nữa nên không cần
 
   const fetchPrompt = async () => {
     try {
+      setLoadingPrompt(true);
+      setPromptError(null);
+      
       const res = await api.get(
         `/learners/speaking-practice/sessions/${sessionId}/prompt`,
         { params: { round: roundNumber, level } }
       );
+      
+      if (!res.data || !res.data.prompt) {
+        throw new Error("Không nhận được prompt từ server");
+      }
+      
       // Lưu prompt data nhưng chưa hiển thị
       promptDataRef.current = {
         prompt: res.data.prompt,
@@ -139,29 +144,36 @@ export default function SpeakingRound({
       setHighlightedWords(new Set());
       setTimeRemaining(res.data.time_limit || 30);
       setCountdown(null); // Reset countdown
+      setLoadingPrompt(false);
+      
+      // Pre-fetch tất cả từ trong prompt ngay khi load
+      if (res.data.prompt) {
+        preloadWordDefinitions(res.data.prompt);
+      }
     } catch (err) {
       console.error("❌ Error fetching prompt:", err);
+      setPromptError(err?.response?.data?.message || err?.message || "Không thể tải đề bài. Vui lòng thử lại.");
+      setLoadingPrompt(false);
+      
+      // Retry sau 2 giây
+      setTimeout(() => {
+        fetchPrompt();
+      }, 2000);
     }
   };
 
   // Bỏ startCountdown - không cần nữa vì tự động bắt đầu
 
   const startRecording = () => {
-    console.log("🎬 startRecording called");
-    
     // Hiển thị prompt và bắt đầu ghi âm
     if (promptDataRef.current) {
-      console.log("📝 Prompt data:", promptDataRef.current);
       const promptText = promptDataRef.current.prompt;
       setPrompt(promptText);
       setTimeLimit(promptDataRef.current.timeLimit);
       setTimeRemaining(promptDataRef.current.timeLimit);
+      timeRemainingRef.current = promptDataRef.current.timeLimit;
       setShowPrompt(true);
-      
-      // Đảm bảo prompt được set trước khi start speech recognition
-      console.log("✅ Prompt set to:", promptText);
     } else {
-      console.warn("⚠️ No prompt data available");
       return; // Không start nếu không có prompt
     }
     
@@ -201,7 +213,6 @@ export default function SpeakingRound({
           const blob = new Blob(audioChunksRef.current, { 
             type: audioChunksRef.current[0]?.type || "audio/webm" 
           });
-          console.log("🎤 MediaRecorder stopped, blob created:", blob.size, "bytes");
           handleAudioRecorded(blob);
           
           // Stop all tracks
@@ -212,7 +223,6 @@ export default function SpeakingRound({
         };
         
         mr.start();
-        console.log("✅ MediaRecorder started directly");
       } catch (err) {
         console.error("❌ Error starting MediaRecorder:", err);
         // Fallback to AudioRecorder if available
@@ -225,9 +235,47 @@ export default function SpeakingRound({
     }, 100);
   };
 
-  const startSpeechRecognition = () => {
-    console.log("🎤 Starting speech recognition...");
+  // Helper function để tính similarity giữa 2 từ (Levenshtein-like)
+  const calculateSimilarity = (str1, str2) => {
+    if (!str1 || !str2) return 0;
     
+    const s1 = str1.toLowerCase();
+    const s2 = str2.toLowerCase();
+    
+    // Exact match
+    if (s1 === s2) return 1.0;
+    
+    // One contains the other
+    if (s1.includes(s2) || s2.includes(s1)) {
+      const longer = s1.length > s2.length ? s1 : s2;
+      const shorter = s1.length > s2.length ? s2 : s1;
+      return shorter.length / longer.length;
+    }
+    
+    // Calculate character match ratio
+    let matchCount = 0;
+    const minLen = Math.min(s1.length, s2.length);
+    const maxLen = Math.max(s1.length, s2.length);
+    
+    // Check prefix match
+    for (let i = 0; i < minLen; i++) {
+      if (s1[i] === s2[i]) matchCount++;
+      else break;
+    }
+    
+    // Check suffix match
+    let suffixMatch = 0;
+    for (let i = 1; i <= minLen; i++) {
+      if (s1[s1.length - i] === s2[s2.length - i]) suffixMatch++;
+      else break;
+    }
+    
+    // Use the better match (prefix or suffix)
+    const bestMatch = Math.max(matchCount, suffixMatch);
+    return bestMatch / maxLen;
+  };
+
+  const startSpeechRecognition = () => {
     // Check if browser supports Web Speech API
     if (!("webkitSpeechRecognition" in window) && !("SpeechRecognition" in window)) {
       console.warn("⚠️ Web Speech API not supported");
@@ -242,147 +290,121 @@ export default function SpeakingRound({
     recognition.lang = "en-US";
 
     recognition.onresult = (event) => {
-      console.log("🗣️ Speech recognition result:", event);
-      
       // Sử dụng prompt từ ref hoặc state
       const currentPrompt = prompt || promptDataRef.current?.prompt || "";
       
       if (!currentPrompt) {
-        console.warn("⚠️ No prompt available, prompt:", prompt, "promptDataRef:", promptDataRef.current);
         return;
       }
       
-      console.log("📝 Using prompt:", currentPrompt);
-      const expectedWords = currentPrompt.toLowerCase().split(/\s+/).filter(w => w.length > 0);
-      
-      // Lấy TẤT CẢ kết quả (cả interim và final) để highlight real-time như Duolingo
+      // Lấy toàn bộ transcript từ đầu đến hiện tại (tích lũy)
       let fullTranscript = "";
       for (let i = 0; i < event.results.length; i++) {
-        fullTranscript += event.results[i][0].transcript + " ";
+        fullTranscript += event.results[i][0].transcript;
       }
       
-      if (!fullTranscript.trim()) {
-        console.log("⚠️ Empty transcript");
-        return;
-      }
+      // Chuyển transcript và prompt thành lowercase để so sánh
+      const transcriptLower = fullTranscript.toLowerCase().trim();
+      const transcriptWords = transcriptLower.split(/\s+/).map(w => w.replace(/[.,!?;:]/g, ""));
+      const promptWords = currentPrompt.toLowerCase().split(/\s+/).map(w => w.replace(/[.,!?;:]/g, ""));
       
-      console.log("📝 Full transcript:", fullTranscript);
+      // Tìm các từ đã được nói - so sánh theo thứ tự và similarity
+      const newHighlightedWords = new Set();
+      let transcriptWordIndex = 0;
       
-      const spokenWords = fullTranscript.toLowerCase().trim().split(/\s+/).filter(w => w.length > 0);
-      
-      console.log("📊 Expected words:", expectedWords);
-      console.log("🗣️ Spoken words:", spokenWords);
-      
-      // So sánh từng từ đã nói với prompt theo thứ tự CHẶT CHẼ (giống Duolingo)
-      // Chỉ highlight từ khi nói ĐÚNG THỨ TỰ từ đầu đến cuối
-      setHighlightedWords(prev => {
-        const newHighlighted = new Set();
-        let spokenIdx = 0;
-        let lastHighlightedIdx = -1;
-        
-        // Tìm từ cuối cùng đã được highlight để chỉ tiếp tục từ đó
-        for (let i = expectedWords.length - 1; i >= 0; i--) {
-          if (prev.has(i)) {
-            lastHighlightedIdx = i;
-            break;
-          }
-        }
-        
-        // Chỉ tìm từ tiếp theo (không được skip)
-        const nextExpectedIdx = lastHighlightedIdx + 1;
-        if (nextExpectedIdx >= expectedWords.length) {
-          // Đã highlight hết rồi
-          return prev;
-        }
-        
-        const expectedWord = expectedWords[nextExpectedIdx];
-        const cleanExpected = expectedWord.replace(/[.,!?;:]/g, "").toLowerCase();
-        
-        // Tìm từ tương ứng trong spoken words (từ vị trí hiện tại)
-        for (let j = spokenIdx; j < spokenWords.length; j++) {
-          const cleanSpoken = spokenWords[j].replace(/[.,!?;:]/g, "").toLowerCase();
+      promptWords.forEach((promptWord, promptIdx) => {
+        // Tìm từ trong transcript bắt đầu từ vị trí hiện tại
+        for (let i = transcriptWordIndex; i < transcriptWords.length; i++) {
+          const transcriptWord = transcriptWords[i];
           
-          // So sánh chính xác hoặc gần đúng
-          if (cleanSpoken === cleanExpected) {
-            // Khớp chính xác
-            console.log(`✅ Matched word ${nextExpectedIdx} (in order): "${cleanExpected}"`);
-            newHighlighted.add(nextExpectedIdx);
+          // Kiểm tra exact match hoặc similarity cao
+          if (promptWord === transcriptWord) {
+            // Exact match - chắc chắn đúng
+            newHighlightedWords.add(promptIdx);
+            transcriptWordIndex = i + 1; // Di chuyển pointer
             break;
-          } else if (cleanSpoken.length > 0 && cleanExpected.length > 0) {
-            // Kiểm tra similarity
-            const similarity = calculateSimilarity(cleanSpoken, cleanExpected);
+          } else {
+            const similarity = calculateSimilarity(promptWord, transcriptWord);
             if (similarity > 0.7) {
-              // Khớp gần đúng (>70%)
-              console.log(`✅ Matched word ${nextExpectedIdx} (similarity ${similarity.toFixed(2)}, in order): "${cleanExpected}"`);
-              newHighlighted.add(nextExpectedIdx);
+              // Similarity cao - có thể đúng
+              newHighlightedWords.add(promptIdx);
+              transcriptWordIndex = i + 1; // Di chuyển pointer
+              break;
+            } else if (promptWord.length > 3 && transcriptWord.includes(promptWord)) {
+              // Từ dài và transcript chứa prompt word - có thể đúng
+              newHighlightedWords.add(promptIdx);
+              transcriptWordIndex = i + 1;
+              break;
+            } else if (promptWord.includes(transcriptWord) && transcriptWord.length > 2) {
+              // Prompt word chứa transcript word và transcript word đủ dài - có thể đúng
+              newHighlightedWords.add(promptIdx);
+              transcriptWordIndex = i + 1;
               break;
             }
           }
         }
-        
-        if (newHighlighted.size > 0) {
-          const combined = new Set([...prev, ...newHighlighted]);
-          console.log("✨ New highlighted words:", Array.from(newHighlighted));
-          console.log("📊 Total highlighted:", combined.size, "/", expectedWords.length);
-          
-          // Kiểm tra nếu đã highlight hết tất cả từ
-          if (combined.size >= expectedWords.length) {
-            console.log("🎉 All words highlighted! Will auto-submit when audio is ready...");
-            // Đánh dấu để submit khi audio được record
-            finishEarlyRef.current = true;
-          }
-          
-          return combined;
-        }
-        
-        return prev; // Không có thay đổi
       });
-    };
-    
-    // Helper function để tính similarity giữa 2 từ
-    const calculateSimilarity = (str1, str2) => {
-      const longer = str1.length > str2.length ? str1 : str2;
-      const shorter = str1.length > str2.length ? str2 : str1;
       
-      if (longer.length === 0) return 1.0;
+      // Cập nhật highlighted words
+      setHighlightedWords(newHighlightedWords);
       
-      // Kiểm tra nếu một từ chứa từ kia
-      if (longer.includes(shorter)) return 0.8;
-      
-      // Tính số ký tự giống nhau ở đầu
-      let matchCount = 0;
-      const minLen = Math.min(longer.length, shorter.length);
-      for (let i = 0; i < minLen; i++) {
-        if (longer[i] === shorter[i]) matchCount++;
+      // Tự động chuyển vòng nếu đã đọc đúng hết tất cả từ
+      if (newHighlightedWords.size === promptWords.length && isRecordingRef.current) {
+        // Đợi một chút để đảm bảo audio được ghi xong
+        setTimeout(() => {
+          if (isRecordingRef.current) {
+            stopRecording();
+          }
+        }, 500);
       }
-      
-      return matchCount / longer.length;
     };
 
     recognition.onerror = (event) => {
+      // Ignore "aborted" errors - xảy ra khi stop() được gọi
+      if (event.error === 'aborted') {
+        return;
+      }
       console.error("Speech recognition error:", event.error);
+      
+      // Chỉ restart nếu không phải lỗi aborted và vẫn đang recording
+      if (event.error !== 'aborted' && isRecordingRef.current && recognitionRef.current === recognition) {
+        setTimeout(() => {
+          if (isRecordingRef.current && recognitionRef.current === recognition) {
+            try {
+              recognition.start();
+            } catch (e) {
+              // Ignore errors when restarting
+            }
+          }
+        }, 500);
+      }
     };
 
     recognition.onend = () => {
-      // Tự động restart nếu vẫn đang recording
-      // Sử dụng ref để lấy giá trị mới nhất
-      setTimeout(() => {
-        if (isRecordingRef.current && recognitionRef.current === recognition) {
-          try {
-            recognition.start();
-          } catch (e) {
-            // Ignore errors when restarting
+      // Tự động restart nếu vẫn đang recording và không bị abort
+      if (isRecordingRef.current && recognitionRef.current === recognition) {
+        setTimeout(() => {
+          if (isRecordingRef.current && recognitionRef.current === recognition) {
+            try {
+              recognition.start();
+            } catch (e) {
+              // Ignore errors when restarting (có thể bị aborted)
+              if (e.name !== 'InvalidStateError' && !e.message?.includes('abort')) {
+                console.warn("Speech recognition restart error:", e);
+              }
+            }
           }
-        }
-      }, 100);
+        }, 100);
+      }
     };
 
+    // Lưu recognition vào ref để có thể stop sau
     recognitionRef.current = recognition;
     
     try {
       recognition.start();
     } catch (err) {
-      console.error("Failed to start speech recognition:", err);
+      console.error("❌ Failed to start speech recognition:", err);
     }
   };
 
@@ -397,16 +419,20 @@ export default function SpeakingRound({
     // Stop speech recognition
     if (recognitionRef.current) {
       try {
-        recognitionRef.current.stop();
+        // Abort thay vì stop để tránh lỗi
+        if (recognitionRef.current.abort) {
+          recognitionRef.current.abort();
+        } else {
+          recognitionRef.current.stop();
+        }
       } catch (e) {
-        // Ignore errors
+        // Ignore errors (có thể đã bị stop rồi)
       }
       recognitionRef.current = null;
     }
     
     // Stop MediaRecorder directly
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-      console.log("🛑 Stopping MediaRecorder directly...");
       mediaRecorderRef.current.stop();
     }
     
@@ -425,7 +451,6 @@ export default function SpeakingRound({
   const finishEarlyRef = useRef(false);
 
   const handleAudioRecorded = (blob) => {
-    console.log("🎤 Audio recorded, finishEarly:", finishEarlyRef.current);
     setAudioBlob(blob);
     
     // Nếu đang trong quá trình finish early (bấm nút hoặc auto-submit), submit ngay
@@ -434,42 +459,22 @@ export default function SpeakingRound({
       stopRecording();
       // Đợi một chút để đảm bảo audio đã được tạo hoàn toàn
       setTimeout(() => {
-        console.log("⏩ Auto-submitting (all words completed)...");
         handleSubmit(blob);
       }, 500);
     } else {
-      // Kiểm tra xem đã highlight hết chưa
-      const currentPrompt = prompt || promptDataRef.current?.prompt || "";
-      if (currentPrompt) {
-        const expectedWords = currentPrompt.toLowerCase().split(/\s+/).filter(w => w.length > 0);
-        const currentHighlighted = highlightedWords.size;
-        console.log("📊 Checking highlighted words after recording:", currentHighlighted, "/", expectedWords.length);
-        if (currentHighlighted >= expectedWords.length) {
-          console.log("🎉 All words completed after recording, auto-submitting...");
-          // Đợi một chút rồi submit
-          setTimeout(() => {
-            handleSubmit(blob);
-          }, 500);
-        }
-      }
+      // Không cần kiểm tra highlight nữa - chỉ dừng recording
       stopRecording();
     }
   };
 
   const handleFinishEarly = () => {
-    console.log("⏩ handleFinishEarly called, isRecording:", isRecording, "audioBlob:", !!audioBlob);
-    
     if (isRecording) {
       // Đánh dấu là muốn finish early
       finishEarlyRef.current = true;
-      console.log("✅ Set finishEarlyRef to true");
       
       // Dừng AudioRecorder trước
       if (audioRecorderRef.current && audioRecorderRef.current.stopRecording) {
-        console.log("🛑 Stopping AudioRecorder...");
         audioRecorderRef.current.stopRecording();
-      } else {
-        console.warn("⚠️ AudioRecorder ref not available for stop");
       }
       
       // Dừng ghi âm sớm
@@ -477,17 +482,13 @@ export default function SpeakingRound({
       
       // Nếu không có audioRecorderRef, thử submit với audioBlob hiện tại hoặc đợi
       if (!audioRecorderRef.current && audioBlob) {
-        console.log("📤 AudioRecorder ref missing, but have audioBlob, submitting...");
         setTimeout(() => {
           handleSubmit(audioBlob);
         }, 500);
       }
     } else if (audioBlob) {
       // Nếu đã có audio, submit ngay
-      console.log("📤 Submitting existing audio...");
       handleSubmit(audioBlob);
-    } else {
-      console.warn("⚠️ No recording or audio available");
     }
   };
 
@@ -499,11 +500,9 @@ export default function SpeakingRound({
     }
 
     if (submitting) {
-      console.log("⚠️ Already submitting, skipping...");
       return; // Tránh submit nhiều lần
     }
 
-    console.log("📤 Starting submit process...");
     setSubmitting(true);
     const timeTaken = startTimeRef.current
       ? Math.floor((Date.now() - startTimeRef.current) / 1000)
@@ -523,16 +522,49 @@ export default function SpeakingRound({
         { headers: { "Content-Type": "multipart/form-data" } }
       );
 
-      console.log("✅ Round submitted, round_id:", res.data.round_id);
-
+      const roundId = res.data.round_id;
+      
+      // Fetch analysis để lấy missing words và highlight
+      let missingWordsList = [];
+      try {
+        const analysisRes = await api.get(
+          `/learners/speaking-practice/sessions/${sessionId}/rounds/${roundId}/analysis`
+        );
+        
+        if (analysisRes.data && analysisRes.data.analysis) {
+          const analysis = typeof analysisRes.data.analysis === 'string' 
+            ? JSON.parse(analysisRes.data.analysis) 
+            : analysisRes.data.analysis;
+          
+          missingWordsList = analysis.missing_words || [];
+          if (missingWordsList.length > 0) {
+            // Tạo Set từ missing words để highlight
+            const promptWords = (prompt || promptDataRef.current?.prompt || "").toLowerCase().split(/\s+/);
+            const missingSet = new Set();
+            
+            promptWords.forEach((word, idx) => {
+              const cleanWord = word.replace(/[.,!?;:]/g, "");
+              if (missingWordsList.some(mw => mw.toLowerCase().replace(/[.,!?;:]/g, "") === cleanWord)) {
+                missingSet.add(idx);
+              }
+            });
+            
+            setMissingWords(missingSet);
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to fetch analysis for missing words:", err);
+      }
+      
       // Không đợi analysis, chuyển vòng ngay
       setSubmitting(false);
-      const roundId = res.data.round_id;
+      
       const roundData = {
         audioBlob: audio,
         timeTaken,
         prompt: prompt || promptDataRef.current?.prompt || "",
-        round_id: roundId
+        round_id: roundId,
+        missing_words: missingWordsList // Lưu missing_words từ analysis
       };
       
       // Chuyển vòng ngay
@@ -548,19 +580,130 @@ export default function SpeakingRound({
 
 
   const fetchWordDefinition = async (word) => {
+    // Kiểm tra cache trước
+    if (wordDefinitionsCache[word]) {
+      return wordDefinitionsCache[word];
+    }
+
+    // Nếu đang loading, không fetch lại
+    if (loadingWords[word]) {
+      return null;
+    }
+
     try {
+      setLoadingWords(prev => ({ ...prev, [word]: true }));
       const res = await api.get(`/learners/dictionary/${encodeURIComponent(word)}`);
-      return res.data;
+      const definition = res.data;
+      
+      // Lưu vào cache (state và localStorage)
+      const newCache = {
+        ...wordDefinitionsCache,
+        [word]: definition
+      };
+      setWordDefinitionsCache(newCache);
+      
+      // Lưu vào localStorage (chỉ lưu 100 từ gần nhất để tránh quá lớn)
+      try {
+        const cacheEntries = Object.entries(newCache);
+        const limitedCache = cacheEntries.slice(-100).reduce((acc, [key, value]) => {
+          acc[key] = value;
+          return acc;
+        }, {});
+        localStorage.setItem('wordDefinitionsCache', JSON.stringify(limitedCache));
+      } catch (err) {
+        console.warn("Could not save to localStorage:", err);
+      }
+      
+      return definition;
     } catch (err) {
       console.error("❌ Error fetching word definition:", err);
       return null;
+    } finally {
+      setLoadingWords(prev => ({ ...prev, [word]: false }));
     }
   };
 
-  const handleWordHover = async (word) => {
-    const definition = await fetchWordDefinition(word);
+  // Pre-load tất cả từ trong prompt để cache sẵn
+  const preloadWordDefinitions = async (promptText) => {
+    if (!promptText || preloadingWords) return;
+    
+    setPreloadingWords(true);
+    
+    // Extract unique words
+    const words = promptText
+      .toLowerCase()
+      .split(/\s+/)
+      .map((w) => w.replace(/[.,!?;:]/g, ""))
+      .filter((w) => w.length > 0)
+      .filter((w, i, arr) => arr.indexOf(w) === i); // Remove duplicates
+    
+    // Pre-fetch tất cả từ song song (batch 10 từ một lúc để nhanh hơn)
+    const batchSize = 10;
+    for (let i = 0; i < words.length; i += batchSize) {
+      const batch = words.slice(i, i + batchSize);
+      
+      // Fetch song song tất cả từ trong batch
+      const fetchPromises = batch
+        .filter(word => !wordDefinitionsCache[word] && !loadingWords[word])
+        .map(word => fetchWordDefinition(word).catch(err => {
+          console.warn(`Failed to preload definition for ${word}:`, err);
+          return null;
+        }));
+      
+      // Đợi batch này hoàn thành trước khi chuyển batch tiếp theo
+      await Promise.all(fetchPromises);
+      
+      // Không cần delay giữa các batch vì đã đợi batch trước hoàn thành
+    }
+    
+    setPreloadingWords(false);
+  };
+
+  // Phát âm từ khi click
+  const speakWord = (word) => {
+    // Dừng bất kỳ phát âm nào đang chạy
+    window.speechSynthesis.cancel();
+    
+    const utterance = new SpeechSynthesisUtterance(word);
+    utterance.lang = 'en-US';
+    utterance.rate = 0.8; // Chậm hơn một chút để dễ nghe
+    utterance.pitch = 1;
+    utterance.volume = 1;
+    
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const handleWordClick = async (word, event) => {
+    // Phát âm từ ngay khi click
+    speakWord(word);
+    
+    // Toggle tooltip: nếu đang mở từ này thì đóng, nếu không thì mở
+    if (openWordTooltip === word) {
+      setOpenWordTooltip(null);
+      setWordTooltip(null);
+      return;
+    }
+
+    // Kiểm tra cache trước
+    let definition = wordDefinitionsCache[word];
+    
+    if (!definition) {
+      // Fetch nếu chưa có trong cache
+      definition = await fetchWordDefinition(word);
+    }
+
     if (definition) {
       setWordTooltip({ word, ...definition });
+      setOpenWordTooltip(word);
+    } else {
+      // Nếu đang loading, đợi một chút rồi thử lại
+      setTimeout(async () => {
+        const def = await fetchWordDefinition(word);
+        if (def) {
+          setWordTooltip({ word, ...def });
+          setOpenWordTooltip(word);
+        }
+      }, 100);
     }
   };
 
@@ -585,54 +728,131 @@ export default function SpeakingRound({
       <div className="round-content">
         {showPrompt ? (
           <>
-            <div className="prompt-section">
-              <h4>Đọc đoạn văn sau:</h4>
-              <div className="prompt-text" style={{ position: "relative" }}>
-                {prompt.split(/\s+/).map((word, idx) => {
-                  const cleanWord = word.replace(/[.,!?;:]/g, "").toLowerCase();
-                  const isHighlighted = highlightedWords.has(idx);
-                  return (
-                    <span
-                      key={idx}
-                      className={`prompt-word ${isHighlighted ? "word-highlighted" : ""}`}
-                      onMouseEnter={() => handleWordHover(cleanWord)}
-                      onMouseLeave={() => setWordTooltip(null)}
+            <div className="prompt-section" style={{ position: "relative" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                <h4 style={{ margin: 0 }}>Đọc đoạn văn sau:</h4>
+                {/* Circular Progress Indicator - Vòng tròn nhỏ ở góc trên phải */}
+                {isRecording && (
+                  <div 
+                    key={progressAnimationKey}
+                    style={{
+                      width: "48px",
+                      height: "48px",
+                      position: "relative",
+                      flexShrink: 0
+                    }}
+                  >
+                    <svg 
+                      width="48" 
+                      height="48" 
+                      style={{ transform: "rotate(-90deg)" }}
                     >
-                      {word}{" "}
-                    </span>
-                  );
-                })}
-                {wordTooltip && (
-                  <div className="word-tooltip">
-                    <div className="tooltip-word">
-                      <strong>{wordTooltip.word}</strong>
+                      {/* Background circle */}
+                      <circle
+                        cx="24"
+                        cy="24"
+                        r="20"
+                        fill="none"
+                        stroke="#e5e7eb"
+                        strokeWidth="4"
+                      />
+                      {/* Progress circle */}
+                      <circle
+                        cx="24"
+                        cy="24"
+                        r="20"
+                        fill="none"
+                        stroke="#10b981"
+                        strokeWidth="4"
+                        strokeLinecap="round"
+                        strokeDasharray={`${2 * Math.PI * 20}`}
+                        strokeDashoffset={`${2 * Math.PI * 20}`}
+                        style={{
+                          animation: `progressCircleComplete ${timeLimit}s linear forwards`
+                        }}
+                      />
+                    </svg>
+                    {/* Time remaining text */}
+                    <div style={{
+                      position: "absolute",
+                      top: "50%",
+                      left: "50%",
+                      transform: "translate(-50%, -50%)",
+                      fontSize: "12px",
+                      fontWeight: "bold",
+                      color: "#10b981"
+                    }}>
+                      {timeRemaining}
                     </div>
-                    {wordTooltip.pronunciation && (
-                      <div className="tooltip-pronunciation" style={{ marginTop: 8, color: "#10b981", fontWeight: "bold" }}>
-                        <strong>Phát âm:</strong> /{wordTooltip.pronunciation}/
-                      </div>
-                    )}
-                    {wordTooltip.definition && (
-                      <div className="tooltip-definition">
-                        <strong>Nghĩa:</strong> {wordTooltip.definition}
-                      </div>
-                    )}
-                    {wordTooltip.usage && (
-                      <div className="tooltip-usage">
-                        <strong>Cách dùng:</strong> {wordTooltip.usage}
-                      </div>
-                    )}
-                    {wordTooltip.example && (
-                      <div className="tooltip-example">
-                        <strong>Ví dụ:</strong> {wordTooltip.example}
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
-              <div className="time-limit">
-                Thời gian: <strong>{formatTime(timeRemaining)}</strong>
-              </div>
+              <div className="prompt-text" style={{ 
+                position: "relative", 
+                zIndex: 2, 
+                padding: "24px",
+                background: "white",
+                borderRadius: "8px",
+                border: "1px solid #e5e7eb",
+                boxShadow: "0 2px 8px rgba(0, 0, 0, 0.08)",
+                fontSize: "18px",
+                lineHeight: "1.8",
+                color: "#333"
+              }}>
+                {(() => {
+                  // Tách prompt thành words và spaces để map đúng index
+                  const parts = prompt.split(/(\s+)/);
+                  let wordIndex = 0; // Index của từ trong prompt (bỏ qua spaces)
+                  
+                  return parts.map((part, idx) => {
+                    // Nếu là khoảng trắng, render trực tiếp
+                    if (/^\s+$/.test(part)) {
+                      return <span key={idx}>{part}</span>;
+                    }
+                    
+                    // Đây là một từ
+                    const currentWordIndex = wordIndex;
+                    wordIndex++; // Tăng index cho từ tiếp theo
+                    
+                    const cleanWord = part.replace(/[.,!?;:]/g, "").toLowerCase();
+                    const isHighlighted = highlightedWords.has(currentWordIndex);
+                    const isMissing = missingWords.has(currentWordIndex);
+                  
+                  return (
+                    <span
+                      key={idx}
+                      onClick={(e) => {
+                        // Chỉ phát âm, không hiển thị tooltip khi đang luyện nói
+                        speakWord(cleanWord);
+                      }}
+                      style={{ 
+                        cursor: "pointer", 
+                        position: "relative", 
+                        display: "inline-block",
+                        padding: "2px 4px",
+                        borderRadius: "3px",
+                        transition: "all 0.2s",
+                        fontWeight: isHighlighted ? "bold" : "normal",
+                        backgroundColor: isHighlighted ? "#d1fae5" : (isMissing ? "#fee2e2" : "transparent"),
+                        color: isHighlighted ? "#065f46" : (isMissing ? "#991b1b" : "#333")
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isHighlighted && !isMissing) {
+                          e.target.style.backgroundColor = "#f3f4f6";
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isHighlighted && !isMissing) {
+                          e.target.style.backgroundColor = "transparent";
+                        }
+                      }}
+                    >
+                      {part}
+                    </span>
+                  );
+                  });
+                })()}
+                </div>
             </div>
 
             <div className="recording-section">
@@ -655,11 +875,8 @@ export default function SpeakingRound({
                     <span className="pulse"></span>
                     Đang ghi âm...
                   </div>
-                  <div className="time-remaining">
-                    Còn lại: <strong>{formatTime(timeRemaining)}</strong>
-                  </div>
                   <div style={{ marginTop: 12, fontSize: 14, color: "#666" }}>
-                    Nói đúng hết tất cả từ sẽ tự động chuyển vòng
+                    Đọc to và rõ ràng đoạn văn trên
                   </div>
                 </div>
               )}
@@ -682,9 +899,34 @@ export default function SpeakingRound({
         ) : (
           <div className="recording-section">
             <div className="recording-controls">
-              <p style={{ textAlign: "center", color: "#666" }}>
-                Đang tải đề bài...
-              </p>
+              {loadingPrompt ? (
+                <p style={{ textAlign: "center", color: "#666" }}>
+                  Đang tải đề bài...
+                </p>
+              ) : promptError ? (
+                <div style={{ textAlign: "center" }}>
+                  <p style={{ color: "#ef4444", marginBottom: 12 }}>
+                    ❌ {promptError}
+                  </p>
+                  <button
+                    onClick={fetchPrompt}
+                    style={{
+                      padding: "8px 16px",
+                      background: "#10b981",
+                      color: "white",
+                      border: "none",
+                      borderRadius: 4,
+                      cursor: "pointer"
+                    }}
+                  >
+                    Thử lại
+                  </button>
+                </div>
+              ) : (
+                <p style={{ textAlign: "center", color: "#666" }}>
+                  Đang tải đề bài...
+                </p>
+              )}
             </div>
           </div>
         )}

@@ -41,7 +41,9 @@ export default function Home() {
  useEffect(() => {
   api.get("/packages/public")
     .then((res) => {
-      const sorted = (res.data.packages || []).sort((a, b) => a.price - b.price);
+      const data = res.data;
+      const list = Array.isArray(data) ? data : (data.packages || []);
+      const sorted = list.sort((a, b) => a.price - b.price);
       setPackages(sorted);
     })
     .catch((err) => console.error("❌ Lỗi khi load packages:", err));

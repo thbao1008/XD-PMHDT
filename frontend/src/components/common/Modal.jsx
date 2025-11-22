@@ -2,7 +2,7 @@
 import { createPortal } from "react-dom";
 import "../../styles/modal.css";
 
-export default function Modal({ title, children, onClose }) {
+export default function Modal({ title, children, onClose, className = "" }) {
   return createPortal(
     <div
       className="modal-overlay"
@@ -13,7 +13,7 @@ export default function Modal({ title, children, onClose }) {
         }
       }}
     >
-      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+      <div className={`modal-card ${className}`} onClick={(e) => e.stopPropagation()}>
         {title && (
           <div className="modal-header">
             <h3>{title}</h3>

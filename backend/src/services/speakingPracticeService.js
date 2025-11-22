@@ -12,33 +12,15 @@ import fs from "fs";
 // Training data nằm trong ai_models/promptSamples.json
 
 /**
- * Tính thời gian dựa trên độ dài và độ phức tạp của text
- * Dựa trên tốc độ nói của người giỏi tiếng Anh: ~150-200 từ/phút
- * Thêm buffer 20% cho người học
+ * Tính thời gian cố định cho tất cả các vòng
+ * Dựa trên thời gian người giỏi tiếng Anh nói câu khó (30-40 từ) trong khoảng 10-15 giây
+ * Set thời gian cố định là 18 giây cho tất cả các vòng (bất kể mức độ dễ/khó)
  */
 function calculateTimeLimit(text, level) {
-  if (!text) return 30;
-  
-  // Đếm số từ
-  const words = text.trim().split(/\s+/).length;
-  
-  // Tốc độ nói (từ/giây)
-  // Level 1: 2 từ/giây (120 từ/phút) - chậm hơn
-  // Level 2: 2.5 từ/giây (150 từ/phút) - trung bình
-  // Level 3: 3 từ/giây (180 từ/phút) - nhanh hơn
-  const wordsPerSecond = level === 1 ? 2 : level === 2 ? 2.5 : 3;
-  
-  // Thời gian cơ bản
-  let baseTime = words / wordsPerSecond;
-  
-  // Thêm buffer 20% cho người học
-  baseTime = baseTime * 1.2;
-  
-  // Thêm thời gian tối thiểu và tối đa
-  const minTime = level === 1 ? 15 : level === 2 ? 25 : 35;
-  const maxTime = level === 1 ? 45 : level === 2 ? 90 : 120;
-  
-  return Math.max(minTime, Math.min(maxTime, Math.ceil(baseTime)));
+  // Thời gian cố định: 18 giây cho tất cả các vòng
+  // Người giỏi tiếng Anh nói câu khó (30-40 từ) trong khoảng 10-15 giây
+  // Thêm buffer 3 giây cho người học = 18 giây
+  return 18;
 }
 
 /**
@@ -63,10 +45,35 @@ export async function initializeAILearning() {
 
 /**
  * Tạo session mới cho luyện nói
+ * Kiểm tra xem có session đang dở dang không, nếu có thì bắt buộc phải hoàn thành trước
  */
 export async function createPracticeSession(learnerId, level) {
   // Đảm bảo AI đã học từ các nguồn
   await initializeAILearning();
+  
+  // Kiểm tra xem có session đang dở dang không (status = 'active' và chưa completed)
+  const existingSession = await pool.query(
+    `SELECT id, created_at, 
+       (SELECT COUNT(*) FROM speaking_practice_rounds WHERE session_id = speaking_practice_sessions.id) as rounds_count
+     FROM speaking_practice_sessions 
+     WHERE learner_id = $1 
+       AND mode = 'practice'
+       AND status = 'active'
+       AND completed_at IS NULL
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [learnerId]
+  );
+
+  if (existingSession.rows.length > 0) {
+    const session = existingSession.rows[0];
+    const roundsCount = parseInt(session.rounds_count || 0);
+    
+    // Nếu session đang dở dang (chưa đủ 10 rounds), throw error
+    if (roundsCount < 10) {
+      throw new Error(`Bạn đang có một bài luyện tập chưa hoàn thành (${roundsCount}/10 vòng). Vui lòng hoàn thành bài đó trước khi bắt đầu bài mới.`);
+    }
+  }
   
   const result = await pool.query(
     `INSERT INTO speaking_practice_sessions (learner_id, level, mode, status)
@@ -399,8 +406,18 @@ async function getTrainingDataFromPython(trainingType, options = {}) {
         }
         
         try {
-          const result = JSON.parse(stdout);
-          resolve(result);
+          // Extract JSON từ stdout (bỏ qua debug messages)
+          const firstBrace = stdout.indexOf('{');
+          const lastBrace = stdout.lastIndexOf('}');
+          if (firstBrace !== -1 && lastBrace !== -1) {
+            const jsonString = stdout.substring(firstBrace, lastBrace + 1);
+            const result = JSON.parse(jsonString);
+            resolve(result);
+          } else {
+            console.error("❌ No JSON found in Python output");
+            console.error("Python stdout:", stdout);
+            resolve(null);
+          }
         } catch (err) {
           console.error("❌ Error parsing Python output:", err);
           console.error("Python stdout:", stdout);
@@ -425,10 +442,91 @@ async function getTrainingDataFromPython(trainingType, options = {}) {
 }
 
 /**
+ * Lấy điểm trung bình của học viên
+ */
+async function getLearnerAverageScore(learnerId) {
+  if (!learnerId) return null;
+  
+  try {
+    const result = await pool.query(
+      `SELECT AVG(average_score) as avg_score
+       FROM practice_history 
+       WHERE learner_id = $1 
+         AND practice_type = 'speaking_practice' 
+         AND average_score IS NOT NULL`,
+      [learnerId]
+    );
+    
+    return result.rows[0]?.avg_score ? parseFloat(result.rows[0].avg_score) : null;
+  } catch (err) {
+    console.error("❌ Error getting learner average score:", err);
+    return null;
+  }
+}
+
+/**
+ * Xác định độ khó của câu dựa trên điểm trung bình và round number
+ * Phân bổ: dễ/trung bình/khó theo tỉ lệ phù hợp với trình độ
+ */
+function determineDifficultyForRound(averageScore, roundNumber) {
+  // Nếu không có điểm, dùng tỉ lệ mặc định cho người mới
+  if (!averageScore || averageScore === 0) {
+    // Round 1-3: dễ, Round 4-7: trung bình, Round 8-10: khó
+    if (roundNumber <= 3) return 'easy';
+    if (roundNumber <= 7) return 'medium';
+    return 'hard';
+  }
+  
+  // Phân bổ dựa trên điểm trung bình
+  let easyRatio, mediumRatio, hardRatio;
+  
+  if (averageScore < 50) {
+    // Điểm < 50: 70% dễ, 25% trung bình, 5% khó
+    easyRatio = 0.7;
+    mediumRatio = 0.25;
+    hardRatio = 0.05;
+  } else if (averageScore < 70) {
+    // Điểm 50-70: 40% dễ, 45% trung bình, 15% khó
+    easyRatio = 0.4;
+    mediumRatio = 0.45;
+    hardRatio = 0.15;
+  } else if (averageScore < 85) {
+    // Điểm 70-85: 20% dễ, 50% trung bình, 30% khó
+    easyRatio = 0.2;
+    mediumRatio = 0.5;
+    hardRatio = 0.3;
+  } else {
+    // Điểm > 85: 10% dễ, 40% trung bình, 50% khó
+    easyRatio = 0.1;
+    mediumRatio = 0.4;
+    hardRatio = 0.5;
+  }
+  
+  // Xác định độ khó cho round này dựa trên tỉ lệ
+  const random = Math.random();
+  if (random < easyRatio) {
+    return 'easy';
+  } else if (random < easyRatio + mediumRatio) {
+    return 'medium';
+  } else {
+    return 'hard';
+  }
+}
+
+/**
  * AI tự tạo prompt mới sử dụng Python trainer (đơn giản hóa)
+ * Phân bổ câu dễ/trung bình/khó dựa trên điểm trung bình của học viên
  */
 async function generateAIPrompt(level, roundNumber, learnerId = null, sessionId = null) {
   try {
+    // Lấy điểm trung bình của học viên
+    const averageScore = await getLearnerAverageScore(learnerId);
+    
+    // Xác định độ khó cho round này
+    const difficulty = determineDifficultyForRound(averageScore, roundNumber);
+    
+    console.log(`📊 Learner average score: ${averageScore || 'N/A'}, Round ${roundNumber}, Difficulty: ${difficulty}`);
+    
     // Lấy topics và prompts đã dùng trong session để tránh lặp lại
     const { topics: usedTopics, prompts: usedPrompts } = await getUsedTopicsInSession(sessionId, level);
     
@@ -444,6 +542,7 @@ async function generateAIPrompt(level, roundNumber, learnerId = null, sessionId 
     
     // Gọi OpenRouter với training data từ Python qua trainedAIService
     // trainedAIService sẽ tự động gọi Python trainer với topics/challenges
+    // QUAN TRỌNG: Độ khó được xác định dựa trên điểm trung bình của học viên
     const response = await trainedAIService.callTrainedAI(
       'prompt_generator',
       {
@@ -454,20 +553,23 @@ async function generateAIPrompt(level, roundNumber, learnerId = null, sessionId 
         sessionId,
         topicsJson: JSON.stringify(topics.rows),
         challengesJson: JSON.stringify(challenges.rows),
-        personalizationContext
+        personalizationContext,
+        // Độ khó được xác định dựa trên điểm trung bình
+        difficulty_requirement: difficulty === 'hard' ? 'very_hard' : difficulty === 'medium' ? 'medium' : 'easy',
+        average_score: averageScore // Truyền điểm trung bình để AI có thể điều chỉnh
       },
       null, // Messages sẽ được tạo tự động với randomization
       { 
         model: 'openai/gpt-4o-mini', 
-        temperature: 1.1, // Temperature cao để đảm bảo đa dạng
-        max_tokens: 250 
+        temperature: difficulty === 'hard' ? 1.2 : difficulty === 'medium' ? 1.1 : 1.0,
+        max_tokens: difficulty === 'hard' ? 300 : difficulty === 'medium' ? 250 : 200
       }
     );
     
     // Nếu response fail, fallback
     if (!response || !response.choices || !response.choices[0]) {
       console.warn("⚠️ AI response failed, using fallback");
-      return await generateAIPromptFallback(level, usedTopics, usedPrompts);
+      return await generateAIPromptFallback(level, usedTopics, usedPrompts, difficulty);
     }
 
     const content = response.choices?.[0]?.message?.content || "{}";
@@ -495,7 +597,8 @@ async function generateAIPrompt(level, roundNumber, learnerId = null, sessionId 
 
     // Lưu prompt đã generate vào database
     const wordCount = finalPrompt.split(/\s+/).length;
-    const difficultyScore = level === 1 ? 0.3 : level === 2 ? 0.6 : 0.9;
+    // Tính difficulty_score dựa trên độ khó thực tế
+    const difficultyScore = difficulty === 'hard' ? 0.9 : difficulty === 'medium' ? 0.6 : 0.3;
 
     await pool.query(
       `INSERT INTO ai_generated_prompts 
@@ -517,23 +620,44 @@ async function generateAIPrompt(level, roundNumber, learnerId = null, sessionId 
     return finalPrompt;
   } catch (err) {
     console.error("❌ Error generating AI prompt:", err);
-    // Fallback về prompts cũ nếu AI fail
-    // Fallback: Generate simple prompt with AI
-    const fallbackPrompt = `Generate a simple English speaking practice sentence for level ${level} learners. Return only the sentence, no explanation.`;
+    
+    // Fallback: Lấy lại difficulty và averageScore để tạo prompt phù hợp
     try {
+      const averageScore = await getLearnerAverageScore(learnerId);
+      const difficulty = determineDifficultyForRound(averageScore, roundNumber);
+      
+      // Fallback: Generate simple prompt with AI dựa trên difficulty
+      const difficultyDesc = difficulty === 'hard' ? 'difficult (30-50 words, complex vocabulary)' : 
+                             difficulty === 'medium' ? 'medium (15-30 words, moderate vocabulary)' : 
+                             'easy (5-15 words, simple vocabulary)';
+      
+      const fallbackPrompt = `Generate a ${difficultyDesc} English speaking practice sentence. Return only the sentence, no explanation.`;
+      
       const response = await aiService.callOpenRouter(
         [{ role: "user", content: fallbackPrompt }],
         { model: "openai/gpt-4o-mini", temperature: 1.0, max_tokens: 100 }
       );
       const content = response.choices?.[0]?.message?.content || "";
-      return content.trim().replace(/^["']|["']$/g, "") || `Let's practice speaking English. This is level ${level}.`;
+      return content.trim().replace(/^["']|["']$/g, "") || 
+        (difficulty === 'hard' ? "The advancement of technology has significantly transformed how we learn and interact with information in the modern world." :
+         difficulty === 'medium' ? "I enjoy learning English because it helps me communicate with people from different countries." :
+         "Hello, my name is Anna. I am from Vietnam.");
     } catch (fallbackErr) {
+      // Ultimate fallback
       const ultimateFallback = {
-        1: "Hello, my name is Anna. I am from Vietnam.",
-        2: "I enjoy learning English because it helps me communicate with people from different countries.",
-        3: "The advancement of technology has significantly transformed how we learn and interact with information in the modern world."
+        easy: "Hello, my name is Anna. I am from Vietnam.",
+        medium: "I enjoy learning English because it helps me communicate with people from different countries.",
+        hard: "The advancement of technology has significantly transformed how we learn and interact with information in the modern world."
       };
-      return ultimateFallback[level] || ultimateFallback[1];
+      
+      // Cố gắng lấy difficulty một lần nữa
+      try {
+        const averageScore = await getLearnerAverageScore(learnerId);
+        const difficulty = determineDifficultyForRound(averageScore, roundNumber);
+        return ultimateFallback[difficulty] || ultimateFallback.easy;
+      } catch {
+        return ultimateFallback.easy;
+      }
     }
   }
 }
@@ -541,7 +665,7 @@ async function generateAIPrompt(level, roundNumber, learnerId = null, sessionId 
 /**
  * Fallback method nếu Python trainer không hoạt động (đơn giản hóa)
  */
-async function generateAIPromptFallback(level, usedTopics = [], usedPrompts = []) {
+async function generateAIPromptFallback(level, usedTopics = [], usedPrompts = [], difficulty = 'easy') {
   // Đơn giản hóa: chỉ tạo prompt ngắn gọn với AI
   const availableTopics = TOPIC_THEMES[level] || TOPIC_THEMES[1];
   const unusedTopics = availableTopics.filter(t => !usedTopics.includes(t));
@@ -549,8 +673,11 @@ async function generateAIPromptFallback(level, usedTopics = [], usedPrompts = []
     ? unusedTopics.sort(() => Math.random() - 0.5).slice(0, 3)
     : availableTopics.sort(() => Math.random() - 0.5).slice(0, 3);
   
-  const simplePrompt = `Generate a NEW speaking practice sentence for level ${level} English learners.
-- Length: ${level === 1 ? '5-15' : level === 2 ? '15-30' : '30-60'} words
+  // Xác định độ dài dựa trên difficulty thay vì level
+  const lengthDesc = difficulty === 'hard' ? '30-50' : difficulty === 'medium' ? '15-30' : '5-15';
+  
+  const simplePrompt = `Generate a NEW speaking practice sentence for ${difficulty} difficulty English learners.
+- Length: ${lengthDesc} words
 - Topic: ${selectedTopics.join(' or ')}
 - Avoid: ${usedPrompts.slice(0, 3).join(', ') || 'none'}
 - Natural, conversational English
@@ -574,14 +701,14 @@ Return JSON: {"prompt": "sentence", "topic": "topic name", "word_count": number}
     };
   }
 
-  // Nếu vẫn fail, tạo prompt đơn giản nhất
+  // Nếu vẫn fail, tạo prompt đơn giản nhất dựa trên difficulty
   if (!result.prompt) {
-    const levelPrompts = {
-      1: "Hello, my name is Anna. I am from Vietnam.",
-      2: "I enjoy learning English because it helps me communicate with people from different countries.",
-      3: "The advancement of technology has significantly transformed how we learn and interact with information in the modern world."
+    const difficultyPrompts = {
+      easy: "Hello, my name is Anna. I am from Vietnam.",
+      medium: "I enjoy learning English because it helps me communicate with people from different countries.",
+      hard: "The advancement of technology has significantly transformed how we learn and interact with information in the modern world."
     };
-    return levelPrompts[level] || levelPrompts[1];
+    return difficultyPrompts[difficulty] || difficultyPrompts.easy;
   }
   
   return result.prompt;
@@ -758,9 +885,11 @@ export async function saveRound(sessionId, roundNumber, audioUrl, timeTaken, pro
 
   const roundId = result.rows[0].id;
 
-  // Enqueue job để xử lý transcription và analysis ở background
+  // QUAN TRỌNG: Phân tích ngay sau mỗi vòng (không đợi đến cuối)
+  // Xử lý ngay trong background để kết quả sẵn sàng khi đến summary
   try {
     const { enqueue } = await import("../utils/queue.js");
+    // Enqueue với priority cao để xử lý nhanh
     await enqueue("processSpeakingRound", {
       roundId,
       sessionId,
@@ -768,11 +897,14 @@ export async function saveRound(sessionId, roundNumber, audioUrl, timeTaken, pro
       prompt,
       level,
       time_taken: timeTaken
+    }, {
+      priority: 1, // Priority cao để xử lý ngay
+      attempts: 2 // Retry nếu fail
     });
   } catch (err) {
     console.error("❌ Error enqueueing processing job:", err);
-    // Nếu không có queue, xử lý ngay (fallback)
-    processRoundInBackground(roundId, audioUrl, prompt, level).catch(err => {
+    // Nếu không có queue, xử lý ngay (fallback) - không đợi
+    processRoundInBackground(roundId, audioUrl, prompt, level, sessionId).catch(err => {
       console.error("❌ Background processing error:", err);
     });
   }
@@ -782,8 +914,9 @@ export async function saveRound(sessionId, roundNumber, audioUrl, timeTaken, pro
 
 /**
  * Xử lý round ở background (transcription + AI analysis)
+ * QUAN TRỌNG: Phân tích ngay sau mỗi vòng để kết quả sẵn sàng khi đến summary
  */
-async function processRoundInBackground(roundId, audioUrl, prompt, level) {
+async function processRoundInBackground(roundId, audioUrl, prompt, level, sessionId = null) {
   const localPath = audioUrl.startsWith("/uploads/")
     ? path.join(process.cwd(), audioUrl)
     : audioUrl;
@@ -792,8 +925,8 @@ async function processRoundInBackground(roundId, audioUrl, prompt, level) {
   if (fs.existsSync(localPath)) {
     try {
       const { json: transcriptJson } = await runWhisperX(localPath, {
-        model: "base",
-        computeType: "float32"
+        model: "base"
+        // computeType không cần chỉ định - tự động dùng GPU với float16
       });
       transcript = transcriptJson;
     } catch (err) {
@@ -817,18 +950,58 @@ async function processRoundInBackground(roundId, audioUrl, prompt, level) {
         .join(" ");
 
     try {
-      analysis = await analyzePronunciation(transcriptText, prompt, level);
-      score = analysis.score || 0;
+      // Lấy learner_id từ session để lưu vào quick_evaluations
+      const sessionInfo = await pool.query(
+        `SELECT learner_id FROM speaking_practice_sessions WHERE id = $1`,
+        [sessionId]
+      );
+      const learnerId = sessionInfo.rows[0]?.learner_id;
+      
+      analysis = await analyzePronunciation(transcriptText, prompt, level, roundId, sessionId, learnerId);
+      score = Math.round(analysis.score || 0); // Làm tròn điểm
       feedback = analysis.feedback || "";
       errors = analysis.errors || [];
       correctedText = analysis.corrected_text || "";
+      
     } catch (err) {
       console.error("❌ AI analysis error:", err);
       feedback = "Không thể phân tích. Vui lòng thử lại.";
+      score = 0; // Nếu lỗi, score = 0
+      analysis = {
+        score: 0,
+        feedback: feedback,
+        missing_words: prompt.toLowerCase().split(/\s+/).filter(w => w.length > 0),
+        errors: [],
+        corrected_text: prompt
+      };
     }
+  } else {
+    // Nếu không có transcript (không nói gì), score = 0
+    score = 0;
+    feedback = "Bạn chưa nói gì. Hãy thử lại và nói to, rõ ràng.";
+    analysis = {
+      score: 0,
+      feedback: feedback,
+      missing_words: prompt.toLowerCase().split(/\s+/).filter(w => w.length > 0),
+      errors: [],
+      corrected_text: prompt
+    };
   }
 
-  // Cập nhật database với kết quả
+  // Build word_analysis từ transcript (nếu có)
+  let wordAnalysis = [];
+  if (transcript && transcript.words && Array.isArray(transcript.words)) {
+    wordAnalysis = transcript.words.map((w, idx) => ({
+      word: w.text ?? w.word ?? "",
+      start: typeof w.start === "number" ? w.start : null,
+      end: typeof w.end === "number" ? w.end : null,
+      confidence: typeof w.score === "number" ? w.score : w.confidence ?? null,
+      wordIndex: idx
+    }));
+  }
+  
+  // Cập nhật database với kết quả (bao gồm missing_words)
+  // Lưu ý: word_analysis không có trong schema, chỉ lưu trong analysis
   await pool.query(
     `UPDATE speaking_practice_rounds 
      SET transcript = $1, score = $2, analysis = $3
@@ -839,8 +1012,10 @@ async function processRoundInBackground(roundId, audioUrl, prompt, level) {
       JSON.stringify({
         feedback,
         errors,
-        corrected_text: correctedText,
-        score
+        corrected_text: correctedText || prompt,
+        score,
+        missing_words: analysis?.missing_words || [],
+        word_analysis: wordAnalysis.length > 0 ? wordAnalysis : []
       }),
       roundId
     ]
@@ -851,104 +1026,266 @@ async function processRoundInBackground(roundId, audioUrl, prompt, level) {
  * Phân tích phát âm với AI sử dụng Python trainer (quick analysis)
  */
 async function analyzePronunciation(transcript, expectedText, level, roundId = null, sessionId = null, learnerId = null) {
-  try {
-    // Gọi Python trainer để tạo quick analysis training
-    const trainingData = await getTrainingDataFromPython('quick_analysis', {
-      transcript,
-      expected: expectedText,
-      level
-    });
-    
-    // Nếu Python trainer fail, dùng fallback
-    if (!trainingData || !trainingData.system_prompt) {
-      return await analyzePronunciationFallback(transcript, expectedText, level);
-    }
-    
-    // Gọi OpenRouter với training data từ Python qua trainedAIService
-    const messages = [
-      { role: 'user', content: 'Analyze now. Return JSON only.' }
-    ];
-    
-    const response = await trainedAIService.callTrainedAI(
-      'quick_analysis',
-      {
-        transcript,
-        expected: expectedText,
-        level
-      },
-      messages,
-      { model: 'openai/gpt-4o-mini', temperature: 0.5, max_tokens: 200 }
-    );
-
-    const content = response.choices?.[0]?.message?.content || "{}";
-    let parsed;
-    try {
-      parsed = JSON.parse(content);
-    } catch (e) {
-      return await analyzePronunciationFallback(transcript, expectedText, level);
-    }
-    
-    // Lưu quick evaluation vào database
-    if (roundId && learnerId) {
-      await pool.query(
-        `INSERT INTO quick_evaluations 
-         (round_id, session_id, learner_id, score, feedback, strengths, improvements)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [
-          roundId,
-          sessionId,
-          learnerId,
-          parsed.score || 5,
-          parsed.feedback || "",
-          JSON.stringify(parsed.strengths || []),
-          JSON.stringify(parsed.improvements || [])
-        ]
-      );
-    }
-    
+  // QUAN TRỌNG: Kiểm tra nếu không nói gì (transcript rỗng hoặc không có từ nào) thì score = 0
+  if (!transcript || !transcript.trim()) {
     return {
-      score: parsed.score || 5,
-      feedback: parsed.feedback || "Good effort!",
+      score: 0,
+      feedback: "Bạn chưa nói gì. Hãy thử lại và nói to, rõ ràng.",
       errors: [],
       corrected_text: expectedText,
-      strengths: parsed.strengths || [],
-      improvements: parsed.improvements || []
+      missing_words: expectedText.toLowerCase().split(/\s+/).filter(w => w.length > 0),
+      strengths: [],
+      improvements: ["Hãy nói to và rõ ràng hơn"]
     };
-  } catch (err) {
-    console.error("❌ AI analysis error:", err);
+  }
+  
+  // Kiểm tra xem có từ nào trong transcript match với expected text không
+  const transcriptWords = transcript.toLowerCase().split(/\s+/).filter(w => w.length > 0);
+  const expectedWords = expectedText.toLowerCase().split(/\s+/).filter(w => w.length > 0);
+  
+  // Nếu không có từ nào match, score = 0
+  const matchedWords = expectedWords.filter(ew => {
+    const cleanExpected = ew.replace(/[.,!?;:]/g, "");
+    return transcriptWords.some(tw => {
+      const cleanTranscript = tw.replace(/[.,!?;:]/g, "");
+      return cleanTranscript === cleanExpected || 
+             cleanTranscript.includes(cleanExpected) || 
+             cleanExpected.includes(cleanTranscript);
+    });
+  });
+  
+  // Nếu không match từ nào, score = 0
+  if (matchedWords.length === 0) {
+    return {
+      score: 0,
+      feedback: "Bạn chưa nói đúng từ nào. Hãy nghe lại và nói theo prompt.",
+      errors: [],
+      corrected_text: expectedText,
+      missing_words: expectedWords,
+      strengths: [],
+      improvements: ["Hãy nghe kỹ prompt và nói theo đúng nội dung"]
+    };
+  }
+  
+  // Gọi Python trainer để tạo quick analysis training
+  const trainingData = await getTrainingDataFromPython('quick_analysis', {
+    transcript,
+    expected: expectedText,
+    level
+  });
+  
+  // Nếu Python trainer fail, dùng fallback
+  if (!trainingData || !trainingData.system_prompt) {
     return await analyzePronunciationFallback(transcript, expectedText, level);
   }
+  
+  // Gọi OpenRouter với training data từ Python qua trainedAIService
+  const messages = [
+    { role: 'user', content: 'Analyze now. Return JSON only.' }
+  ];
+  
+  try {
+      const response = await trainedAIService.callTrainedAI(
+        'quick_analysis',
+        {
+          transcript,
+          expected: expectedText,
+          level
+        },
+        messages,
+        { 
+          model: 'openai/gpt-4o-mini', // Dùng gpt-4o-mini để tiết kiệm credits
+          temperature: 0.7,
+          max_tokens: 500
+        }
+      );
+
+      const content = response.choices?.[0]?.message?.content || "{}";
+      let parsed;
+      try {
+        parsed = JSON.parse(content);
+      } catch (e) {
+        console.warn("⚠️ Failed to parse AI response, using fallback");
+        return await analyzePronunciationFallback(transcript, expectedText, level);
+      }
+      
+      // Validate parsed response
+      if (!parsed || typeof parsed !== 'object') {
+        console.warn("⚠️ Invalid AI response format, using fallback");
+        return await analyzePronunciationFallback(transcript, expectedText, level);
+      }
+      
+      // Tính missing_words từ kết quả phân tích
+      const missingWords = expectedWords.filter(ew => {
+        const cleanExpected = ew.replace(/[.,!?;:]/g, "");
+        return !transcriptWords.some(tw => {
+          const cleanTranscript = tw.replace(/[.,!?;:]/g, "");
+          return cleanTranscript === cleanExpected || 
+                 cleanTranscript.includes(cleanExpected) || 
+                 cleanExpected.includes(cleanTranscript);
+        });
+      });
+      
+      // Đảm bảo score không vượt quá tỷ lệ từ đã nói đúng (thang 100)
+      const accuracyRatio = matchedWords.length / expectedWords.length;
+      const calculatedScore = parsed.score ? (parsed.score * 10) : (accuracyRatio * 100); // Convert từ thang 10 sang 100 nếu có
+      const finalScore = Math.min(calculatedScore, accuracyRatio * 100); // Không vượt quá tỷ lệ đúng (thang 100)
+      
+      // Lưu quick evaluation vào database
+      if (roundId && learnerId) {
+        await pool.query(
+          `INSERT INTO quick_evaluations 
+           (round_id, session_id, learner_id, score, feedback, strengths, improvements)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [
+            roundId,
+            sessionId,
+            learnerId,
+            finalScore,
+            parsed.feedback || "",
+            JSON.stringify(parsed.strengths || []),
+            JSON.stringify(parsed.improvements || [])
+          ]
+        );
+      }
+      
+      return {
+        score: Math.round(finalScore), // Làm tròn điểm
+        feedback: parsed.feedback || "Good effort!",
+        errors: [],
+        corrected_text: expectedText,
+        missing_words: missingWords,
+        strengths: parsed.strengths || [],
+        improvements: parsed.improvements || []
+      };
+    } catch (err) {
+      // Nếu gặp lỗi payment required hoặc các lỗi khác, fallback về phương pháp cũ
+      console.error("❌ AI analysis error:", err);
+      console.warn("⚠️ Falling back to basic pronunciation analysis");
+      return await analyzePronunciationFallback(transcript, expectedText, level);
+    }
 }
 
 /**
  * Fallback cho pronunciation analysis
  */
 async function analyzePronunciationFallback(transcript, expectedText, level) {
-  const prompt = `Quick analysis. Expected: "${expectedText}". Spoken: "${transcript}". 
-Return JSON: {"score": 0-10, "feedback": "brief", "strengths": ["s1"], "improvements": ["i1"]}`;
+  // Kiểm tra nếu không nói gì
+  if (!transcript || !transcript.trim()) {
+    return {
+      score: 0,
+      feedback: "Bạn chưa nói gì. Hãy thử lại và nói to, rõ ràng.",
+      errors: [],
+      corrected_text: expectedText,
+      missing_words: expectedText.toLowerCase().split(/\s+/).filter(w => w.length > 0),
+      strengths: [],
+      improvements: ["Hãy nói to và rõ ràng hơn"]
+    };
+  }
+  
+  // Tính missing_words
+  const transcriptWords = transcript.toLowerCase().split(/\s+/).filter(w => w.length > 0);
+  const expectedWords = expectedText.toLowerCase().split(/\s+/).filter(w => w.length > 0);
+  const matchedWords = expectedWords.filter(ew => {
+    const cleanExpected = ew.replace(/[.,!?;:]/g, "");
+    return transcriptWords.some(tw => {
+      const cleanTranscript = tw.replace(/[.,!?;:]/g, "");
+      return cleanTranscript === cleanExpected || 
+             cleanTranscript.includes(cleanExpected) || 
+             cleanExpected.includes(cleanTranscript);
+    });
+  });
+  
+  // Nếu không match từ nào, score = 0
+  if (matchedWords.length === 0) {
+    return {
+      score: 0,
+      feedback: "Bạn chưa nói đúng từ nào. Hãy nghe lại và nói theo prompt.",
+      errors: [],
+      corrected_text: expectedText,
+      missing_words: expectedWords,
+      strengths: [],
+      improvements: ["Hãy nghe kỹ prompt và nói theo đúng nội dung"]
+    };
+  }
+  
+  const prompt = `You are an expert English speaking evaluator. Analyze the following speaking practice:
+
+Expected text: "${expectedText}"
+Spoken transcript: "${transcript}"
+
+Provide DETAILED analysis with:
+1. Score (0-10): Overall performance
+2. Feedback (2-4 sentences): Specific, encouraging, actionable feedback with examples
+3. Strengths (2-3 points): Specific examples of what worked well (e.g., "You pronounced 'X' clearly")
+4. Improvements (2-3 points): Specific, achievable goals with actionable steps (e.g., "Work on 'th' sound in 'think' - place tongue between teeth")
+
+Return JSON ONLY:
+{
+  "score": <0-10>,
+  "feedback": "<detailed feedback with specific examples>",
+  "strengths": ["<specific strength1>", "<strength2>"],
+  "improvements": ["<specific improvement1 with steps>", "<improvement2>"]
+}`;
 
   try {
     const response = await aiService.callOpenRouter(
       [{ role: "user", content: prompt }],
-      { model: "openai/gpt-4o-mini", temperature: 0.5, max_tokens: 200 }
+      { 
+        model: "openai/gpt-4o", // Nâng cấp lên GPT-4o cho fallback analysis
+        temperature: 0.7, // Tăng temperature để có phản hồi đa dạng hơn
+        max_tokens: 500 // Tăng tokens để có phản hồi chi tiết hơn
+      }
     );
 
     const content = response.choices?.[0]?.message?.content || "{}";
     const parsed = JSON.parse(content);
+    
+    // Tính missing_words
+    const missingWords = expectedWords.filter(ew => {
+      const cleanExpected = ew.replace(/[.,!?;:]/g, "");
+      return !transcriptWords.some(tw => {
+        const cleanTranscript = tw.replace(/[.,!?;:]/g, "");
+        return cleanTranscript === cleanExpected || 
+               cleanTranscript.includes(cleanExpected) || 
+               cleanExpected.includes(cleanTranscript);
+      });
+    });
+    
+    // Đảm bảo score không vượt quá tỷ lệ từ đã nói đúng
+    const accuracyRatio = matchedWords.length / expectedWords.length;
+    const calculatedScore = parsed.score || (accuracyRatio * 10);
+    const finalScore = Math.min(calculatedScore, accuracyRatio * 10);
+    
     return {
-      score: parsed.score || 5,
+      score: Math.round(finalScore), // Làm tròn điểm
       feedback: parsed.feedback || "Good effort!",
       errors: [],
       corrected_text: expectedText,
+      missing_words: missingWords,
       strengths: parsed.strengths || [],
       improvements: parsed.improvements || []
     };
   } catch (err) {
+    // Fallback: tính điểm dựa trên tỷ lệ từ đúng
+    const accuracyRatio = matchedWords.length / expectedWords.length;
+    const fallbackScore = accuracyRatio * 10;
+    const missingWords = expectedWords.filter(ew => {
+      const cleanExpected = ew.replace(/[.,!?;:]/g, "");
+      return !transcriptWords.some(tw => {
+        const cleanTranscript = tw.replace(/[.,!?;:]/g, "");
+        return cleanTranscript === cleanExpected || 
+               cleanTranscript.includes(cleanExpected) || 
+               cleanExpected.includes(cleanTranscript);
+      });
+    });
+    
     return {
-      score: 5,
+      score: fallbackScore,
       feedback: "Không thể phân tích chi tiết.",
       errors: [],
       corrected_text: expectedText,
+      missing_words: missingWords,
       strengths: [],
       improvements: []
     };
@@ -999,8 +1336,8 @@ export async function analyzeAllRoundsAndSummary(sessionId) {
     let transcript = null;
     try {
       const { json: transcriptJson } = await runWhisperX(localPath, {
-        model: "base",
-        computeType: "float32"
+        model: "base"
+        // computeType không cần chỉ định - tự động dùng GPU với float16
       });
       transcript = transcriptJson;
     } catch (err) {
@@ -1039,7 +1376,7 @@ export async function analyzeAllRoundsAndSummary(sessionId) {
           sessionId,
           learnerId
         );
-        score = analysis.score || 0;
+        score = Math.round(analysis.score || 0); // Làm tròn điểm
         feedback = analysis.feedback || "";
         errors = analysis.errors || [];
         correctedText = analysis.corrected_text || "";
@@ -1049,7 +1386,20 @@ export async function analyzeAllRoundsAndSummary(sessionId) {
       }
     }
 
-    // Cập nhật database với kết quả
+    // Build word_analysis từ transcript (nếu có)
+    let wordAnalysis = [];
+    if (transcript && transcript.words && Array.isArray(transcript.words)) {
+      wordAnalysis = transcript.words.map((w, idx) => ({
+        word: w.text ?? w.word ?? "",
+        start: typeof w.start === "number" ? w.start : null,
+        end: typeof w.end === "number" ? w.end : null,
+        confidence: typeof w.score === "number" ? w.score : w.confidence ?? null,
+        wordIndex: idx
+      }));
+    }
+    
+    // Cập nhật database với kết quả (bao gồm missing_words)
+    // Lưu ý: word_analysis không có trong schema, chỉ lưu trong analysis
     await pool.query(
       `UPDATE speaking_practice_rounds 
        SET transcript = $1, score = $2, analysis = $3
@@ -1061,7 +1411,9 @@ export async function analyzeAllRoundsAndSummary(sessionId) {
           feedback,
           errors,
           corrected_text: correctedText,
-          score
+          score,
+          missing_words: analysis?.missing_words || [],
+          word_analysis: wordAnalysis.length > 0 ? wordAnalysis : []
         }),
         round.id
       ]
@@ -1094,11 +1446,12 @@ export async function generateSummary(sessionId) {
     throw new Error("No rounds found");
   }
 
+  // Tính điểm tổng kết: cộng tất cả điểm 10 câu, chia cho 10, làm tròn
   const totalScore = rounds.rows.reduce((sum, r) => sum + (parseFloat(r.score) || 0), 0);
-  const averageScore = totalScore / rounds.rows.length;
+  const averageScore = Math.round(totalScore / 10); // Luôn chia cho 10 (10 câu), làm tròn
 
   // Tạo tổng kết với AI (tối ưu cho tốc độ)
-  const summaryPrompt = `Summary: ${rounds.rows.length} rounds, avg ${averageScore.toFixed(1)}/10.
+  const summaryPrompt = `Summary: ${rounds.rows.length} rounds, avg ${averageScore.toFixed(1)}/100.
 Scores: ${rounds.rows.map((r, i) => `R${i+1}:${r.score}`).join(" ")}.
 
 Return JSON only:
@@ -1122,10 +1475,27 @@ Return JSON only:
       }
     );
 
-    const content = response.choices?.[0]?.message?.content || "{}";
+    let content = response.choices?.[0]?.message?.content || "{}";
+    
+    // Parse JSON (handle markdown code blocks if any)
+    content = content.trim();
+    const codeBlockRegex = /```(?:json)?\s*([\s\S]*?)```/;
+    const codeBlockMatch = content.match(codeBlockRegex);
+    if (codeBlockMatch && codeBlockMatch[1]) {
+      content = codeBlockMatch[1].trim();
+    }
+    
+    // Extract JSON nếu có text trước/sau
+    const firstBrace = content.indexOf('{');
+    const lastBrace = content.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1) {
+      content = content.substring(firstBrace, lastBrace + 1);
+    }
+    
     summaryData = JSON.parse(content);
   } catch (err) {
     console.error("❌ Summary generation error:", err);
+    console.error("Content:", response.choices?.[0]?.message?.content);
   }
 
   // Update session
@@ -1137,7 +1507,7 @@ Return JSON only:
          summary = $3,
          completed_at = NOW()
      WHERE id = $4`,
-    [totalScore, averageScore, JSON.stringify(summaryData), sessionId]
+    [totalScore, Math.round(averageScore), JSON.stringify(summaryData), sessionId]
   );
 
   // Lưu vào practice_history để tracking tiến độ
@@ -1178,168 +1548,66 @@ Return JSON only:
       }
     });
     
-    // Lưu practice history
-    await pool.query(
-      `INSERT INTO practice_history 
-       (learner_id, session_id, practice_type, level, total_score, average_score, 
-        evaluation, strengths, improvements, duration_minutes)
-       VALUES ($1, $2, 'speaking_practice', $3, $4, $5, $6, $7, $8, $9)`,
-      [
-        session.learner_id,
-        sessionId,
-        session.level,
-        totalScore,
-        averageScore,
-        summaryData.overall_feedback || "Good practice session!",
-        JSON.stringify([...new Set(allStrengths)].slice(0, 3)),
-        JSON.stringify([...new Set(allImprovements)].slice(0, 3)),
-        duration
-      ]
+    // Lưu practice history - chỉ lưu điểm
+    // Kiểm tra xem đã có record chưa
+    const existing = await pool.query(
+      `SELECT id FROM practice_history WHERE session_id = $1`,
+      [sessionId]
     );
+    
+    if (existing.rows.length > 0) {
+      // Update existing record
+      await pool.query(
+        `UPDATE practice_history 
+         SET total_score = $1,
+             average_score = $2,
+             duration_minutes = $3
+         WHERE session_id = $4`,
+        [totalScore, Math.round(averageScore), duration, sessionId]
+      );
+    } else {
+      // Insert new record
+      await pool.query(
+        `INSERT INTO practice_history 
+         (learner_id, session_id, practice_type, level, total_score, average_score, duration_minutes)
+         VALUES ($1, $2, 'speaking_practice', $3, $4, $5, $6)`,
+        [
+          session.learner_id,
+          sessionId,
+          session.level,
+          totalScore,
+          Math.round(averageScore),
+          duration
+        ]
+      );
+    }
   }
+
+  // Parse missing_words từ analysis cho mỗi round
+  const roundsWithMissingWords = rounds.rows.map(round => {
+    let missingWords = [];
+    if (round.analysis) {
+      try {
+        const analysis = typeof round.analysis === 'string' 
+          ? JSON.parse(round.analysis) 
+          : round.analysis;
+        missingWords = analysis.missing_words || [];
+      } catch (e) {
+        // Ignore parse errors
+      }
+    }
+    return {
+      ...round,
+      missing_words: missingWords
+    };
+  });
 
   return {
     total_score: totalScore,
-    average_score: averageScore,
-    ...summaryData
+    average_score: Math.round(averageScore), // Làm tròn điểm trung bình
+    ...summaryData,
+    rounds: roundsWithMissingWords
   };
 }
 
-/**
- * Xử lý message trong story mode
- */
-export async function processStoryMessage(sessionId, text, audioUrl) {
-  let transcript = null;
-  let transcriptText = "";
-
-  // Nếu có audio, transcribe
-  if (audioUrl) {
-    const localPath = audioUrl.startsWith("/uploads/")
-      ? path.join(process.cwd(), audioUrl)
-      : audioUrl;
-
-    if (fs.existsSync(localPath)) {
-      try {
-        const { json: transcriptJson } = await runWhisperX(localPath, {
-          model: "base",
-          computeType: "float32"
-        });
-        transcript = transcriptJson;
-        transcriptText =
-          transcript.text ||
-          (transcript.segments || [])
-            .map((s) => s.text || "")
-            .join(" ");
-      } catch (err) {
-        console.error("❌ Story transcription error:", err);
-      }
-    }
-  }
-
-  const userMessage = text || transcriptText;
-
-  // Lấy conversation history
-  const history = await pool.query(
-    `SELECT * FROM story_conversations 
-     WHERE session_id = $1 
-     ORDER BY created_at DESC 
-     LIMIT 10`,
-    [sessionId]
-  );
-
-  // Tạo AI response với tone đồng cảm, an ủi
-  const aiResponse = await generateStoryResponse(userMessage, history.rows.reverse());
-
-  // Lưu messages
-  await pool.query(
-    `INSERT INTO story_conversations 
-     (session_id, message_type, text_content, audio_url, transcript, ai_response)
-     VALUES ($1, 'user', $2, $3, $4, $5)`,
-    [
-      sessionId,
-      text || null,
-      audioUrl || null,
-      transcript ? JSON.stringify(transcript) : null,
-      aiResponse
-    ]
-  );
-
-  return aiResponse;
-}
-
-/**
- * Tạo AI response cho story mode sử dụng Python trainer (trò chuyện live như Gemini)
- */
-async function generateStoryResponse(userMessage, history) {
-  try {
-    // Gọi Python trainer để tạo conversation AI training
-    const trainingData = await getTrainingDataFromPython('conversation_ai', {
-      topic: null, // Không có topic cố định, để conversation tự nhiên
-      history: history.map(h => ({
-        speaker: 'user',
-        text_content: h.text_content || "[Audio]",
-        ai_response: h.ai_response || ""
-      }))
-    });
-    
-    // Nếu Python trainer fail, dùng fallback
-    if (!trainingData || !trainingData.system_prompt) {
-      return await generateStoryResponseFallback(userMessage, history);
-    }
-    
-    // Gọi OpenRouter với training data từ Python qua trainedAIService
-    const messages = [
-      { role: 'user', content: userMessage }
-    ];
-    
-    const response = await trainedAIService.callTrainedAI(
-      'conversation_ai',
-      {
-        topic: null,
-        history: history.map(h => ({
-          speaker: 'user',
-          text_content: h.text_content || "[Audio]",
-          ai_response: h.ai_response || ""
-        }))
-      },
-      messages,
-      { model: "openai/gpt-4o-mini", temperature: 0.9, max_tokens: 300 }
-    );
-
-    return response.choices?.[0]?.message?.content || "I'm here to listen. Please continue.";
-  } catch (err) {
-    console.error("❌ Story response error:", err);
-    return generateStoryResponseFallback(userMessage, history);
-  }
-}
-
-/**
- * Fallback cho story response
- */
-async function generateStoryResponseFallback(userMessage, history) {
-  const systemPrompt = `You are a compassionate AI companion. Be warm, empathetic, and natural like Google Gemini's live conversation.
-
-Previous context:
-${history.slice(-3).map((h) => 
-  `User: ${h.text_content || "[Audio]"} | AI: ${h.ai_response || ""}`
-).join("\n")}
-
-User: "${userMessage}"
-
-Respond naturally and empathetically.`;
-
-  try {
-    const response = await aiService.callOpenRouter(
-      [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userMessage }
-      ],
-      { model: "openai/gpt-4o-mini", temperature: 0.9 }
-    );
-
-    return response.choices?.[0]?.message?.content || "I'm here to listen. Please continue.";
-  } catch (err) {
-    return "I understand. Thank you for sharing with me. How are you feeling about this?";
-  }
-}
 

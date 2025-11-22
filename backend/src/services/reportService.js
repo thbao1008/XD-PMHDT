@@ -32,6 +32,79 @@ export async function getReportSummary(from, to) {
 
   return result.rows[0];
 }
+// Lấy danh sách learners với mentor name và average score cho admin
+export async function getAllLearnersWithProgress(mentorId = null, searchQuery = null) {
+  let query = `
+    SELECT 
+      l.id AS learner_id,
+      u.id AS user_id,
+      u.name AS learner_name,
+      u.email,
+      u.phone,
+      m.id AS mentor_id,
+      mu.id AS mentor_user_id,
+      mu.name AS mentor_name,
+      COALESCE(
+        (SELECT AVG(average_score) 
+         FROM practice_history 
+         WHERE learner_id = l.id 
+           AND practice_type = 'speaking_practice' 
+           AND average_score IS NOT NULL),
+        0
+      ) AS average_score,
+      (SELECT COUNT(*) 
+       FROM practice_history 
+       WHERE learner_id = l.id 
+         AND practice_type = 'speaking_practice') AS practice_attempts,
+      (SELECT COUNT(*) 
+       FROM submissions s
+       JOIN challenges c ON s.challenge_id = c.id
+       WHERE s.learner_id = l.id) AS challenge_attempts
+    FROM learners l
+    JOIN users u ON l.user_id = u.id
+    LEFT JOIN mentors m ON l.mentor_id = m.id
+    LEFT JOIN users mu ON m.user_id = mu.id
+    WHERE 1=1
+  `;
+  
+  const params = [];
+  let paramIndex = 1;
+  
+  // Filter theo mentor
+  if (mentorId) {
+    query += ` AND m.id = $${paramIndex}`;
+    params.push(mentorId);
+    paramIndex++;
+  }
+  
+  // Search theo tên hoặc số điện thoại
+  if (searchQuery && searchQuery.trim()) {
+    query += ` AND (u.name ILIKE $${paramIndex} OR u.phone ILIKE $${paramIndex})`;
+    params.push(`%${searchQuery.trim()}%`);
+    paramIndex++;
+  }
+  
+  query += ` ORDER BY u.name ASC`;
+  
+  const result = await pool.query(query, params);
+  return result.rows;
+}
+
+// Lấy danh sách tất cả mentors để hiển thị trong dropdown
+export async function getAllMentors() {
+  const result = await pool.query(`
+    SELECT 
+      m.id AS mentor_id,
+      u.name AS mentor_name,
+      u.email,
+      u.phone
+    FROM mentors m
+    JOIN users u ON m.user_id = u.id
+    ORDER BY u.name ASC
+  `);
+  return result.rows;
+}
+
 // Lấy danh sách reports (có filter trạng thái)
 export async function getReports(status) {
   const result = await pool.query(`
