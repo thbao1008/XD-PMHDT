@@ -3,8 +3,10 @@ import jwt from "jsonwebtoken";
 import {
   findUserByEmail,
   findUserByPhone,
+  findUserById,
   findUserByIdentifier,
   createUserInDb,
+  updateUserInDb,
   updateUserPasswordByEmail,
   updateUserPasswordById,
 } from "../models/userModel.js";
@@ -112,7 +114,7 @@ export async function login(req, res) {
 }
 
 /**
- * Request password reset
+ * Request password reset - Step 1: Get security question
  */
 export async function requestPasswordReset(req, res) {
   try {
@@ -122,14 +124,19 @@ export async function requestPasswordReset(req, res) {
     const user = await findUserByIdentifier(identifier);
     if (!user) return res.status(404).json({ message: "Người dùng không tồn tại" });
 
-    const resetToken = jwt.sign(
-      { id: user.id, email: user.email },
-      JWT_SECRET,
-      { expiresIn: RESET_TOKEN_EXPIRES }
-    );
+    // Kiểm tra xem user đã có security question chưa
+    if (!user.security_question || !user.security_answer) {
+      return res.status(400).json({ 
+        message: "Tài khoản chưa thiết lập câu hỏi bảo mật. Vui lòng liên hệ quản trị viên." 
+      });
+    }
 
-    // In production: gửi token qua email/SMS
-    return res.json({ message: "Reset token tạo thành công", resetToken });
+    // Trả về câu hỏi bảo mật (không trả về answer)
+    return res.json({ 
+      message: "Vui lòng trả lời câu hỏi bảo mật",
+      security_question: user.security_question,
+      userId: user.id // Cần để verify answer ở bước sau
+    });
   } catch (err) {
     console.error("RequestPasswordReset error - authController.js:134", err);
     return res.status(500).json({ message: "Lỗi server" });
@@ -137,7 +144,49 @@ export async function requestPasswordReset(req, res) {
 }
 
 /**
- * Reset password using reset token
+ * Verify security answer - Step 2: Verify answer
+ */
+export async function verifySecurityAnswer(req, res) {
+  try {
+    const { identifier, security_answer } = req.body;
+    if (!identifier || !security_answer) {
+      return res.status(400).json({ message: "Vui lòng cung cấp đầy đủ thông tin" });
+    }
+
+    const user = await findUserByIdentifier(identifier);
+    if (!user) return res.status(404).json({ message: "Người dùng không tồn tại" });
+
+    if (!user.security_answer) {
+      return res.status(400).json({ message: "Tài khoản chưa thiết lập câu hỏi bảo mật" });
+    }
+
+    // So sánh answer (case-insensitive, trim whitespace)
+    const userAnswer = (user.security_answer || "").trim().toLowerCase();
+    const providedAnswer = (security_answer || "").trim().toLowerCase();
+
+    if (userAnswer !== providedAnswer) {
+      return res.status(400).json({ message: "Câu trả lời không đúng" });
+    }
+
+    // Tạo reset token nếu answer đúng
+    const resetToken = jwt.sign(
+      { id: user.id, email: user.email, type: "password_reset" },
+      JWT_SECRET,
+      { expiresIn: "15m" } // Token chỉ có hiệu lực 15 phút
+    );
+
+    return res.json({ 
+      message: "Xác thực thành công",
+      resetToken 
+    });
+  } catch (err) {
+    console.error("VerifySecurityAnswer error - authController.js", err);
+    return res.status(500).json({ message: "Lỗi server" });
+  }
+}
+
+/**
+ * Reset password using reset token - Step 3: Set new password
  */
 export async function resetPassword(req, res) {
   try {
@@ -149,6 +198,10 @@ export async function resetPassword(req, res) {
     let decoded;
     try {
       decoded = jwt.verify(token, JWT_SECRET);
+      // Kiểm tra token có phải là password reset token không
+      if (decoded.type !== "password_reset") {
+        return res.status(400).json({ message: "Token không hợp lệ" });
+      }
     } catch (e) {
       return res.status(400).json({ message: "Token không hợp lệ hoặc đã hết hạn" });
     }
@@ -189,6 +242,81 @@ export async function getProfile(req, res) {
 }
 
 /**
+ * Get security question (for profile)
+ */
+export async function getSecurityQuestion(req, res) {
+  try {
+    const requester = req.user;
+    if (!requester) return res.status(401).json({ message: "Chưa đăng nhập" });
+
+    // Chỉ mentor và learner mới có security question
+    if (requester.role?.toLowerCase() === "admin") {
+      return res.status(403).json({ message: "Admin không có câu hỏi bảo mật" });
+    }
+
+    const dbUser = await findUserById(Number(requester.id));
+    if (!dbUser) return res.status(404).json({ message: "Người dùng không tồn tại" });
+
+    return res.json({ 
+      security_question: dbUser.security_question || null,
+      has_question: !!dbUser.security_question 
+    });
+  } catch (err) {
+    console.error("GetSecurityQuestion error - authController.js", err);
+    return res.status(500).json({ message: "Lỗi server" });
+  }
+}
+
+/**
+ * Set/Update security question
+ */
+export async function setSecurityQuestion(req, res) {
+  try {
+    const requester = req.user;
+    if (!requester) return res.status(401).json({ message: "Chưa đăng nhập" });
+
+    // Chỉ mentor và learner mới có security question
+    if (requester.role?.toLowerCase() === "admin") {
+      return res.status(403).json({ message: "Admin không có câu hỏi bảo mật" });
+    }
+
+    const { security_question, security_answer, old_answer } = req.body;
+    
+    if (!security_question || !security_answer) {
+      return res.status(400).json({ message: "Vui lòng cung cấp câu hỏi và câu trả lời" });
+    }
+
+    const dbUser = await findUserById(Number(requester.id));
+    if (!dbUser) return res.status(404).json({ message: "Người dùng không tồn tại" });
+
+    // Nếu đã có câu hỏi bảo mật, cần verify câu trả lời cũ
+    if (dbUser.security_question && dbUser.security_answer) {
+      if (!old_answer) {
+        return res.status(400).json({ message: "Vui lòng nhập câu trả lời của câu hỏi bảo mật hiện tại" });
+      }
+
+      const oldAnswerNormalized = (dbUser.security_answer || "").trim().toLowerCase();
+      const providedOldAnswer = (old_answer || "").trim().toLowerCase();
+
+      if (oldAnswerNormalized !== providedOldAnswer) {
+        return res.status(400).json({ message: "Câu trả lời câu hỏi bảo mật hiện tại không đúng" });
+      }
+    }
+
+    // Cập nhật security question và answer
+    await updateUserInDb(dbUser.id, {
+      security_question: security_question.trim(),
+      security_answer: security_answer.trim().toLowerCase() // Lưu lowercase để so sánh dễ hơn
+    });
+
+    return res.json({ message: "Cập nhật câu hỏi bảo mật thành công" });
+  } catch (err) {
+    console.error("SetSecurityQuestion error - authController.js", err);
+    return res.status(500).json({ message: "Lỗi server" });
+  }
+}
+
+/**
  * Change password
  */
 export async function changePassword(req, res) {
@@ -199,12 +327,30 @@ export async function changePassword(req, res) {
     if (!validatePassword(newPassword)) return res.status(400).json({ message: "Mật khẩu mới không hợp lệ" });
     if (!oldPassword) return res.status(400).json({ message: "Vui lòng cung cấp mật khẩu cũ" });
 
-    const dbUser = await findUserByIdentifier(requester.email || requester.phone || requester.id);
-    if (!dbUser) return res.status(404).json({ message: "Người dùng không tồn tại" });
+    // Ưu tiên dùng id trực tiếp từ token (chính xác nhất)
+    let dbUser = null;
+    if (requester.id) {
+      dbUser = await findUserById(Number(requester.id));
+    }
+    
+    // Nếu không tìm được bằng id, thử dùng email hoặc phone
+    if (!dbUser) {
+      dbUser = await findUserByIdentifier(requester.email || requester.phone || requester.id);
+    }
+    
+    if (!dbUser) {
+      console.error("ChangePassword - User not found:", { requester });
+      return res.status(404).json({ message: "Người dùng không tồn tại" });
+    }
 
+    // So sánh mật khẩu cũ
     const match = await bcrypt.compare(oldPassword, dbUser.password);
-    if (!match) return res.status(400).json({ message: "Mật khẩu cũ không đúng" });
+    if (!match) {
+      console.error("ChangePassword - Password mismatch for user:", dbUser.id);
+      return res.status(400).json({ message: "Mật khẩu cũ không đúng" });
+    }
 
+    // Hash mật khẩu mới và cập nhật
     const hashed = await bcrypt.hash(newPassword, 10);
     if (dbUser.id) {
       await updateUserPasswordById(dbUser.id, hashed);

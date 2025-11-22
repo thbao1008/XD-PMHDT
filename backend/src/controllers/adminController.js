@@ -43,7 +43,7 @@ export async function getUser(req, res) {
     const { id } = req.params;
     const result = await pool.query(`
       SELECT 
-    u.id, u.name, u.email, u.phone, u.dob, u.role, u.status, u.created_at,
+    u.id, u.name, u.email, u.phone, u.dob, u.role, u.status, u.created_at, u.avatar_url,
     l.id AS learner_id,
     lp.package_name,
     lp.status AS package_status,
@@ -177,6 +177,37 @@ export async function updateUser(req, res) {
     return res.json({ success: true, user: safe });
   } catch (err) {
     console.error("updateUser error - adminController.js:156", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+}
+
+// Upload avatar
+export async function uploadAvatar(req, res) {
+  try {
+    const { id } = req.params;
+    const requester = req.user;
+    
+    // Chỉ cho phép user upload avatar của chính mình (hoặc admin)
+    if (requester.role?.toLowerCase() !== "admin" && requester.id !== parseInt(id) && requester.userId !== parseInt(id) && requester._id !== parseInt(id)) {
+      return res.status(403).json({ success: false, message: "Không có quyền cập nhật avatar" });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: "Không có file được upload" });
+    }
+
+    const baseUrl = req.protocol + "://" + req.get("host");
+    const avatarUrl = `${baseUrl}/uploads/${req.file.filename}`;
+
+    const updated = await updateUserInDb(id, { avatar_url: avatarUrl });
+    if (!updated) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    const { password: _, ...safe } = updated;
+    return res.json({ success: true, user: safe });
+  } catch (err) {
+    console.error("uploadAvatar error - adminController.js", err);
     return res.status(500).json({ success: false, message: "Server error" });
   }
 }

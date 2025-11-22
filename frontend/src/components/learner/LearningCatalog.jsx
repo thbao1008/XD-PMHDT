@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { getAuth } from "../../utils/auth";
 import api from "../../api";
 import Modal from "../common/Modal";
+import PDFPreview from "../common/PDFPreview";
 import "../../styles/catalog.css";
-import { FiFileText, FiVideo, FiDownload } from "react-icons/fi";
+import { FiFileText, FiVideo } from "react-icons/fi";
 
 export default function LearningCatalog() {
   const auth = getAuth();
@@ -42,10 +43,10 @@ export default function LearningCatalog() {
           return;
         }
 
-        // 3 + 4. Lấy song song: thông tin giảng viên và tài liệu
+        // 3 + 4. Lấy song song: thông tin giảng viên và tài liệu (chỉ lấy tài liệu đã publish)
         const [mentorInfo, res] = await Promise.all([
           api.get(`/mentors/${mid}`),
-          api.get(`/mentors/${mid}/resources`)
+          api.get(`/mentors/${mid}/resources/published`)
         ]);
 
         // Tùy vào response BE, lấy đúng name:
@@ -118,43 +119,47 @@ export default function LearningCatalog() {
       )}
 
       {selectedResource && (
-        <Modal title={selectedResource.title} onClose={() => setSelectedResource(null)}>
-          <div style={{ textAlign: "right", marginBottom: "10px" }}>
-            <a
-              href={`/api/learners/${learnerId}/resource/${selectedResource.id}/download`}
-              className="btn-ghost"
-              style={{ marginRight: 10 }}
-            >
-              <FiDownload style={{ marginRight: 4 }} />
-              Tải xuống
-            </a>
-
-            <button
-              onClick={() => window.open(selectedResource.file_url, "_blank")}
-              className="btn-ghost"
-            >
-              🔍 Phóng to
-            </button>
-          </div>
-
+        <Modal 
+          title={selectedResource.type === "pdf" ? null : selectedResource.title}
+          onClose={() => setSelectedResource(null)}
+          className={selectedResource.type === "pdf" ? "resource-preview-modal" : ""}
+        >
           {selectedResource.type === "pdf" ? (
-            <iframe
-              src={selectedResource.file_url}
-              width="100%"
-              height="600px"
-              style={{ border: "none" }}
-              title="Xem tài liệu PDF"
-              onError={(e) => {
-                e.target.style.display = "none";
-              }}
-            />
+            <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+              <div style={{ flex: 1, minHeight: "600px" }}>
+                <PDFPreview
+                  url={selectedResource.file_url}
+                  title={selectedResource.title}
+                  onClose={() => setSelectedResource(null)}
+                />
+              </div>
+              {selectedResource.description && (
+                <p style={{ marginTop: "10px", flexShrink: 0, padding: "12px", background: "#f9fafb", borderRadius: "6px" }}>
+                  {selectedResource.description}
+                </p>
+              )}
+            </div>
           ) : selectedResource.type === "video" ? (
-            <video src={selectedResource.file_url} controls width="100%" />
+            <div>
+              <video 
+                src={selectedResource.file_url} 
+                controls 
+                width="100%" 
+                style={{ 
+                  maxHeight: "70vh",
+                  borderRadius: "8px",
+                  backgroundColor: "#000"
+                }}
+              />
+              {selectedResource.description && (
+                <p style={{ marginTop: "10px" }}>{selectedResource.description}</p>
+              )}
+            </div>
           ) : (
-            <p>Không thể xem trước tài liệu này. Vui lòng dùng nút Tải xuống.</p>
+            <div>
+              <p>Không thể xem trước tài liệu này.</p>
+            </div>
           )}
-
-          <p style={{ marginTop: "10px" }}>{selectedResource.description}</p>
         </Modal>
       )}
     </div>

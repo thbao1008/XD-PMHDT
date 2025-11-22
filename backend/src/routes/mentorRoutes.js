@@ -36,9 +36,11 @@ router.delete("/challenges/:id", mentorCtrl.deleteChallenge);
 router.put("/challenges/:id", mentorCtrl.updateChallenge);
 
 // Resources
+router.get("/:id/resources/published", mentorCtrl.getPublishedResources);
 router.get("/:id/resources", mentorCtrl.getResources);
-router.post("/:id/resources", mentorCtrl.createResource);
-router.put("/resources/:id", mentorCtrl.updateResource);
+router.post("/:id/resources", upload.single("file"), mentorCtrl.createResource);
+router.put("/resources/:id", upload.single("file"), mentorCtrl.updateResource);
+router.patch("/resources/:id/visibility", mentorCtrl.toggleResourceVisibility);
 router.delete("/resources/:id", mentorCtrl.deleteResource);
 
 // Reports

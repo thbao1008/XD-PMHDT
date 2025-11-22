@@ -5,7 +5,7 @@ import api from "../../api";
 import Modal from "../common/Modal";
 import "../../styles/challenge.css";
 import ChallengeDetail from "./ChallengeDetail";
-import { FiStar } from "react-icons/fi";
+import { FiStar, FiUser } from "react-icons/fi";
 
 export default function Challenges() {
   const auth = getAuth();
@@ -21,7 +21,9 @@ export default function Challenges() {
   const [query, setQuery] = useState("");
   const [filterLevel, setFilterLevel] = useState("");
   const [mentorOnly, setMentorOnly] = useState(false);
-  const [marked, setMarked] = useState(new Set());
+  const [bookmarked, setBookmarked] = useState(new Set());
+  const [favoriteChallenges, setFavoriteChallenges] = useState([]);
+  const [showFavorites, setShowFavorites] = useState(false);
 
   useEffect(() => {
     if (!userId) return setLoading(false);
@@ -47,6 +49,7 @@ export default function Challenges() {
           setMentorId(null);
         }
 
+        // Load all challenges
         const cres = await api.get(`/challenges`);
         const arr = cres.data?.challenges ?? cres.data ?? [];
         const minimal = Array.isArray(arr)
@@ -55,21 +58,27 @@ export default function Challenges() {
               title: c.title ?? "",
               level: c.level ?? "",
               description: stripHtml(c.description ?? ""),
-              is_teen: !!c.is_teen,
+              type: c.type ?? "",
               mentor_id: c.mentor_id ?? null,
+              mentor_name: c.mentor_name ?? null,
+              created_at: c.created_at,
               _color: pickColor(String(c.id ?? c._id))
             }))
           : [];
         if (!mounted) return;
         setChallenges(minimal);
 
+        // Load bookmarked challenges
         try {
-          const marksRes = await api.get(`/learners/${lid}/marks`);
-          const marksArr = marksRes.data?.marks ?? marksRes.data ?? [];
-          const ids = new Set(marksArr.map(m => m.challenge_id ?? m.challengeId ?? m));
-          if (mounted) setMarked(ids);
+          const bookmarkedRes = await api.get(`/learners/${lid}/challenges/bookmarked`);
+          const bookmarkedArr = bookmarkedRes.data?.challenges ?? bookmarkedRes.data ?? [];
+          const bookmarkedIds = new Set(bookmarkedArr.map(c => c.id ?? c.challenge_id));
+          if (mounted) {
+            setBookmarked(bookmarkedIds);
+            setFavoriteChallenges(minimal.filter(c => bookmarkedIds.has(c.id)));
+          }
         } catch (err) {
-          console.warn("Could not load marks", err);
+          console.warn("Could not load bookmarked challenges", err);
         }
       } catch (err) {
         console.error("Load challenges error", err);
@@ -101,33 +110,63 @@ export default function Challenges() {
     return true;
   });
 
+  const displayChallenges = showFavorites ? favoriteChallenges : filtered;
+
   function openDetail(ch) {
     setDetailChallenge(ch);
   }
 
-  async function toggleMark(challengeId) {
+  async function toggleBookmark(challengeId) {
     if (!learnerId) return;
-    const prev = new Set(marked);
+    const prev = new Set(bookmarked);
     const next = new Set(prev);
-    const isMarked = prev.has(challengeId);
-    isMarked ? next.delete(challengeId) : next.add(challengeId);
-    setMarked(next);
+    const isBookmarked = prev.has(challengeId);
+    isBookmarked ? next.delete(challengeId) : next.add(challengeId);
+    setBookmarked(next);
+
+    // Update favorite challenges list
+    if (isBookmarked) {
+      setFavoriteChallenges(prev => prev.filter(c => c.id !== challengeId));
+    } else {
+      const challenge = challenges.find(c => c.id === challengeId);
+      if (challenge) {
+        setFavoriteChallenges(prev => [...prev, challenge]);
+      }
+    }
 
     try {
-      if (isMarked) {
-        await api.delete(`/learners/${learnerId}/challenges/${challengeId}/mark`);
+      if (isBookmarked) {
+        await api.delete(`/learners/${learnerId}/challenges/${challengeId}/bookmark`);
       } else {
-        await api.post(`/learners/${learnerId}/challenges/${challengeId}/mark`);
+        await api.post(`/learners/${learnerId}/challenges/${challengeId}/bookmark`);
       }
     } catch (err) {
-      console.error("toggleMark error", err);
-      setMarked(prev);
+      console.error("toggleBookmark error", err);
+      setBookmarked(prev);
+      // Revert favorite challenges
+      if (isBookmarked) {
+        const challenge = challenges.find(c => c.id === challengeId);
+        if (challenge) {
+          setFavoriteChallenges(prev => [...prev, challenge]);
+        }
+      } else {
+        setFavoriteChallenges(prev => prev.filter(c => c.id !== challengeId));
+      }
     }
   }
 
   return (
     <div className="challenge-page">
-      <h2 className="page-title">Danh sách Challenges</h2>
+      <div className="page-header">
+        <h2 className="page-title">Danh sách Challenges</h2>
+        <button
+          className={`favorite-toggle ${showFavorites ? "active" : ""}`}
+          onClick={() => setShowFavorites(!showFavorites)}
+        >
+          <FiStar style={{ marginRight: "6px" }} />
+          {showFavorites ? "Tất cả" : "Yêu thích"} ({bookmarked.size})
+        </button>
+      </div>
 
       <div className="challenge-toolbar">
         <div className="search">
@@ -167,12 +206,16 @@ export default function Challenges() {
             </div>
           ))}
         </div>
-      ) : filtered.length === 0 ? (
-        <div className="empty-state">Không có challenge phù hợp với bộ lọc hiện tại.</div>
+      ) : displayChallenges.length === 0 ? (
+        <div className="empty-state">
+          {showFavorites 
+            ? "Bạn chưa có challenge yêu thích nào. Hãy đánh dấu ⭐ để thêm vào danh sách yêu thích!" 
+            : "Không có challenge phù hợp với bộ lọc hiện tại."}
+        </div>
       ) : (
         <div className="challenge-grid">
-          {filtered.map(c => {
-            const isMarked = marked.has(c.id);
+          {displayChallenges.map(c => {
+            const isBookmarked = bookmarked.has(c.id);
             return (
               <div key={c.id} className="challenge-card">
                 <div
@@ -180,21 +223,56 @@ export default function Challenges() {
                   style={{ background: `linear-gradient(135deg, ${c._color} 0%, ${c._color}33 100%)` }}
                 >
                   <div className="challenge-badges">
-                    {c.is_teen && <span className="challenge-badge">Teen</span>}
-                    <span className="challenge-badge">{c.level || "-"}</span>
+                    {isBookmarked && (
+                      <span className="challenge-badge favorite-badge">
+                        ⭐ Yêu thích
+                      </span>
+                    )}
+                    <span 
+                      className="challenge-badge" 
+                      style={{
+                        background: c.level === "easy" ? "#10b981" :
+                                   c.level === "medium" ? "#f59e0b" :
+                                   c.level === "hard" ? "#ef4444" : "#6b7280",
+                        color: "#fff"
+                      }}
+                    >
+                      {c.level || "-"}
+                    </span>
+                    {c.type && (
+                      <span className="challenge-badge type-badge">
+                        {c.type}
+                      </span>
+                    )}
                     {mentorId && c.mentor_id === mentorId && (
-                      <span className="challenge-badge">Của giảng viên</span>
+                      <span className="challenge-badge mentor-badge">
+                        Của giảng viên
+                      </span>
                     )}
                   </div>
                 </div>
 
-                <div className="challenge-title">{c.title}</div>
-                <div className="challenge-desc">{c.description}</div>
+                <div className="challenge-content">
+                  <div className="challenge-title">{c.title}</div>
+                  <div className="challenge-desc">{c.description}</div>
+                  {c.mentor_name && (
+                    <div className="challenge-mentor">
+                      <FiUser size={14} style={{ marginRight: "4px", verticalAlign: "middle" }} />
+                      {c.mentor_name}
+                    </div>
+                  )}
+                </div>
 
                 <div className="challenge-footer">
-                  <button className="btn-view" onClick={() => openDetail(c)}>Xem chi tiết</button>
-                  <button className="btn-mark" onClick={() => toggleMark(c.id)}>
-                    <FiStar style={{ color: isMarked ? "#F59E0B" : "#9CA3AF" }} />
+                  <button className="btn-view" onClick={() => openDetail(c)}>
+                    Xem chi tiết
+                  </button>
+                  <button 
+                    className={`btn-mark ${isBookmarked ? "marked" : ""}`}
+                    onClick={() => toggleBookmark(c.id)}
+                    title={isBookmarked ? "Bỏ yêu thích" : "Thêm vào yêu thích"}
+                  >
+                    <FiStar style={{ color: isBookmarked ? "#F59E0B" : "#9CA3AF" }} />
                   </button>
                 </div>
               </div>

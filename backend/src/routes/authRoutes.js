@@ -3,21 +3,28 @@ import {
   login,
   register,
   forgotPassword,
+  verifySecurityAnswer,
   resetPassword,
   getProfile,
   changePassword,
+  getSecurityQuestion,
+  setSecurityQuestion,
 } from "../controllers/authController.js";
+import { authGuard } from "../middleware/authGuard.js";
 
 const router = express.Router();
 
 // Auth
 router.post("/register", register);
 router.post("/login", login);
-router.post("/forgot-password", forgotPassword);
-router.post("/reset-password", resetPassword);
+router.post("/forgot-password", forgotPassword); // Step 1: Get security question
+router.post("/verify-security-answer", verifySecurityAnswer); // Step 2: Verify answer
+router.post("/reset-password", resetPassword); // Step 3: Set new password
 
-// Admin profile
-router.get("/profile", getProfile);          // lấy thông tin admin
-router.post("/change-password", changePassword); // đổi mật khẩu
+// Profile (cần authentication)
+router.get("/profile", authGuard, getProfile);
+router.post("/change-password", authGuard, changePassword);
+router.get("/security-question", authGuard, getSecurityQuestion);
+router.post("/security-question", authGuard, setSecurityQuestion);
 
 export default router;

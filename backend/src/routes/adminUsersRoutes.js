@@ -1,4 +1,6 @@
 ﻿import express from "express";
+import multer from "multer";
+import path from "path";
 import { authGuard } from "../middleware/authGuard.js";
 import { adminGuard } from "../middleware/adminGuard.js";
 import {
@@ -11,10 +13,35 @@ import {
   removeLearnerFromMentor,
   changeLearnerMentor,
   getAvailableMentors,
+  uploadAvatar,
 } from "../controllers/adminController.js";
 import { findUserByIdentifier } from "../models/userModel.js";
 
 const router = express.Router();
+
+// Multer config for avatar upload
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, "uploads/");
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    cb(null, "avatar-" + uniqueSuffix + ext);
+  }
+});
+
+const upload = multer({ 
+  storage: storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Chỉ chấp nhận file ảnh'));
+    }
+  }
+});
 
 // Áp dụng middleware cho tất cả route trong nhóm này
 router.use(authGuard);
@@ -45,7 +72,11 @@ router.get("/check", async (req, res) => {
   }
 });
 
-// Các route quản lý người dùng
+// Upload avatar (đặt trước các route khác để không bị conflict)
+router.post("/:id/avatar", authGuard, upload.single("avatar"), uploadAvatar);
+
+// Các route quản lý người dùng (cần adminGuard)
+router.use(adminGuard);
 router.get("/", listUsers);
 router.get("/:id", getUser);
 router.post("/", createUser);

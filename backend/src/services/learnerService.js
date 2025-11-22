@@ -545,7 +545,7 @@ export async function downloadLearnerResourceService(learnerId, resourceId) {
 
 /* -------------------- Challenges / Learner view -------------------- */
 
-export async function getChallenges({ query, level, topicId, page = 1, limit = 20 }) {
+export async function getChallenges({ query, level, mentorId, page = 1, limit = 20 }) {
   const offset = (Math.max(1, parseInt(page)) - 1) * parseInt(limit);
   const params = [];
   const where = [];
@@ -558,21 +558,20 @@ export async function getChallenges({ query, level, topicId, page = 1, limit = 2
     params.push(level);
     where.push(`c.level = $${params.length}`);
   }
-  if (topicId) {
-    params.push(parseInt(topicId));
-    where.push(`c.topic_id = $${params.length}`);
+  if (mentorId) {
+    params.push(parseInt(mentorId));
+    where.push(`c.mentor_id = $${params.length}`);
   }
 
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
   params.push(parseInt(limit), offset);
 
   const sql = `
-    SELECT c.id, c.topic_id, c.title, c.description, c.type, c.level, c.created_at,
-           t.mentor_id,
+    SELECT c.id, c.title, c.description, c.type, c.level, c.created_at,
+           c.mentor_id,
            u.name AS mentor_name
     FROM challenges c
-    JOIN topics t ON c.topic_id = t.id
-    LEFT JOIN mentors m ON m.id = t.mentor_id
+    LEFT JOIN mentors m ON m.id = c.mentor_id
     LEFT JOIN users u ON u.id = m.user_id
     ${whereSql}
     ORDER BY c.created_at DESC
@@ -585,11 +584,10 @@ export async function getChallenges({ query, level, topicId, page = 1, limit = 2
 export async function getChallengeById(id) {
   const sql = `
     SELECT c.id, c.title, c.description, c.level, c.type, c.created_at,
-           c.topic_id, t.mentor_id,
+           c.mentor_id,
            u.name AS mentor_name
     FROM challenges c
-    JOIN topics t ON c.topic_id = t.id
-    LEFT JOIN mentors m ON m.id = t.mentor_id
+    LEFT JOIN mentors m ON m.id = c.mentor_id
     LEFT JOIN users u ON u.id = m.user_id
     WHERE c.id = $1
   `;
@@ -1034,4 +1032,54 @@ export async function updateSubmissionSegments(submissionId, segments) {
     "UPDATE submissions SET segments = $1, updated_at = NOW() WHERE id = $2",
     [JSON.stringify(segments), submissionId]
   );
+}
+
+/* -------------------- Bookmarks -------------------- */
+
+export async function getBookmarkedChallenges(learnerId) {
+  const sql = `
+    SELECT c.id, c.title, c.description, c.level, c.type, c.created_at,
+           c.mentor_id,
+           u.name AS mentor_name,
+           lc.is_bookmarked, lc.updated_at AS bookmarked_at
+    FROM learner_challenges lc
+    JOIN challenges c ON c.id = lc.challenge_id
+    LEFT JOIN mentors m ON m.id = c.mentor_id
+    LEFT JOIN users u ON u.id = m.user_id
+    WHERE lc.learner_id = $1 AND lc.is_bookmarked = true
+    ORDER BY lc.updated_at DESC
+  `;
+  const r = await pool.query(sql, [learnerId]);
+  return r.rows;
+}
+
+export async function toggleBookmark(learnerId, challengeId) {
+  // Check if bookmark exists
+  const check = await pool.query(
+    `SELECT is_bookmarked FROM learner_challenges 
+     WHERE learner_id = $1 AND challenge_id = $2`,
+    [learnerId, challengeId]
+  );
+
+  if (check.rows.length === 0) {
+    // Create new record with bookmark
+    const r = await pool.query(
+      `INSERT INTO learner_challenges (learner_id, challenge_id, is_bookmarked, created_at, updated_at)
+       VALUES ($1, $2, true, NOW(), NOW())
+       RETURNING *`,
+      [learnerId, challengeId]
+    );
+    return r.rows[0];
+  } else {
+    // Toggle bookmark
+    const newValue = !check.rows[0].is_bookmarked;
+    const r = await pool.query(
+      `UPDATE learner_challenges 
+       SET is_bookmarked = $1, updated_at = NOW()
+       WHERE learner_id = $2 AND challenge_id = $3
+       RETURNING *`,
+      [newValue, learnerId, challengeId]
+    );
+    return r.rows[0];
+  }
 }

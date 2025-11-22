@@ -10,6 +10,7 @@ import Login from "../pages/Login";
 import ProfilePage from "../pages/Profile";
 import NotFound from "../pages/NotFound";
 import CommunicateCenter from "../pages/CommunicateCenter";
+import AdminCommunity from "../components/admin/AdminCommunity";
 
 // Layouts
 import AdminLayout from "../components/admin/AdminLayout";
@@ -55,16 +56,6 @@ export default function AppRoutes() {
         }
       />
 
-      {/* Profile chung cho tất cả role */}
-      <Route
-        path="/profile/:id"
-        element={
-          <ProtectedRoute>
-            <ProfilePage />
-          </ProtectedRoute>
-        }
-      />
-
       {/* Admin routes */}
       <Route
         path="/admin"
@@ -83,6 +74,8 @@ export default function AppRoutes() {
         <Route path="reports" element={<ReportsPage />} />
         <Route path="support" element={<SupportTickets />} />
         <Route path="communicate" element={<CommunicateCenter />} />
+        <Route path="communicate/manage" element={<AdminCommunity />} />
+        <Route path="profile" element={<ProfilePage />} />
         <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
       </Route>
 
@@ -103,6 +96,7 @@ export default function AppRoutes() {
         <Route path="challenges/:id" element={<ChallengeDetail />} />
         <Route path="feedback" element={<LearnerFeedback />} />
         <Route path="communicate" element={<CommunicateCenter />} />
+        <Route path="profile" element={<ProfilePage />} />
         <Route path="*" element={<Navigate to="/learn/dashboard" replace />} />
       </Route>
 
@@ -123,6 +117,7 @@ export default function AppRoutes() {
         <Route path="learners" element={<MentorLearners />} />
         <Route path="resources" element={<MentorResources />} />
         <Route path="communicate" element={<CommunicateCenter />} />
+        <Route path="profile" element={<ProfilePage />} />
         <Route path="*" element={<Navigate to="/mentor/dashboard" replace />} />
       </Route>
 

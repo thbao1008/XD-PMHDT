@@ -16,14 +16,11 @@ import multer from "multer";
 
 // Routes
 import authRoutes from "./routes/authRoutes.js";
-import adminUsersRoutes from "./routes/adminUsersRoutes.js";
-import adminSupportRoutes from "./routes/adminSupportRoutes.js";
-import adminPackagesRoutes from "./routes/adminPackagesRoutes.js";
-import adminPurchasesRoutes from "./routes/adminPurchasesRoutes.js";
-import adminReportRoutes from "./routes/adminReportsRoutes.js";
-import adminDashboardRoutes from "./routes/adminDashboardRoutes.js";
+import adminRoutes from "./routes/adminRoutes.js";
 import learnerRoutes from "./routes/learnerRoutes.js";
 import mentorRoutes from "./routes/mentorRoutes.js";
+import communityRoutes from "./routes/communityRoutes.js";
+import notificationRoutes from "./routes/notificationRoutes.js";
 
 // Middleware
 import { errorHandler } from "./middleware/errorHandler.js";
@@ -60,7 +57,27 @@ app.use(requestLogger);
 app.use(trackTraffic); // Track traffic và online users
 
 // ====== Multer config for file uploads ======
-const upload = multer({ dest: "uploads/" });
+import fs from "fs";
+
+// Ensure uploads directory exists
+const uploadsDir = path.resolve(process.cwd(), "uploads");
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadsDir);
+  },
+  filename: function (req, file, cb) {
+    // Preserve original extension
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    cb(null, file.fieldname + "-" + uniqueSuffix + ext);
+  }
+});
+
+const upload = multer({ storage: storage });
 
 // ====== Health check ======
 app.get("/health/ai", (_req, res) => {
@@ -72,22 +89,18 @@ app.get("/health/ai", (_req, res) => {
 
 // ====== Routes ======
 app.use("/api/auth", authRoutes);
-app.use("/api/admin/users", adminUsersRoutes);
-app.use("/api/admin/support", adminSupportRoutes);
-app.use("/api/admin/packages", adminPackagesRoutes);
-app.use("/api/admin/purchases", adminPurchasesRoutes);
-app.use("/api/admin/reports", adminReportRoutes);
-app.use("/api/admin/dashboard", adminDashboardRoutes);
+app.use("/api/admin", adminRoutes);
 
 app.use("/api/learners", learnerRoutes);
 app.use("/api/mentors", mentorRoutes);
+app.use("/api/community", communityRoutes);
+app.use("/api/notifications", notificationRoutes);
 
 // Challenge routes
 app.get("/api/challenges", learnerCtrl.listAllChallenges);
 app.get("/api/challenges/:id", learnerCtrl.getChallengeById);
 
-// Public packages route (không cần auth)
-app.get("/api/packages/public", getPackages);
+// Public packages route moved to adminRoutes.js (/api/admin/packages/public)
 
 // Mentor learners
 app.get("/api/admin/mentors/:id/learners", getLearnersByMentor);
@@ -101,8 +114,40 @@ app.post("/api/uploads", upload.single("file"), (req, res) => {
   res.json({ url: fileUrl, filename: req.file.filename });
 });
 
-// ====== Static uploads ======
-app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
+// ====== Static uploads with proper Content-Type ======
+app.use("/uploads", (req, res, next) => {
+  const filePath = path.resolve(process.cwd(), "uploads", req.path);
+  const ext = path.extname(req.path).toLowerCase();
+  
+  // Set Content-Type based on extension
+  const mimeTypes = {
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
+    '.mp4': 'video/mp4',
+    '.webm': 'video/webm',
+    '.ogg': 'video/ogg',
+    '.mov': 'video/quicktime',
+    '.avi': 'video/x-msvideo',
+    '.wmv': 'video/x-ms-wmv',
+    '.flv': 'video/x-flv',
+    '.mkv': 'video/x-matroska',
+    '.pdf': 'application/pdf',
+    '.mp3': 'audio/mpeg',
+    '.wav': 'audio/wav',
+    '.ogg': 'audio/ogg',
+    '.m4a': 'audio/mp4'
+  };
+  
+  if (mimeTypes[ext]) {
+    res.setHeader('Content-Type', mimeTypes[ext]);
+  }
+  
+  // Use express.static to serve the file
+  express.static(path.resolve(process.cwd(), "uploads"))(req, res, next);
+});
 
 // ====== Simple logger ======
 app.use((req, _res, next) => {

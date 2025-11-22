@@ -214,7 +214,18 @@ export default function UsersList() {
   return (
     <>
       <div className="panel users-list">
-        <h2>Danh sách Người dùng</h2>
+        <div className="users-list-header">
+          <h2>Danh sách Người dùng</h2>
+          <select
+            className="input filter-select header-filter"
+            value={roleFilter}
+            onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}
+          >
+            <option value="ADMIN">Admin</option>
+            <option value="MENTOR">Mentor</option>
+            <option value="LEARNER">Learner</option>
+          </select>
+        </div>
 
         {/* Toolbar */}
         <div className="toolbar">
@@ -225,15 +236,6 @@ export default function UsersList() {
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           />
-          <select
-            className="input filter-select"
-            value={roleFilter}
-            onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}
-          >
-            <option value="ADMIN">Admin</option>
-            <option value="MENTOR">Mentor</option>
-            <option value="LEARNER">Learner</option>
-          </select>
 
           {roleFilter === "MENTOR" && (
             <button

@@ -12,6 +12,7 @@ export default function UserForPage({ userId, onClose, onStatusChange }) {
   const [showAssigned, setShowAssigned] = useState(false);
   const [showMentorInfo, setShowMentorInfo] = useState(false);
   const [learnerTotalRating, setLearnerTotalRating] = useState(null);
+  const [mentorBio, setMentorBio] = useState("");
 
   const auth = getAuth();
   const isAdmin = auth?.user?.role?.toUpperCase() === "ADMIN";
@@ -44,9 +45,17 @@ export default function UserForPage({ userId, onClose, onStatusChange }) {
           }
         }
         
-        // Set rating for mentor
-        if (u.role?.toUpperCase() === "MENTOR" && u.mentor_rating !== undefined) {
-          // Rating already in user object
+        // Load bio for mentor
+        if (u.role?.toUpperCase() === "MENTOR") {
+          try {
+            const mentorRes = await api.get(`/mentors/by-user/${userId}`);
+            const mentorData = mentorRes.data;
+            if (mentorData?.bio) {
+              setMentorBio(mentorData.bio);
+            }
+          } catch (err) {
+            console.error("Error loading mentor bio:", err);
+          }
         }
       } catch (err) {
         if (err.response?.status === 403 || err.response?.status === 404) {
@@ -67,6 +76,9 @@ export default function UserForPage({ userId, onClose, onStatusChange }) {
                 status: mentor.status,
                 mentor_rating: mentor.rating
               });
+              if (mentor.bio) {
+                setMentorBio(mentor.bio);
+              }
             }
           } catch (e2) {
             console.error("❌ Fallback load mentor error:", e2);
@@ -127,6 +139,16 @@ export default function UserForPage({ userId, onClose, onStatusChange }) {
               <div className="user-for-page-info-item">
                 <span className="user-for-page-info-label">Vai trò:</span>
                 <span className="user-for-page-info-value">{user.role}</span>
+              </div>
+            )}
+            {isMentor && (
+              <div className="user-for-page-info-item user-for-page-bio">
+                <span className="user-for-page-info-label">Giới thiệu:</span>
+                {mentorBio ? (
+                  <span className="user-for-page-info-value user-for-page-bio-text">{mentorBio}</span>
+                ) : (
+                  <span className="user-for-page-info-value user-for-page-bio-empty">Chưa được cập nhật</span>
+                )}
               </div>
             )}
           </div>
@@ -284,7 +306,7 @@ export default function UserForPage({ userId, onClose, onStatusChange }) {
         <div className="user-for-page-avatar-section">
           <div className="user-for-page-avatar">
             <img
-              src={user.avatarUrl || "/default-avatar.png"}
+              src={user.avatar_url || user.avatarUrl || user.avatar || "/default-avatar.png"}
               alt="Avatar"
               onError={(e) => {
                 e.target.src = "/default-avatar.png";

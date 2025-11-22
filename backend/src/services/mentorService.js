@@ -269,43 +269,89 @@
     Resources
     ========================= */
 
-  export async function getResourcesByMentor(mentorId) {
-    const result = await pool.query(
-      "SELECT * FROM mentor_resources WHERE mentor_id = $1 ORDER BY created_at DESC",
-      [mentorId]
-    );
+  export async function getResourcesByMentor(mentorId, includeHidden = true) {
+    let query = "SELECT * FROM mentor_resources WHERE mentor_id = $1";
+    const params = [mentorId];
+    if (!includeHidden) {
+      query += " AND is_published = true";
+    }
+    query += " ORDER BY created_at DESC";
+    const result = await pool.query(query, params);
     return result.rows;
   }
 
-  export async function createResource({ mentor_id, title, description, type, file_url }) {
+  export async function createResource({ mentor_id, title, description, type, file_url, is_published = true }) {
     const result = await pool.query(
-      `INSERT INTO mentor_resources (mentor_id, title, description, type, file_url)
-      VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [mentor_id, title, description, type, file_url]
+      `INSERT INTO mentor_resources (mentor_id, title, description, type, file_url, is_published)
+      VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [mentor_id, title, description, type, file_url, is_published]
     );
     return result.rows[0];
   }
 
   export async function updateResource(id, fields) {
+    const updates = [];
+    const values = [];
+    let paramIndex = 1;
+
+    if (fields.title !== undefined) {
+      updates.push(`title = $${paramIndex++}`);
+      values.push(fields.title);
+    }
+    if (fields.description !== undefined) {
+      updates.push(`description = $${paramIndex++}`);
+      values.push(fields.description);
+    }
+    if (fields.type !== undefined) {
+      updates.push(`type = $${paramIndex++}`);
+      values.push(fields.type);
+    }
+    if (fields.file_url !== undefined) {
+      updates.push(`file_url = $${paramIndex++}`);
+      values.push(fields.file_url);
+    }
+    if (fields.is_published !== undefined) {
+      updates.push(`is_published = $${paramIndex++}`);
+      values.push(fields.is_published);
+    }
+
+    if (updates.length === 0) {
+      // No updates, return existing resource
+      const existing = await pool.query("SELECT * FROM mentor_resources WHERE id = $1", [id]);
+      return existing.rows[0];
+    }
+
+    // Check if updated_at column exists before adding it
+    const columnCheck = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'mentor_resources' 
+      AND column_name = 'updated_at'
+    `);
+    
+    if (columnCheck.rows.length > 0) {
+      updates.push(`updated_at = NOW()`);
+    }
+    
+    values.push(id);
+
     const result = await pool.query(
-      `UPDATE mentor_resources
-      SET title=$2, description=$3, type=$4, file_url=$5, is_public=$6, is_published=$7
-      WHERE id=$1 RETURNING *`,
-      [
-        id,
-        fields.title,
-        fields.description,
-        fields.type,
-        fields.file_url,
-        fields.is_public,
-        fields.is_published
-      ]
+      `UPDATE mentor_resources SET ${updates.join(", ")} WHERE id = $${paramIndex} RETURNING *`,
+      values
     );
     return result.rows[0];
   }
 
   export async function deleteResource(id) {
     await pool.query("DELETE FROM mentor_resources WHERE id=$1", [id]);
+  }
+
+  export async function toggleResourceVisibility(id, is_published) {
+    const result = await pool.query(
+      `UPDATE mentor_resources SET is_published = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
+      [is_published, id]
+    );
+    return result.rows[0];
   }
 
   /* =========================

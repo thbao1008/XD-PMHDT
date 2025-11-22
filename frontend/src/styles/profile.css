@@ -1,6 +1,5 @@
 .profile-fullscreen {
   width: 100%;
-  min-height: 100vh;
   padding: 32px;
   background: #fff;
   box-sizing: border-box;
@@ -181,8 +180,9 @@
 /* Cropper modal */
 .cropper-container {
   position: relative;
-  width: 300px;
-  height: 300px;
+  width: 100%;
+  max-width: 400px;
+  height: 400px;
   margin: 0 auto;
   background: #000;
   border-radius: 8px;
@@ -194,4 +194,74 @@
   justify-content: center;
   gap: 16px;
   margin-top: 12px;
+}
+
+/* Bio edit styles */
+.bio-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bio-display {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.bio-display span {
+  flex: 1;
+  min-width: 200px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.btn-edit-bio {
+  font-size: 13px;
+  padding: 4px 12px;
+  margin: 0;
+}
+
+.bio-edit-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 600px;
+  margin-top: 8px;
+}
+
+.bio-textarea {
+  width: 100%;
+  padding: 12px;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 100px;
+  transition: border-color 0.2s;
+}
+
+.bio-textarea:focus {
+  outline: none;
+  border-color: var(--primary, #4868d9);
+  box-shadow: 0 0 0 3px rgba(72, 104, 217, 0.1);
+}
+
+.bio-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-sm {
+  padding: 8px 16px;
+  font-size: 13px;
+}
+
+.btn-primary:disabled,
+.btn-secondary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }

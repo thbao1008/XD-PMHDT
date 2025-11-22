@@ -3,7 +3,8 @@ import { getAuth } from "../../utils/auth";
 import "../../styles/resources.css";
 import api from "../../api";
 import Modal from "../common/Modal";
-import { FiFileText, FiVideo, FiPlus, FiX } from "react-icons/fi";
+import PDFPreview from "../common/PDFPreview";
+import { FiFileText, FiVideo, FiPlus, FiX, FiEdit2, FiTrash2, FiEye, FiEyeOff } from "react-icons/fi";
 
 export default function MentorResources() {
   const auth = getAuth();
@@ -11,6 +12,7 @@ export default function MentorResources() {
   const [resources, setResources] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [editingResource, setEditingResource] = useState(null);
   const [selectedResource, setSelectedResource] = useState(null);
 
   useEffect(() => {
@@ -33,8 +35,61 @@ export default function MentorResources() {
     fetchResources();
   }, [auth]);
 
-  const openPreview = (resource) => {
+  const refreshResources = async () => {
+    if (!mentorId) return;
+    try {
+      const res = await api.get(`/mentors/${mentorId}/resources`);
+      setResources(res.data.resources || []);
+    } catch (err) {
+      console.error("Error refreshing resources:", err);
+    }
+  };
+
+  const openPreview = (resource, e) => {
+    if (e) {
+      e.stopPropagation();
+    }
     setSelectedResource(resource);
+  };
+
+  const handleEdit = (resource, e) => {
+    if (e) {
+      e.stopPropagation();
+    }
+    setEditingResource(resource);
+    setShowModal(true);
+  };
+
+  const handleDelete = async (resourceId, e) => {
+    if (e) {
+      e.stopPropagation();
+    }
+    if (!confirm("Bạn có chắc chắn muốn xóa tài liệu này?")) {
+      return;
+    }
+
+    try {
+      await api.delete(`/mentors/resources/${resourceId}`);
+      await refreshResources();
+    } catch (err) {
+      console.error("Error deleting resource:", err);
+      alert("Lỗi khi xóa tài liệu: " + (err.response?.data?.message || err.message));
+    }
+  };
+
+  const handleToggleVisibility = async (resourceId, currentStatus, e) => {
+    if (e) {
+      e.stopPropagation();
+    }
+    try {
+      await api.patch(`/mentors/resources/${resourceId}/visibility`, {
+        is_published: !currentStatus
+      });
+      await refreshResources();
+    } catch (err) {
+      console.error("Error toggling visibility:", err);
+      alert("Lỗi khi thay đổi trạng thái: " + (err.response?.data?.message || err.message));
+    }
   };
 
   if (loading) return <p>Đang tải tài liệu...</p>;
@@ -42,8 +97,11 @@ export default function MentorResources() {
   return (
     <div className="resources-page">
       <div className="resources-header">
-        <h2>Tài liệu của mentor</h2>
-        <button className="btn-primary" onClick={() => setShowModal(true)}>
+        <h2>Tài liệu của tôi</h2>
+        <button className="btn-primary" onClick={() => {
+          setEditingResource(null);
+          setShowModal(true);
+        }}>
           <FiPlus style={{ marginRight: 6 }} /> Thêm tài liệu
         </button>
       </div>
@@ -53,12 +111,39 @@ export default function MentorResources() {
           <div className="empty-state">Chưa có tài liệu nào được đăng tải</div>
         ) : (
           resources.map(r => (
-            <div key={r.id} className="resource-card" onClick={() => openPreview(r)}>
-              <div className="resource-preview">
+            <div key={r.id} className="resource-card">
+              <div className="resource-preview" onClick={() => openPreview(r)}>
                 {r.type === "pdf" ? <FiFileText size={40} /> : <FiVideo size={40} />}
+                {!r.is_published && (
+                  <div className="hidden-badge">Đã ẩn</div>
+                )}
               </div>
-              <div className="resource-title">{r.title}</div>
-              <div className="resource-desc">{r.description}</div>
+              <div className="resource-title" onClick={() => openPreview(r)}>{r.title}</div>
+              <div className="resource-desc" onClick={() => openPreview(r)}>{r.description}</div>
+              
+              <div className="resource-actions">
+                <button
+                  className="btn-icon"
+                  onClick={(e) => handleToggleVisibility(r.id, r.is_published, e)}
+                  title={r.is_published ? "Ẩn tài liệu" : "Hiện tài liệu"}
+                >
+                  {r.is_published ? <FiEye size={16} /> : <FiEyeOff size={16} />}
+                </button>
+                <button
+                  className="btn-icon"
+                  onClick={(e) => handleEdit(r, e)}
+                  title="Chỉnh sửa"
+                >
+                  <FiEdit2 size={16} />
+                </button>
+                <button
+                  className="btn-icon btn-icon-danger"
+                  onClick={(e) => handleDelete(r.id, e)}
+                  title="Xóa"
+                >
+                  <FiTrash2 size={16} />
+                </button>
+              </div>
             </div>
           ))
         )}
@@ -67,76 +152,115 @@ export default function MentorResources() {
       {showModal && (
         <ResourceModal
           mentorId={mentorId}
-          onClose={() => setShowModal(false)}
-          onCreated={async () => {
-            const res = await api.get(`/mentors/${mentorId}/resources`);
-            setResources(res.data.resources || []);
+          resource={editingResource}
+          onClose={() => {
             setShowModal(false);
+            setEditingResource(null);
+          }}
+          onSuccess={async () => {
+            await refreshResources();
+            setShowModal(false);
+            setEditingResource(null);
           }}
         />
       )}
 
       {selectedResource && (
-        <Modal title={selectedResource.title} onClose={() => setSelectedResource(null)}>
-          <div style={{ textAlign: "right", marginBottom: "10px" }}>
-            <button
-              onClick={() => window.open(selectedResource.file_url, "_blank")}
-              className="btn-zoom"
-            >
-              🔍 Phóng to
-            </button>
-          </div>
-
+        <Modal 
+          title={selectedResource.type === "pdf" ? null : selectedResource.title}
+          onClose={() => setSelectedResource(null)}
+          className={selectedResource.type === "pdf" ? "resource-preview-modal" : ""}
+        >
           {selectedResource.type === "pdf" ? (
-            <iframe
-              src={selectedResource.file_url}
-              width="100%"
-              height="600px"
-              style={{ border: "none" }}
-              title="Xem tài liệu PDF"
-              onError={(e) => {
-                e.target.style.display = "none";
-              }}
-            />
+            <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+              <div style={{ flex: 1, minHeight: "600px" }}>
+                <PDFPreview
+                  url={selectedResource.file_url}
+                  title={selectedResource.title}
+                  onClose={() => setSelectedResource(null)}
+                />
+              </div>
+              {selectedResource.description && (
+                <p style={{ marginTop: "10px", flexShrink: 0, padding: "12px", background: "#f9fafb", borderRadius: "6px" }}>
+                  {selectedResource.description}
+                </p>
+              )}
+            </div>
           ) : selectedResource.type === "video" ? (
-            <video src={selectedResource.file_url} controls width="100%" />
+            <div>
+              <video 
+                src={selectedResource.file_url} 
+                controls 
+                width="100%" 
+                style={{ 
+                  maxHeight: "70vh",
+                  borderRadius: "8px",
+                  backgroundColor: "#000"
+                }}
+              />
+              {selectedResource.description && (
+                <p style={{ marginTop: "10px" }}>{selectedResource.description}</p>
+              )}
+            </div>
           ) : (
-            <p>Không hỗ trợ định dạng này</p>
+            <div>
+              <p>Không thể xem trước tài liệu này.</p>
+            </div>
           )}
-
-          <p style={{ marginTop: "10px" }}>{selectedResource.description}</p>
         </Modal>
       )}
     </div>
   );
 }
 
-function ResourceModal({ mentorId, onClose, onCreated }) {
+function ResourceModal({ mentorId, resource, onClose, onSuccess }) {
   const [form, setForm] = useState({
     title: "",
     description: "",
     type: "pdf",
     file_url: ""
   });
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
+
+  useEffect(() => {
+    if (resource) {
+      setForm({
+        title: resource.title || "",
+        description: resource.description || "",
+        type: resource.type || "pdf",
+        file_url: resource.file_url || ""
+      });
+    } else {
+      setForm({
+        title: "",
+        description: "",
+        type: "pdf",
+        file_url: ""
+      });
+    }
+    setSelectedFile(null);
+  }, [resource]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setForm(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleFileUpload = (e) => {
+  const handleFileSelect = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    const allowedTypes = ["application/pdf", "video/mp4"];
-    if (!allowedTypes.includes(file.type)) {
-      alert("Chỉ được upload file PDF hoặc MP4");
-      return;
+    // Auto-detect type
+    let detectedType = "pdf";
+    if (file.type.startsWith("video/") || file.name.match(/\.(mp4|mov|avi)$/i)) {
+      detectedType = "video";
+    } else if (file.type === "application/pdf" || file.name.match(/\.pdf$/i)) {
+      detectedType = "pdf";
     }
 
-    // Giả lập upload
-    const fakeUrl = `https://files.example.com/${file.name}`;
-    setForm(prev => ({ ...prev, file_url: fakeUrl }));
+    setSelectedFile(file);
+    setForm(prev => ({ ...prev, type: detectedType }));
   };
 
   const handleSubmit = async (e) => {
@@ -146,58 +270,99 @@ function ResourceModal({ mentorId, onClose, onCreated }) {
       return;
     }
 
+    setUploading(true);
     try {
-      await api.post(`/mentors/${mentorId}/resources`, form);
-      onCreated();
+      const formData = new FormData();
+      formData.append("title", form.title);
+      formData.append("description", form.description);
+      formData.append("type", form.type);
+      
+      if (selectedFile) {
+        formData.append("file", selectedFile);
+      } else if (resource && form.file_url) {
+        // Keep existing file_url if no new file selected
+        formData.append("file_url", form.file_url);
+      }
+
+      if (resource) {
+        // Update existing resource
+        await api.put(`/mentors/resources/${resource.id}`, formData, {
+          headers: { "Content-Type": "multipart/form-data" }
+        });
+      } else {
+        // Create new resource
+        await api.post(`/mentors/${mentorId}/resources`, formData, {
+          headers: { "Content-Type": "multipart/form-data" }
+        });
+      }
+      
+      onSuccess();
     } catch (err) {
-      console.error("❌ Error creating resource:", err);
+      console.error("❌ Error saving resource:", err);
+      alert("Lỗi khi lưu tài liệu: " + (err.response?.data?.message || err.message));
+    } finally {
+      setUploading(false);
     }
   };
 
   return (
-    <div className="modal-overlay">
-      <div className="modal-card">
-        <div className="modal-header">
-          <h3>Thêm tài liệu mới</h3>
-          <button className="btn-close" onClick={onClose}>
-            <FiX size={20} />
+    <Modal
+      title={resource ? "Chỉnh sửa tài liệu" : "Thêm tài liệu mới"}
+      onClose={onClose}
+    >
+      <form className="modal-body" onSubmit={handleSubmit}>
+        <label>Tiêu đề *</label>
+        <input
+          type="text"
+          name="title"
+          value={form.title}
+          onChange={handleChange}
+          placeholder="Nhập tiêu đề tài liệu"
+          required
+        />
+
+        <label>Mô tả</label>
+        <textarea
+          name="description"
+          value={form.description}
+          onChange={handleChange}
+          placeholder="Nhập mô tả tài liệu"
+          rows={3}
+        />
+
+        <label>Tệp tài liệu {resource ? "(để trống nếu giữ nguyên)" : "*"}</label>
+        <input 
+          type="file" 
+          accept=".pdf,.mp4,.mov,.avi" 
+          onChange={handleFileSelect}
+          required={!resource}
+        />
+        {selectedFile && (
+          <div style={{ marginTop: "8px", fontSize: "13px", color: "#6b7280" }}>
+            Đã chọn: {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
+          </div>
+        )}
+        {resource && !selectedFile && (
+          <div style={{ marginTop: "8px", fontSize: "13px", color: "#6b7280" }}>
+            File hiện tại: {resource.file_url?.split("/").pop() || "N/A"}
+          </div>
+        )}
+
+        <label>Loại tài liệu</label>
+        <select name="type" value={form.type} onChange={handleChange}>
+          <option value="pdf">PDF</option>
+          <option value="video">Video</option>
+        </select>
+
+        <div className="modal-actions">
+          <button type="button" className="btn-secondary" onClick={onClose} disabled={uploading}>
+            Hủy
+          </button>
+          <button type="submit" className="btn-primary" disabled={uploading}>
+            {uploading ? "Đang lưu..." : resource ? "Cập nhật" : "Thêm mới"}
           </button>
         </div>
-
-        <form className="modal-body" onSubmit={handleSubmit}>
-          <label>Tiêu đề</label>
-          <input
-            type="text"
-            name="title"
-            value={form.title}
-            onChange={handleChange}
-            placeholder="Nhập tiêu đề tài liệu"
-            required
-          />
-
-          <label>Mô tả</label>
-          <textarea
-            name="description"
-            value={form.description}
-            onChange={handleChange}
-            placeholder="Nhập mô tả tài liệu"
-          />
-
-          <label>Tệp tài liệu (PDF hoặc MP4)</label>
-          <input type="file" accept=".pdf,.mp4" onChange={handleFileUpload} />
-
-          <label>Loại tài liệu</label>
-          <select name="type" value={form.type} onChange={handleChange}>
-            <option value="pdf">PDF</option>
-            <option value="video">Video</option>
-          </select>
-
-          <div className="modal-actions">
-            <button type="submit" className="btn-primary">Lưu</button>
-            <button type="button" className="btn-secondary" onClick={onClose}>Hủy</button>
-          </div>
-        </form>
-      </div>
-    </div>
+      </form>
+    </Modal>
   );
 }

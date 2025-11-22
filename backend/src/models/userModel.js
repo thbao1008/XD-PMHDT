@@ -68,7 +68,7 @@ export async function createUserInDb(user) {
 
 // Update user (general)
 export async function updateUserInDb(id, updates) {
-  const allowedFields = ["name", "email", "phone", "dob", "role", "password", "status", "package_id"];
+  const allowedFields = ["name", "email", "phone", "dob", "role", "password", "status", "package_id", "avatar_url", "security_question", "security_answer"];
   const fields = Object.keys(updates).filter(f => allowedFields.includes(f));
   if (fields.length === 0) return null;
 

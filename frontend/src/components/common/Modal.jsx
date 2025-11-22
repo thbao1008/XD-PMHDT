@@ -2,14 +2,16 @@
 import { createPortal } from "react-dom";
 import "../../styles/modal.css";
 
-export default function Modal({ title, children, onClose, className = "" }) {
+export default function Modal({ title, children, onClose, className = "", isOpen = true }) {
+  if (!isOpen) return null;
+
   return createPortal(
     <div
       className="modal-overlay"
       onClick={(e) => {
         // chỉ đóng khi click đúng overlay
         if (e.target.classList.contains("modal-overlay")) {
-          onClose();
+          onClose?.();
         }
       }}
     >

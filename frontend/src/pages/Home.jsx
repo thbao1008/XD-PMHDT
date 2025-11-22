@@ -206,13 +206,15 @@ export default function Home() {
   ref={(el) => (sectionRefs.current["packages"] = el)}
   className={`packages ${visibleSections["packages"] ? "visible" : ""}`}
 >
-  <h2>Các gói học</h2>
-  <p className="packages-desc">
-    Truy cập toàn bộ khóa học và tài liệu học tập. <br />
-    Sử dụng không giới hạn tất cả tính năng luyện nói với AI. <br />
-    Nhận phản hồi phát âm tức thì và lộ trình học tập cá nhân hóa. <br />
-    Có sự hỗ trợ từ giảng viên hướng dẫn tận tình, chuyên nghiệp.
-  </p>
+  <div className="packages-header">
+    <h2>Các gói học</h2>
+    <p className="packages-desc">
+      Truy cập toàn bộ khóa học và tài liệu học tập. <br />
+      Sử dụng không giới hạn tất cả tính năng luyện nói với AI. <br />
+      Nhận phản hồi phát âm tức thì và lộ trình học tập cá nhân hóa. <br />
+      Có sự hỗ trợ từ giảng viên hướng dẫn tận tình, chuyên nghiệp.
+    </p>
+  </div>
   <div className="package-list">
     {packages.map((pkg) => (
       <div key={pkg.id} className="card package-card">

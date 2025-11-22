@@ -5,13 +5,36 @@
   border-radius: 16px;
   padding: 32px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  position: relative;
+  overflow: visible;
+}
+
+.users-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 28px;
+  gap: 20px;
+  position: relative;
+  z-index: 1;
 }
 
 .users-list h2 {
-  margin: 0 0 28px 0;
+  margin: 0;
   font-size: 28px;
   font-weight: 700;
   color: #1a1a1a;
+  flex: 1;
+  min-width: 0;
+}
+
+.users-list-header .header-filter {
+  min-width: 150px;
+  max-width: 200px;
+  margin: 0;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 10;
 }
 
 /* Toolbar */
@@ -50,6 +73,12 @@
   transition: all 0.3s;
   font-weight: 500;
   min-width: 150px;
+  position: relative;
+  z-index: 10;
+}
+
+.users-list-header .header-filter.filter-select {
+  z-index: 100;
 }
 
 .users-list .filter-select:focus {
@@ -87,9 +116,12 @@
   margin-top: 24px;
   background: #fff;
   border-radius: 12px;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: visible;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   border: 1px solid #e5e7eb;
+  display: table;
+  table-layout: auto;
 }
 
 .users-list .table thead {
@@ -116,6 +148,8 @@
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
   background: transparent !important;
   transition: none !important;
+  white-space: nowrap;
+  min-width: 100px;
 }
 
 .users-list .table th:hover,
@@ -140,6 +174,10 @@
   font-size: 14px;
   color: #374151;
   background: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
 }
 
 .users-list .table tbody tr {

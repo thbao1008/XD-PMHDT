@@ -239,7 +239,16 @@ export default function MentorLearners() {
               <td>{l.email}</td>
               <td>{l.phone}</td>
               <td>{l.dob ? new Date(l.dob).toLocaleDateString("vi-VN") : "—"}</td>
-              <td>{l.package_status || "Chưa có"}</td>
+              <td>
+                {(() => {
+                  if (!l.purchase_id) return "Chưa có";
+                  if (l.status === "paused") return "Tạm dừng";
+                  if (l.status === "expired") return "Hết hạn";
+                  if (l.days_left === null || l.days_left === undefined) return "Đang xử lý";
+                  if (l.days_left > 0) return "Còn hạn";
+                  return "Hết hạn";
+                })()}
+              </td>
               <td
                 className="note-cell"
                 style={{ whiteSpace: "pre-line" }}

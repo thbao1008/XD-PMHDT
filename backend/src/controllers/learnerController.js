@@ -430,8 +430,8 @@ export async function downloadLearnerResource(req, res) {
 
 export async function listAllChallenges(req, res) {
   try {
-    const { q, level, topicId, page, limit } = req.query;
-    const data = await learnerService.getChallenges({ query: q, level, topicId, page, limit });
+    const { q, level, mentorId, page, limit } = req.query;
+    const data = await learnerService.getChallenges({ query: q, level, mentorId, page, limit });
     res.json({ challenges: data });
   } catch (err) {
     console.error("listAllChallenges error: - learnerController.js:228", err);
@@ -638,6 +638,33 @@ export async function listSubmissionsForLearner(req, res) {
     res.json({ submissions: rows });
   } catch (err) {
     console.error("listSubmissionsForLearner error: - learnerController.js:431", err);
+    res.status(500).json({ message: "Server error" });
+  }
+}
+
+export async function getBookmarkedChallenges(req, res) {
+  try {
+    const learnerId = parseInt(req.params.learnerId);
+    if (!learnerId) return res.status(400).json({ message: "Invalid learnerId" });
+    const challenges = await learnerService.getBookmarkedChallenges(learnerId);
+    res.json({ challenges });
+  } catch (err) {
+    console.error("getBookmarkedChallenges error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+}
+
+export async function toggleBookmark(req, res) {
+  try {
+    const learnerId = parseInt(req.params.learnerId);
+    const challengeId = parseInt(req.params.challengeId);
+    if (!learnerId || !challengeId) {
+      return res.status(400).json({ message: "Invalid learnerId or challengeId" });
+    }
+    const result = await learnerService.toggleBookmark(learnerId, challengeId);
+    res.json({ learnerChallenge: result });
+  } catch (err) {
+    console.error("toggleBookmark error:", err);
     res.status(500).json({ message: "Server error" });
   }
 }

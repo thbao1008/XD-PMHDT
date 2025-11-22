@@ -43,7 +43,10 @@ router.get("/:learnerId/schedules", scheduleCtrl.getLearnerSchedules);
 router.get("/schedules/:scheduleId", scheduleCtrl.getScheduleById);
 
 /* ===== Challenges & Submissions ===== */
-router.get("/:learnerId/challenges", learnerCtrl.getLearnerChallenges);          
+router.get("/:learnerId/challenges", learnerCtrl.getLearnerChallenges);
+router.get("/:learnerId/challenges/bookmarked", learnerCtrl.getBookmarkedChallenges);
+router.post("/:learnerId/challenges/:challengeId/bookmark", learnerCtrl.toggleBookmark);
+router.delete("/:learnerId/challenges/:challengeId/bookmark", learnerCtrl.toggleBookmark);
 router.get("/:learnerId/submissions", learnerCtrl.listSubmissionsForLearner);
 router.post("/submissions/:id/analyze", learnerCtrl.analyzeSubmission);
 // ✅ dùng upload.single("file") để parse form-data có file + field text

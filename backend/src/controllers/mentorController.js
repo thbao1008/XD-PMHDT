@@ -101,20 +101,59 @@ export async function updateLearnerNote(req, res) {
 export async function getResources(req, res) {
   try {
     const resources = await mentorService.getResourcesByMentor(req.params.id);
-    res.json({ resources });
+    // Format file_url to absolute URL if needed
+    const baseUrl = req.protocol + "://" + req.get("host");
+    const formatted = resources.map(r => ({
+      ...r,
+      file_url: r.file_url?.startsWith("/") ? `${baseUrl}${r.file_url}` : r.file_url
+    }));
+    res.json({ resources: formatted });
   } catch (err) {
     console.error("getResources error - mentorController.js:158", err);
     res.status(500).json({ message: err.message });
   }
 }
 
+export async function getPublishedResources(req, res) {
+  try {
+    const resources = await mentorService.getResourcesByMentor(req.params.id, false);
+    // Format file_url to absolute URL if needed
+    const baseUrl = req.protocol + "://" + req.get("host");
+    const formatted = resources.map(r => ({
+      ...r,
+      file_url: r.file_url?.startsWith("/") ? `${baseUrl}${r.file_url}` : r.file_url
+    }));
+    res.json({ resources: formatted });
+  } catch (err) {
+    console.error("getPublishedResources error - mentorController.js", err);
+    res.status(500).json({ message: err.message });
+  }
+}
+
 export async function createResource(req, res) {
   try {
+    let file_url = req.body.file_url;
+    if (req.file) {
+      file_url = `/uploads/${req.file.filename}`;
+    }
+
     const resource = await mentorService.createResource({
       mentor_id: req.params.id,
-      ...req.body
+      title: req.body.title,
+      description: req.body.description,
+      type: req.body.type,
+      file_url: file_url,
+      is_published: req.body.is_published !== undefined ? req.body.is_published === 'true' || req.body.is_published === true : true
     });
-    res.json({ resource });
+
+    // Format file_url to absolute URL
+    const baseUrl = req.protocol + "://" + req.get("host");
+    const formatted = {
+      ...resource,
+      file_url: resource.file_url?.startsWith("/") ? `${baseUrl}${resource.file_url}` : resource.file_url
+    };
+
+    res.json({ resource: formatted });
   } catch (err) {
     console.error("createResource error - mentorController.js:171", err);
     res.status(500).json({ message: err.message });
@@ -123,8 +162,31 @@ export async function createResource(req, res) {
 
 export async function updateResource(req, res) {
   try {
-    const resource = await mentorService.updateResource(req.params.id, req.body);
-    res.json({ resource });
+    const fields = {};
+    
+    // Handle file upload if new file is provided
+    if (req.file) {
+      fields.file_url = `/uploads/${req.file.filename}`;
+    }
+
+    // Only update fields that are provided
+    if (req.body.title !== undefined) fields.title = req.body.title;
+    if (req.body.description !== undefined) fields.description = req.body.description;
+    if (req.body.type !== undefined) fields.type = req.body.type;
+    if (req.body.is_published !== undefined) {
+      fields.is_published = req.body.is_published === 'true' || req.body.is_published === true;
+    }
+
+    const resource = await mentorService.updateResource(req.params.id, fields);
+
+    // Format file_url to absolute URL
+    const baseUrl = req.protocol + "://" + req.get("host");
+    const formatted = {
+      ...resource,
+      file_url: resource.file_url?.startsWith("/") ? `${baseUrl}${resource.file_url}` : resource.file_url
+    };
+
+    res.json({ resource: formatted });
   } catch (err) {
     console.error("updateResource error - mentorController.js:181", err);
     res.status(500).json({ message: err.message });
@@ -137,6 +199,18 @@ export async function deleteResource(req, res) {
     res.json({ message: "Resource deleted" });
   } catch (err) {
     console.error("deleteResource error - mentorController.js:191", err);
+    res.status(500).json({ message: err.message });
+  }
+}
+
+export async function toggleResourceVisibility(req, res) {
+  try {
+    const { id } = req.params;
+    const { is_published } = req.body;
+    const updated = await mentorService.toggleResourceVisibility(id, is_published);
+    res.json({ resource: updated });
+  } catch (err) {
+    console.error("toggleResourceVisibility error:", err);
     res.status(500).json({ message: err.message });
   }
 }

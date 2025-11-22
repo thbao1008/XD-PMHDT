@@ -2,7 +2,7 @@
 import api from "../../api.js";
 import { FaCommentDots, FaSearch } from "react-icons/fa";
 import "../../styles/reportpage.css";
-import UserForPage from "../admin/UserForPage.jsx";
+import UserForPage from "./UserForPage.jsx";
 import ProgressAnalytics from "../learner/ProgressAnalytics.jsx";
 
 export default function ReportsPage() {
