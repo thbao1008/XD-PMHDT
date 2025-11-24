@@ -356,11 +356,22 @@ async function getTrainingDataFromPython(trainingType, options = {}) {
       let stdinData = { training_type: trainingType };
       
       if (trainingType === 'prompt_generator') {
-        // Lấy topics và challenges từ database
-        const topics = await pool.query(`SELECT id, title, description, level FROM topics ORDER BY RANDOM() LIMIT 20`);
+        // Tạo topics từ TOPIC_THEMES constant (không còn bảng topics)
+        const level = options.level || 2;
+        const availableTopics = TOPIC_THEMES[level] || TOPIC_THEMES[2];
+        const selectedTopics = availableTopics
+          .sort(() => Math.random() - 0.5)
+          .slice(0, 20)
+          .map((title, index) => ({
+            id: index + 1,
+            title,
+            description: `Topic: ${title}`,
+            level
+          }));
+        
         const challenges = await pool.query(`SELECT id, title, description, level, type FROM challenges ORDER BY RANDOM() LIMIT 20`);
         
-        const topicsJson = JSON.stringify(topics.rows);
+        const topicsJson = JSON.stringify(selectedTopics);
         const challengesJson = JSON.stringify(challenges.rows);
         
         // Lấy personalization context nếu có learnerId
@@ -553,9 +564,19 @@ async function generateAIPrompt(level, roundNumber, learnerId = null, sessionId 
       personalizationContext = await getPersonalizationContext(learnerId, sessionId);
     }
     
-    // Lấy topics và challenges từ database với randomization TRƯỚC khi gọi trainer
-    const topics = await pool.query(`SELECT id, title, description, level FROM topics ORDER BY RANDOM() LIMIT 20`);
-    const challenges = await pool.query(`SELECT id, title, description, level, topic_id, type FROM challenges ORDER BY RANDOM() LIMIT 20`);
+    // Tạo topics từ TOPIC_THEMES constant (không còn bảng topics)
+    const availableTopics = TOPIC_THEMES[level] || TOPIC_THEMES[2];
+    const selectedTopics = availableTopics
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 20)
+      .map((title, index) => ({
+        id: index + 1,
+        title,
+        description: `Topic: ${title}`,
+        level
+      }));
+    
+    const challenges = await pool.query(`SELECT id, title, description, level, type FROM challenges ORDER BY RANDOM() LIMIT 20`);
     
     // Gọi OpenRouter với training data từ Python qua trainedAIService
     // trainedAIService sẽ tự động gọi Python trainer với topics/challenges
@@ -568,7 +589,7 @@ async function generateAIPrompt(level, roundNumber, learnerId = null, sessionId 
         usedPrompts,
         learnerId,
         sessionId,
-        topicsJson: JSON.stringify(topics.rows),
+        topicsJson: JSON.stringify(selectedTopics),
         challengesJson: JSON.stringify(challenges.rows),
         personalizationContext,
         // Độ khó được xác định dựa trên điểm trung bình
@@ -660,20 +681,23 @@ async function generateAIPrompt(level, roundNumber, learnerId = null, sessionId 
          difficulty === 'medium' ? "I enjoy learning English because it helps me communicate with people from different countries." :
          "Hello, my name is Anna. I am from Vietnam.");
     } catch (fallbackErr) {
-      // Ultimate fallback
-      const ultimateFallback = {
-        easy: "Hello, my name is Anna. I am from Vietnam.",
-        medium: "I enjoy learning English because it helps me communicate with people from different countries.",
-        hard: "The advancement of technology has significantly transformed how we learn and interact with information in the modern world."
-      };
-      
-      // Cố gắng lấy difficulty một lần nữa
+      // Ultimate fallback: Tạo prompt ngẫu nhiên từ topics
       try {
         const averageScore = await getLearnerAverageScore(learnerId);
         const difficulty = determineDifficultyForRound(averageScore, roundNumber);
-        return ultimateFallback[difficulty] || ultimateFallback.easy;
-      } catch {
-        return ultimateFallback.easy;
+        const { topics: usedTopics } = await getUsedTopicsInSession(sessionId, level);
+        
+        // Tạo prompt ngẫu nhiên từ topics
+        return await generateAIPromptFallback(level, usedTopics, [], difficulty);
+      } catch (fallbackErr) {
+        console.error("❌ Ultimate fallback failed:", fallbackErr);
+        // Last resort: prompt đơn giản nhất
+        const lastResort = {
+          easy: "Hello, my name is Anna. I am from Vietnam.",
+          medium: "I enjoy learning English because it helps me communicate with people from different countries.",
+          hard: "The advancement of technology has significantly transformed how we learn and interact with information in the modern world."
+        };
+        return lastResort.easy;
       }
     }
   }
@@ -701,34 +725,64 @@ async function generateAIPromptFallback(level, usedTopics = [], usedPrompts = []
 
 Return JSON: {"prompt": "sentence", "topic": "topic name", "word_count": number}`;
 
-  const response = await aiService.callOpenRouter(
-    [{ role: "user", content: simplePrompt }],
-    { model: "openai/gpt-4o-mini", temperature: 0.95, max_tokens: 200 }
-  );
-
-  const content = response.choices?.[0]?.message?.content || "{}";
-  let result;
   try {
-    result = JSON.parse(content);
-  } catch (e) {
-    result = {
-      prompt: content.trim().replace(/^["']|["']$/g, ""),
-      topic: selectedTopics[0] || "general",
-      word_count: content.split(/\s+/).length
-    };
+    const response = await aiServiceClient.callOpenRouter(
+      [{ role: "user", content: simplePrompt }],
+      { model: "openai/gpt-4o-mini", temperature: 0.95, max_tokens: 200 }
+    );
+
+    const content = response.choices?.[0]?.message?.content || "{}";
+    let result;
+    try {
+      result = JSON.parse(content);
+    } catch (e) {
+      result = {
+        prompt: content.trim().replace(/^["']|["']$/g, ""),
+        topic: selectedTopics[0] || "general",
+        word_count: content.split(/\s+/).length
+      };
+    }
+
+    // Nếu có prompt hợp lệ, trả về
+    if (result.prompt && result.prompt.length > 10) {
+      return result.prompt;
+    }
+  } catch (err) {
+    console.warn("⚠️ Fallback AI call failed, using topic-based prompts:", err.message);
   }
 
-  // Nếu vẫn fail, tạo prompt đơn giản nhất dựa trên difficulty
-  if (!result.prompt) {
-    const difficultyPrompts = {
-      easy: "Hello, my name is Anna. I am from Vietnam.",
-      medium: "I enjoy learning English because it helps me communicate with people from different countries.",
-      hard: "The advancement of technology has significantly transformed how we learn and interact with information in the modern world."
-    };
-    return difficultyPrompts[difficulty] || difficultyPrompts.easy;
-  }
+  // Nếu vẫn fail, tạo prompt ngẫu nhiên từ topics thay vì dùng prompt cố định
+  const randomTopic = selectedTopics[Math.floor(Math.random() * selectedTopics.length)] || selectedTopics[0] || "general";
   
-  return result.prompt;
+  // Tạo prompt đa dạng dựa trên topic và difficulty
+  const topicBasedPrompts = {
+    easy: [
+      `Hello, my name is ${randomTopic === 'Self-introduction' ? 'Anna' : 'John'}. I am from Vietnam.`,
+      `I like ${randomTopic.toLowerCase()}. It is fun.`,
+      `Today is ${new Date().toLocaleDateString('en-US', { weekday: 'long' })}. I feel happy.`,
+      `My favorite ${randomTopic.toLowerCase()} is ${randomTopic === 'Colors' ? 'blue' : randomTopic === 'Food' ? 'pizza' : 'good'}.`,
+      `I have a ${randomTopic === 'Pets' ? 'dog' : randomTopic === 'Family' ? 'sister' : 'friend'}.`
+    ],
+    medium: [
+      `I enjoy ${randomTopic.toLowerCase()} because it helps me learn new things and meet interesting people.`,
+      `Last weekend, I went to a ${randomTopic.toLowerCase()} event and had a wonderful time with my friends.`,
+      `In my opinion, ${randomTopic.toLowerCase()} is very important for personal development and growth.`,
+      `I have been interested in ${randomTopic.toLowerCase()} since I was young, and it has become my passion.`,
+      `When I think about ${randomTopic.toLowerCase()}, I feel excited and motivated to explore more.`
+    ],
+    hard: [
+      `The advancement of ${randomTopic.toLowerCase()} has significantly transformed how we learn and interact with information in the modern world.`,
+      `In today's globalized society, understanding ${randomTopic.toLowerCase()} is crucial for effective communication and cultural exchange.`,
+      `Research in ${randomTopic.toLowerCase()} has revealed fascinating insights into human behavior and cognitive processes.`,
+      `The intersection of ${randomTopic.toLowerCase()} and technology has created unprecedented opportunities for innovation and discovery.`,
+      `Critical analysis of ${randomTopic.toLowerCase()} requires a deep understanding of historical context and contemporary perspectives.`
+    ]
+  };
+  
+  const prompts = topicBasedPrompts[difficulty] || topicBasedPrompts.easy;
+  const randomPrompt = prompts[Math.floor(Math.random() * prompts.length)];
+  
+  return randomPrompt;
 }
 
 /**
@@ -1246,7 +1300,7 @@ Return JSON ONLY:
 }`;
 
   try {
-    const response = await aiService.callOpenRouter(
+    const response = await aiServiceClient.callOpenRouter(
       [{ role: "user", content: prompt }],
       { 
         model: "openai/gpt-4o", // Nâng cấp lên GPT-4o cho fallback analysis
@@ -1483,7 +1537,7 @@ Return JSON only:
   };
 
   try {
-    const response = await aiService.callOpenRouter(
+    const response = await aiServiceClient.callOpenRouter(
       [{ role: "user", content: summaryPrompt }],
       { 
         model: "openai/gpt-4o-mini", 

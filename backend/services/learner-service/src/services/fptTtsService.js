@@ -27,11 +27,19 @@ const VIETNAMESE_NORTH_VOICES = {
  * @param {string} format - Format output (mp3 hoặc wav, default mp3)
  * @returns {Promise<{audioUrl: string, requestId: string}>}
  */
+// Flag để chỉ log warning 1 lần
+let hasLoggedWarning = false;
+
 export async function generateSpeech(text, voice = 'banmai', speed = 0, format = 'mp3') {
   const apiKey = process.env.FPT_AI_API_KEY;
   
   if (!apiKey) {
-    throw new Error('FPT_AI_API_KEY is not configured in environment variables');
+    // Chỉ log warning 1 lần để tránh spam log
+    if (!hasLoggedWarning) {
+      console.warn('⚠️ FPT_AI_API_KEY is not configured in environment variables. Falling back to browser TTS.');
+      hasLoggedWarning = true;
+    }
+    return null;
   }
 
   if (!text || text.length < 3) {
@@ -164,10 +172,15 @@ export async function generateVietnameseNorthVoice(text, voiceType = 'female', s
   const voice = VIETNAMESE_NORTH_VOICES[voiceType] || VIETNAMESE_NORTH_VOICES['female'];
   
   // Gọi API để lấy async link
-  const { audioUrl } = await generateSpeech(text, voice, speed, 'mp3');
+  const result = await generateSpeech(text, voice, speed, 'mp3');
+  
+  // Nếu API key không có hoặc lỗi, return null để fallback
+  if (!result || !result.audioUrl) {
+    return null;
+  }
   
   // Đợi audio file sẵn sàng và download
-  const audioData = await waitForAudio(audioUrl);
+  const audioData = await waitForAudio(result.audioUrl);
   
   return audioData;
 }
@@ -189,6 +202,12 @@ export async function generateSpeechForFrontend(text, voiceType, voiceOrigin, re
       // Tốc độ tự nhiên hơn: +1 (nhanh hơn một chút) để không giống đánh vần
       const speed = voiceType === 'female' ? 1 : 1; // Cả nam và nữ đều dùng tốc độ +1 (tự nhiên, không quá chậm)
       const audioData = await generateVietnameseNorthVoice(text, voiceType, speed);
+      
+      // Nếu không có audio data (API key missing hoặc lỗi), return null để fallback
+      if (!audioData) {
+        // Không log warning ở đây vì đã log ở generateSpeech
+        return null;
+      }
       
       const audioBase64 = audioData.toString('base64');
       return {

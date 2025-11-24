@@ -91,6 +91,7 @@ export default function Dashboard() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [aiEvaluation, setAiEvaluation] = useState(null);
 
   useEffect(() => {
     loadAllData();
@@ -130,6 +131,12 @@ export default function Dashboard() {
       const chartRes = await api.get(`/admin/dashboard/charts?revenue=${timeframe.revenue}&users=${timeframe.users}&traffic=${timeframe.traffic}&daily=${timeframe.daily}&revenueOffset=${periodOffset.revenue}&usersOffset=${periodOffset.users}&trafficOffset=${periodOffset.traffic}&dailyOffset=${periodOffset.daily}`);
       if (chartRes.data?.success && chartRes.data.chartData) {
         setChartData(chartRes.data.chartData);
+      }
+
+      // Load AI evaluation
+      const evalRes = await api.get("/admin/dashboard/ai-evaluation");
+      if (evalRes.data?.success && evalRes.data.analysis) {
+        setAiEvaluation(evalRes.data);
       }
       } catch (err) {
       console.error("❌ Lỗi load dashboard data:", err);
@@ -1035,6 +1042,103 @@ export default function Dashboard() {
               <div className="traffic-value">{trafficStats.weekTraffic.toLocaleString()}</div>
             </div>
           </div>
+          
+          {/* Thêm thông tin bổ sung */}
+          <div style={{ 
+            marginTop: "20px", 
+            paddingTop: "20px", 
+            borderTop: "1px solid #e5e7eb" 
+          }}>
+            <div style={{ 
+              display: "grid", 
+              gridTemplateColumns: "1fr 1fr", 
+              gap: "16px",
+              marginBottom: "16px"
+            }}>
+              <div style={{ 
+                padding: "12px", 
+                background: "#f9fafb", 
+                borderRadius: "8px" 
+              }}>
+                <div style={{ fontSize: "12px", color: "#6b7280", marginBottom: "4px" }}>
+                  Người truy cập hôm nay
+                </div>
+                <div style={{ fontSize: "18px", fontWeight: "600", color: "#1f2937" }}>
+                  {trafficStats.todayUniqueVisitors || 0}
+                </div>
+              </div>
+              <div style={{ 
+                padding: "12px", 
+                background: "#f9fafb", 
+                borderRadius: "8px" 
+              }}>
+                <div style={{ fontSize: "12px", color: "#6b7280", marginBottom: "4px" }}>
+                  Người truy cập 7 ngày
+                </div>
+                <div style={{ fontSize: "18px", fontWeight: "600", color: "#1f2937" }}>
+                  {trafficStats.weekUniqueVisitors || 0}
+                </div>
+              </div>
+            </div>
+            
+            {/* Biểu đồ mini 7 ngày */}
+            {chartData.traffic7Days && chartData.traffic7Days.length > 0 && (
+              <div style={{ marginTop: "16px" }}>
+                <div style={{ fontSize: "13px", color: "#6b7280", marginBottom: "8px", fontWeight: "500" }}>
+                  Xu hướng 7 ngày qua
+                </div>
+                <div style={{ 
+                  display: "flex", 
+                  alignItems: "flex-end", 
+                  gap: "4px", 
+                  height: "60px",
+                  padding: "8px",
+                  background: "#f9fafb",
+                  borderRadius: "8px"
+                }}>
+                  {chartData.traffic7Days.slice(-7).map((day, idx) => {
+                    const maxValue = Math.max(...chartData.traffic7Days.slice(-7).map(d => d.visitors || 0), 1);
+                    const height = ((day.visitors || 0) / maxValue) * 100;
+                    return (
+                      <div key={idx} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center" }}>
+                        <div style={{
+                          width: "100%",
+                          height: `${Math.max(height, 5)}%`,
+                          background: height > 0 ? "linear-gradient(to top, #3b82f6, #60a5fa)" : "#e5e7eb",
+                          borderRadius: "4px 4px 0 0",
+                          minHeight: "4px",
+                          transition: "all 0.3s"
+                        }}></div>
+                        <div style={{ fontSize: "10px", color: "#9ca3af", marginTop: "4px" }}>
+                          {new Date(day.date || day.period).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            
+            {/* Thông tin bổ sung */}
+            <div style={{ 
+              marginTop: "16px", 
+              padding: "12px", 
+              background: "#eff6ff", 
+              borderRadius: "8px",
+              border: "1px solid #dbeafe"
+            }}>
+              <div style={{ fontSize: "12px", color: "#1e40af", fontWeight: "500", marginBottom: "4px" }}>
+                💡 Mẹo tăng traffic
+              </div>
+              <div style={{ fontSize: "11px", color: "#3b82f6", lineHeight: "1.5" }}>
+                {trafficStats.totalTraffic < 100 
+                  ? "Tăng cường marketing, SEO và quảng cáo để thu hút người dùng mới"
+                  : trafficStats.onlineUsers === 0
+                  ? "Tạo nội dung hấp dẫn và thông báo để người dùng quay lại"
+                  : "Hệ thống đang hoạt động tốt! Tiếp tục duy trì chất lượng dịch vụ"}
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* AI Progress - Hiển thị công suất và hoạt động */}
@@ -1086,7 +1190,238 @@ export default function Dashboard() {
               </span>
             </div>
           </div>
+          
+          {/* Thêm thông tin bổ sung về AI */}
+          <div style={{ 
+            marginTop: "20px", 
+            paddingTop: "20px", 
+            borderTop: "1px solid #e5e7eb" 
+          }}>
+            {/* Breakdown theo loại AI */}
+            <div style={{ marginBottom: "16px" }}>
+              <div style={{ fontSize: "13px", color: "#6b7280", marginBottom: "12px", fontWeight: "500" }}>
+                Các mô hình AI đang hoạt động
         </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                <div style={{ 
+                  padding: "10px", 
+                  background: "#f0fdf4", 
+                  borderRadius: "6px",
+                  border: "1px solid #bbf7d0"
+                }}>
+                  <div style={{ fontSize: "11px", color: "#166534", marginBottom: "4px" }}>
+                    Challenge AI
+                  </div>
+                  <div style={{ fontSize: "14px", fontWeight: "600", color: "#15803d" }}>
+                    {aiProgress.aiReports > 0 ? "Hoạt động" : "Chưa có dữ liệu"}
+                  </div>
+                </div>
+                <div style={{ 
+                  padding: "10px", 
+                  background: "#f0f9ff", 
+                  borderRadius: "6px",
+                  border: "1px solid #bae6fd"
+                }}>
+                  <div style={{ fontSize: "11px", color: "#1e40af", marginBottom: "4px" }}>
+                    Conversation AI
+                  </div>
+                  <div style={{ fontSize: "14px", fontWeight: "600", color: "#2563eb" }}>
+                    {stats.totalChallenges > 0 ? "Hoạt động" : "Chưa có dữ liệu"}
+                  </div>
+                </div>
+                <div style={{ 
+                  padding: "10px", 
+                  background: "#fef3c7", 
+                  borderRadius: "6px",
+                  border: "1px solid #fde68a"
+                }}>
+                  <div style={{ fontSize: "11px", color: "#92400e", marginBottom: "4px" }}>
+                    Assessment AI
+                  </div>
+                  <div style={{ fontSize: "14px", fontWeight: "600", color: "#b45309" }}>
+                    {aiProgress.trainingSamples > 0 ? "Đang học" : "Chưa khởi tạo"}
+                  </div>
+                </div>
+                <div style={{ 
+                  padding: "10px", 
+                  background: "#fce7f3", 
+                  borderRadius: "6px",
+                  border: "1px solid #fbcfe8"
+                }}>
+                  <div style={{ fontSize: "11px", color: "#9f1239", marginBottom: "4px" }}>
+                    Evaluation AI
+                  </div>
+                  <div style={{ fontSize: "14px", fontWeight: "600", color: "#be185d" }}>
+                    {aiEvaluation ? "Hoạt động" : "Chưa có dữ liệu"}
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Performance bar */}
+            <div style={{ marginBottom: "16px" }}>
+              <div style={{ fontSize: "13px", color: "#6b7280", marginBottom: "8px", fontWeight: "500" }}>
+                Hiệu suất AI
+              </div>
+              <div style={{ 
+                height: "8px", 
+                background: "#e5e7eb", 
+                borderRadius: "4px",
+                overflow: "hidden"
+              }}>
+                <div style={{
+                  height: "100%",
+                  width: `${aiProgress.trainingSamples > 0 
+                    ? Math.min((aiProgress.aiReports / Math.max(aiProgress.trainingSamples, 1)) * 100, 100)
+                    : 0}%`,
+                  background: aiProgress.trainingSamples > 0 && aiProgress.aiReports > 0
+                    ? "linear-gradient(90deg, #10b981, #34d399)"
+                    : "#9ca3af",
+                  transition: "width 0.3s",
+                  borderRadius: "4px"
+                }}></div>
+              </div>
+              <div style={{ fontSize: "11px", color: "#6b7280", marginTop: "4px" }}>
+                {aiProgress.trainingSamples > 0 
+                  ? `${aiProgress.aiReports} báo cáo từ ${aiProgress.trainingSamples} mẫu`
+                  : "Chưa có dữ liệu training"}
+              </div>
+            </div>
+            
+            {/* Tips và insights */}
+            <div style={{ 
+              padding: "12px", 
+              background: "#fef3c7", 
+              borderRadius: "8px",
+              border: "1px solid #fde68a"
+            }}>
+              <div style={{ fontSize: "12px", color: "#92400e", fontWeight: "500", marginBottom: "6px" }}>
+                💡 Gợi ý cải thiện AI
+              </div>
+              <div style={{ fontSize: "11px", color: "#b45309", lineHeight: "1.5" }}>
+                {aiProgress.trainingSamples < 10 
+                  ? "Tăng số lượng training samples để cải thiện độ chính xác của AI"
+                  : aiProgress.aiReports < aiProgress.trainingSamples
+                  ? "AI đang hoạt động tốt. Tiếp tục thu thập dữ liệu để cải thiện"
+                  : "AI đang hoạt động hiệu quả! Xem xét mở rộng tính năng AI"}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* AI System Evaluation & Suggestions */}
+        {aiEvaluation && aiEvaluation.analysis && (
+          <div className="dashboard-card ai-evaluation-card">
+            <div className="card-header">
+              <h3>
+                <FaRobot />
+                Đánh giá Hệ thống & Gợi ý
+              </h3>
+              <span 
+                className="status-badge"
+                style={{ 
+                  background: getAIStatusColor(aiEvaluation.analysis.overallStatus) + "20",
+                  color: getAIStatusColor(aiEvaluation.analysis.overallStatus)
+                }}
+              >
+                {aiEvaluation.analysis.overallScore.toFixed(0)}/100
+              </span>
+            </div>
+            <div className="evaluation-content">
+              <div className="evaluation-overall">
+                <div className="evaluation-message">
+                  <strong>{aiEvaluation.analysis.overallMessage}</strong>
+                </div>
+                <div className="evaluation-score">
+                  <div className="score-circle" style={{
+                    background: `conic-gradient(${getAIStatusColor(aiEvaluation.analysis.overallStatus)} ${aiEvaluation.analysis.overallScore * 3.6}deg, #e5e7eb ${aiEvaluation.analysis.overallScore * 3.6}deg)`
+                  }}>
+                    <div className="score-inner">
+                      <span className="score-value">{aiEvaluation.analysis.overallScore.toFixed(0)}</span>
+                      <span className="score-label">/100</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {aiEvaluation.analysis.strengths && aiEvaluation.analysis.strengths.length > 0 && (
+                <div className="evaluation-section strengths">
+                  <h4 style={{ color: '#10b981', marginBottom: '12px' }}>
+                    <FaUserCheck style={{ marginRight: '8px' }} />
+                    Điểm mạnh
+                  </h4>
+                  <ul>
+                    {aiEvaluation.analysis.strengths.map((strength, idx) => (
+                      <li key={idx} style={{ color: '#059669', marginBottom: '8px' }}>
+                        ✓ {strength}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {aiEvaluation.analysis.issues && aiEvaluation.analysis.issues.length > 0 && (
+                <div className="evaluation-section issues">
+                  <h4 style={{ color: '#ef4444', marginBottom: '12px' }}>
+                    <FaEye style={{ marginRight: '8px' }} />
+                    Vấn đề cần chú ý
+                  </h4>
+                  <ul>
+                    {aiEvaluation.analysis.issues.map((issue, idx) => (
+                      <li key={idx} style={{ color: '#dc2626', marginBottom: '8px' }}>
+                        ⚠ {issue}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {aiEvaluation.analysis.suggestions && aiEvaluation.analysis.suggestions.length > 0 && (
+                <div className="evaluation-section suggestions">
+                  <h4 style={{ color: '#3b82f6', marginBottom: '12px' }}>
+                    <FaChartLine style={{ marginRight: '8px' }} />
+                    Gợi ý cải tiến
+                  </h4>
+                  <ul>
+                    {aiEvaluation.analysis.suggestions.map((suggestion, idx) => (
+                      <li key={idx} style={{ color: '#2563eb', marginBottom: '10px', paddingLeft: '8px' }}>
+                        💡 {suggestion}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <div className="evaluation-categories">
+                <h4 style={{ marginBottom: '12px', fontSize: '14px', fontWeight: '600' }}>Đánh giá theo danh mục:</h4>
+                <div className="categories-grid">
+                  {Object.entries(aiEvaluation.analysis.categories || {}).map(([key, category]) => (
+                    <div key={key} className="category-item">
+                      <div className="category-name">
+                        {key === 'userGrowth' ? 'Tăng trưởng người dùng' :
+                         key === 'performance' ? 'Hiệu suất học tập' :
+                         key === 'engagement' ? 'Tương tác' :
+                         key === 'revenue' ? 'Doanh thu' : key}
+                      </div>
+                      <div className="category-score">
+                        <div className="score-bar">
+                          <div 
+                            className="score-fill" 
+                            style={{ 
+                              width: `${category.score}%`,
+                              background: category.score >= 60 ? '#10b981' : category.score >= 40 ? '#f59e0b' : '#ef4444'
+                            }}
+                          ></div>
+                        </div>
+                        <span className="score-text">{category.score}/100</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Charts Section - Professional Analytics Dashboard */}

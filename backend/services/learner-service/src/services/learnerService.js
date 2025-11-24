@@ -626,18 +626,17 @@ export async function getLearnerChallenges(
 
   let sql = `
     SELECT c.id, c.title, c.description, c.level, c.type, c.created_at,
-           t.mentor_id,
+           c.mentor_id,
            lc.id AS learner_challenge_id, lc.status, lc.attempts, lc.score,
            lc.is_bookmarked, lc.last_attempt_at
     FROM challenges c
-    JOIN topics t ON c.topic_id = t.id
     LEFT JOIN learner_challenges lc
       ON c.id = lc.challenge_id AND lc.learner_id = $1
   `;
 
   if (mentorId) {
     params.push(parseInt(mentorId));
-    sql += ` WHERE t.mentor_id = $${params.length}`;
+    sql += ` WHERE c.mentor_id = $${params.length}`;
   }
 
   sql += ` ORDER BY c.created_at DESC LIMIT $2 OFFSET $3`;

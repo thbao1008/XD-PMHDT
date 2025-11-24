@@ -88,14 +88,16 @@ export async function deleteUserInDb(id) {
   return result.rowCount > 0;
 }
 
-// Toggle active/banned
-export async function toggleUserStatusInDb(id) {
+// Toggle active/banned với lý do
+export async function toggleUserStatusInDb(id, newStatus, banReason = null, unbanReason = null) {
+  // Cast status to VARCHAR để tránh type mismatch
   const { rows } = await pool.query(
     `UPDATE users
-     SET status = CASE WHEN status = 'active' THEN 'banned' ELSE 'active' END,
+     SET status = $2::VARCHAR(20),
+         ban_reason = CASE WHEN $2::VARCHAR(20) = 'banned' THEN $3 ELSE ban_reason END,
          updated_at = CURRENT_TIMESTAMP
      WHERE id = $1 RETURNING *`,
-    [id]
+    [id, newStatus, banReason]
   );
   return rows[0];
 }

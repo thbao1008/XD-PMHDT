@@ -15,12 +15,10 @@
     "aiesp:gpu:check": "python backend/ai_models/localGPUTraining.py check-gpu",
     "aiesp:gpu:auto": "node backend/ai_models/startAutoLocalGPUTraining.js",
     "aiesp:cleanup": "python backend/ai_models/localGPUTraining.py cleanup",
-    "dev:all": "concurrently -n BE,FE -c green,blue \"npm run dev:be\" \"npm run dev:fe\"",
-    "dev:be": "nodemon --watch backend/src --exec \"node backend/src/bootstrap.js\"",
+    "dev:all": "concurrently -n BE,FE -c green,blue \"npm run dev:be:micro\" \"npm run dev:fe\"",
     "dev:be:micro": "cd backend/services && node start-all-services.js",
     "dev:fe": "node scripts/start-frontend.js",
     "dev": "npm run dev:all",
-    "dev:micro": "concurrently -n BE,FE -c green,blue \"npm run dev:be:micro\" \"npm run dev:fe\"",
     "seed:admin": "node backend/seed/seedAdminsFromFile.js",
     "generate:learners": "node backend/scripts/generateLearners.js",
     "check:assistant": "node backend/scripts/checkAssistantAI.js",
@@ -30,7 +28,7 @@
     "install:all": "npm install",
     "build": "npm run build:fe",
     "build:fe": "cd frontend && npm run build",
-    "start": "node backend/src/bootstrap.js"
+    "start": "cd backend/services && node start-all-services.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

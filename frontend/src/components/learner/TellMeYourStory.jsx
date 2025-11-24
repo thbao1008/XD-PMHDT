@@ -170,17 +170,53 @@ export default function TellMeYourStory({ onBack }) {
   const recognitionRef = useRef(null); // Web Speech API for speech end detection
   const silenceTimerRef = useRef(null); // Timer để phát hiện im lặng
   const lastSoundTimeRef = useRef(null); // Thời gian có âm thanh cuối cùng
+  
+  // Timeout 30 phút cho conversation history
+  const conversationTimeoutRef = useRef(null);
+  const lastActivityRef = useRef(Date.now());
 
   useEffect(() => {
     startConversation();
+    // Không xóa conversation khi unmount - chỉ cleanup audio/recording
     return () => {
       // Cleanup: stop recording and close streams
       if (mediaStreamRef.current) {
         mediaStreamRef.current.getTracks().forEach(track => track.stop());
       }
       window.speechSynthesis.cancel();
+      // Clear timeout nếu có
+      if (conversationTimeoutRef.current) {
+        clearTimeout(conversationTimeoutRef.current);
+      }
     };
   }, []);
+  
+  // Reset timeout mỗi khi có message mới
+  useEffect(() => {
+    if (conversation.length > 0) {
+      lastActivityRef.current = Date.now();
+      
+      // Clear timeout cũ
+      if (conversationTimeoutRef.current) {
+        clearTimeout(conversationTimeoutRef.current);
+      }
+      
+      // Set timeout mới: 30 phút = 30 * 60 * 1000 = 1800000ms
+      conversationTimeoutRef.current = setTimeout(() => {
+        // Nếu không có hoạt động trong 30 phút, xóa conversation và tạo mới
+        const timeSinceLastActivity = Date.now() - lastActivityRef.current;
+        if (timeSinceLastActivity >= 30 * 60 * 1000) {
+          handleNewConversation();
+        }
+      }, 30 * 60 * 1000); // 30 phút
+    }
+    
+    return () => {
+      if (conversationTimeoutRef.current) {
+        clearTimeout(conversationTimeoutRef.current);
+      }
+    };
+  }, [conversation]);
 
   // Cleanup audio URLs when component unmounts
   useEffect(() => {
@@ -226,21 +262,53 @@ export default function TellMeYourStory({ onBack }) {
         }
       ]);
       
+      // Reset last activity
+      lastActivityRef.current = Date.now();
+      
       // Tự động phát âm message đầu tiên
       speakText(initialMessage, 'initial');
     } catch (err) {
       console.error("❌ Error starting conversation:", err);
     }
   };
+  
+  // Hàm tạo cuộc trò chuyện mới
+  const handleNewConversation = async () => {
+    // Clear timeout
+    if (conversationTimeoutRef.current) {
+      clearTimeout(conversationTimeoutRef.current);
+    }
+    
+    // Xóa conversation hiện tại
+    setConversation([]);
+    setSessionId(null);
+    
+    // Cleanup audio URLs
+    Object.values(aiAudioUrls).forEach(url => {
+      if (url && url.startsWith('blob:')) {
+        URL.revokeObjectURL(url);
+      }
+    });
+    setAiAudioUrls({});
+    userAudioRefs.current = {};
+    
+    // Dừng TTS nếu đang phát
+    window.speechSynthesis.cancel();
+    setPlayingAudio(null);
+    
+    // Tạo conversation mới
+    await startConversation();
+  };
 
   // Text-to-Speech cho AI response với giọng đã chọn
-  const speakText = async (text, messageId) => {
+  const speakText = async (text, messageId, overrideVoiceType = null, overrideVoiceOrigin = null) => {
     // Dừng bất kỳ phát âm nào đang chạy
     window.speechSynthesis.cancel();
     
     // Lấy giá trị hiện tại của voiceType và voiceOrigin (đảm bảo dùng đúng giọng đã chọn)
-    const currentVoiceType = voiceType;
-    const currentVoiceOrigin = voiceOrigin;
+    // Cho phép override để đảm bảo dùng đúng giọng khi thay đổi
+    const currentVoiceType = overrideVoiceType !== null ? overrideVoiceType : voiceType;
+    const currentVoiceOrigin = overrideVoiceOrigin !== null ? overrideVoiceOrigin : voiceOrigin;
     
     // Nếu là giọng Việt Nam (cả nam và nữ), dùng FPT.AI TTS
     if (currentVoiceOrigin === 'asian') {
@@ -1111,6 +1179,9 @@ export default function TellMeYourStory({ onBack }) {
       // Reset audio chunks sau khi gửi thành công
       audioChunksRef.current = [];
       setHasRecordedAudio(false);
+      
+      // Cập nhật last activity khi có message mới
+      lastActivityRef.current = Date.now();
 
       // Tự động phát âm AI response (KHÔNG tự động mở mic sau khi nói xong)
       setTimeout(() => {
@@ -1173,7 +1244,30 @@ export default function TellMeYourStory({ onBack }) {
             ← Quay lại
           </button>
           <h2 style={{ margin: 0, color: "#333" }}>Tell me your story</h2>
-          <div style={{ width: "80px" }}></div> {/* Spacer for centering */}
+          <button
+            onClick={handleNewConversation}
+            style={{
+              padding: "8px 16px",
+              background: "#10b981",
+              color: "white",
+              border: "none",
+              borderRadius: 8,
+              cursor: "pointer",
+              fontSize: 14,
+              fontWeight: 500,
+              transition: "all 0.2s"
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.background = "#059669";
+              e.target.style.transform = "translateY(-1px)";
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.background = "#10b981";
+              e.target.style.transform = "translateY(0)";
+            }}
+          >
+            Tạo cuộc trò chuyện mới
+          </button>
         </div>
         <div style={{ 
           marginTop: 10, 
@@ -1229,10 +1323,11 @@ export default function TellMeYourStory({ onBack }) {
                         const currentMsg = conversation.find(m => m.id === playingAudio);
                         if (currentMsg) {
                           window.speechSynthesis.cancel();
-                          // Đợi state update xong rồi mới speak
+                          setPlayingAudio(null);
+                          // Đợi state update xong rồi mới speak với giọng mới
                           setTimeout(() => {
-                            speakText(currentMsg.text, currentMsg.id);
-                          }, 100);
+                            speakText(currentMsg.text, currentMsg.id, newVoiceType, newVoiceOrigin);
+                          }, 150);
                         }
                       }
                     }}
@@ -1263,9 +1358,10 @@ export default function TellMeYourStory({ onBack }) {
                         const currentMsg = conversation.find(m => m.id === playingAudio);
                         if (currentMsg) {
                           window.speechSynthesis.cancel();
+                          setPlayingAudio(null);
                           setTimeout(() => {
-                            speakText(currentMsg.text, currentMsg.id);
-                          }, 100);
+                            speakText(currentMsg.text, currentMsg.id, newVoiceType, newVoiceOrigin);
+                          }, 150);
                         }
                       }
                     }}
@@ -1322,16 +1418,19 @@ export default function TellMeYourStory({ onBack }) {
                 }}>
                   <button
                     onClick={async () => {
-                      setVoiceType('female');
-                      setVoiceOrigin('native');
+                      const newVoiceType = 'female';
+                      const newVoiceOrigin = 'native';
+                      setVoiceType(newVoiceType);
+                      setVoiceOrigin(newVoiceOrigin);
                       setShowVoiceSubmenu(null);
                       if (playingAudio) {
                         const currentMsg = conversation.find(m => m.id === playingAudio);
                         if (currentMsg) {
                           window.speechSynthesis.cancel();
+                          setPlayingAudio(null);
                           setTimeout(() => {
-                            speakText(currentMsg.text, currentMsg.id);
-                          }, 100);
+                            speakText(currentMsg.text, currentMsg.id, newVoiceType, newVoiceOrigin);
+                          }, 150);
                         }
                       }
                     }}
@@ -1353,16 +1452,19 @@ export default function TellMeYourStory({ onBack }) {
                   </button>
                   <button
                     onClick={async () => {
-                      setVoiceType('female');
-                      setVoiceOrigin('asian');
+                      const newVoiceType = 'female';
+                      const newVoiceOrigin = 'asian';
+                      setVoiceType(newVoiceType);
+                      setVoiceOrigin(newVoiceOrigin);
                       setShowVoiceSubmenu(null);
                       if (playingAudio) {
                         const currentMsg = conversation.find(m => m.id === playingAudio);
                         if (currentMsg) {
                           window.speechSynthesis.cancel();
+                          setPlayingAudio(null);
                           setTimeout(() => {
-                            speakText(currentMsg.text, currentMsg.id);
-                          }, 100);
+                            speakText(currentMsg.text, currentMsg.id, newVoiceType, newVoiceOrigin);
+                          }, 150);
                         }
                       }
                     }}

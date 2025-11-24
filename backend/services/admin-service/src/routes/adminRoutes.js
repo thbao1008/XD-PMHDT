@@ -29,6 +29,7 @@ import {
   getTrafficStats,
   getChartData
 } from "../controllers/dashboardController.js";
+import { getSystemEvaluation } from "../controllers/aiEvaluationController.js";
 // TODO: Replace with API calls to Package Service
 import {
   getPackages,
@@ -80,20 +81,9 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// Multer config for avatar upload
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadsDir);
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname);
-    cb(null, "avatar-" + uniqueSuffix + ext);
-  }
-});
-
+// Multer config for avatar upload - lưu vào memory để convert base64, không lưu file
 const upload = multer({ 
-  storage: storage,
+  storage: multer.memoryStorage(), // Lưu vào memory thay vì disk
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
   fileFilter: (req, file, cb) => {
     if (file.mimetype.startsWith('image/')) {
@@ -144,6 +134,22 @@ router.post("/users", createUser);
 router.put("/users/:id", updateUser);
 router.delete("/users/:id", deleteUser);
 router.put("/users/:id/status", toggleUserStatus);
+router.get("/users/:id/ban-history", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(
+      `SELECT * FROM ban_history 
+       WHERE user_id = $1 
+       ORDER BY created_at DESC 
+       LIMIT 20`,
+      [id]
+    );
+    res.json({ success: true, history: result.rows });
+  } catch (err) {
+    console.error("❌ Error getting ban history:", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
 
 // Mentor-Learner management
 router.post("/users/learners/remove-from-mentor", removeLearnerFromMentor);
@@ -168,6 +174,7 @@ router.get("/dashboard/activity", getRecentActivity);
 router.get("/dashboard/ai-progress", getAIProgress);
 router.get("/dashboard/traffic", getTrafficStats);
 router.get("/dashboard/charts", getChartData);
+router.get("/dashboard/ai-evaluation", getSystemEvaluation);
 
 // ====== PACKAGES ROUTES ======
 // Public route (no auth required)

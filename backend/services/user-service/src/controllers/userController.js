@@ -38,18 +38,18 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// Multer config for avatar upload
-const avatarStorage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadsDir);
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname);
-    cb(null, "avatar-" + uniqueSuffix + ext);
+// Multer config for avatar upload - lưu vào memory để convert base64, không lưu file
+const uploadAvatarMiddleware = multer({ 
+  storage: multer.memoryStorage(), // Lưu vào memory thay vì disk
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Chỉ chấp nhận file ảnh'));
+    }
   }
 });
-const uploadAvatarMiddleware = multer({ storage: avatarStorage });
 
 export async function listUsers(req, res) {
   try {
@@ -129,13 +129,13 @@ export async function getMyProfile(req, res) {
       return res.status(404).json({ success: false, message: "Not found" });
     }
 
-    // Format avatar_url to absolute URL (giống code cũ trong src)
+    // Format avatar_url to absolute URL (chỉ format relative paths, không format base64)
     const protocol = req.get("x-forwarded-proto") || req.protocol || "http";
     const host = req.get("x-forwarded-host") || req.get("host") || "localhost:4000";
     const baseUrl = `${protocol}://${host}`;
     
     const user = result.rows[0];
-    if (user.avatar_url?.startsWith("/")) {
+    if (user.avatar_url && !user.avatar_url.startsWith("data:") && user.avatar_url.startsWith("/")) {
       user.avatar_url = `${baseUrl}${user.avatar_url}`;
     }
 
@@ -279,10 +279,11 @@ export async function toggleUserStatus(req, res) {
 }
 
 // Upload avatar cho chính user (không cần admin)
+// Lưu base64 vào avatar_url, không lưu file vào thư mục upload
 export async function uploadMyAvatar(req, res) {
   try {
     const userId = req.user?.id || req.user?.user_id || req.user?._id;
-    console.log(`[uploadMyAvatar] Request received: userId=${userId}, hasFile=${!!req.file}, filename=${req.file?.filename}`);
+    console.log(`[uploadMyAvatar] Request received: userId=${userId}, hasFile=${!!req.file}`);
     
     if (!userId) {
       console.error("[uploadMyAvatar] No userId found in token");
@@ -294,36 +295,21 @@ export async function uploadMyAvatar(req, res) {
       return res.status(400).json({ message: "No file uploaded" });
     }
     
-    // Verify file was saved
-    const backendDir = getProjectRoot();
-    const uploadsDir = path.resolve(backendDir, "uploads");
-    const filePath = path.join(uploadsDir, req.file.filename);
+    // Convert file buffer to base64
+    const base64String = req.file.buffer.toString('base64');
+    const mimeType = req.file.mimetype || 'image/jpeg';
+    const avatarUrl = `data:${mimeType};base64,${base64String}`;
     
-    if (!fs.existsSync(filePath)) {
-      console.error(`[uploadMyAvatar] File was not saved! Path: ${filePath}`);
-      return res.status(500).json({ error: "File upload failed - file not saved", path: filePath });
-    }
+    console.log(`[uploadMyAvatar] File converted to base64, size: ${base64String.length} chars`);
     
-    console.log(`[uploadMyAvatar] File uploaded successfully: ${req.file.filename}, path: ${filePath}`);
-    
-    // Format avatar URL to absolute URL (giống code cũ trong src)
-    const protocol = req.get("x-forwarded-proto") || req.protocol || "http";
-    const host = req.get("x-forwarded-host") || req.get("host") || "localhost:4000";
-    const baseUrl = `${protocol}://${host}`;
-    const avatarUrl = `${baseUrl}/uploads/${req.file.filename}`;
-    
+    // Lưu base64 vào avatar_url trong database
     const updated = await updateUserInDb(userId, { avatar_url: avatarUrl });
     if (!updated) {
       console.error(`[uploadMyAvatar] User not found: userId=${userId}`);
       return res.status(404).json({ message: "User not found" });
     }
     
-    // Format avatar_url in response
     const user = safeUserForClient(updated);
-    if (user.avatar_url?.startsWith("/")) {
-      user.avatar_url = `${baseUrl}${user.avatar_url}`;
-    }
-    
     console.log(`[uploadMyAvatar] Avatar updated successfully for user ${userId}`);
     return res.json({ success: true, user });
   } catch (err) {
@@ -333,6 +319,7 @@ export async function uploadMyAvatar(req, res) {
 }
 
 // Upload avatar cho user khác (yêu cầu admin)
+// Lưu base64 vào avatar_url, không lưu file vào thư mục upload
 export async function uploadAvatar(req, res) {
   try {
     const { id } = req.params;
@@ -340,11 +327,10 @@ export async function uploadAvatar(req, res) {
       return res.status(400).json({ message: "No file uploaded" });
     }
     
-    // Format avatar URL to absolute URL (giống code cũ trong src)
-    const protocol = req.get("x-forwarded-proto") || req.protocol || "http";
-    const host = req.get("x-forwarded-host") || req.get("host") || "localhost:4000";
-    const baseUrl = `${protocol}://${host}`;
-    const avatarUrl = `${baseUrl}/uploads/${req.file.filename}`;
+    // Convert file buffer to base64
+    const base64String = req.file.buffer.toString('base64');
+    const mimeType = req.file.mimetype || 'image/jpeg';
+    const avatarUrl = `data:${mimeType};base64,${base64String}`;
     
     const updated = await updateUserInDb(id, { avatar_url: avatarUrl });
     if (!updated) return res.status(404).json({ message: "User not found" });

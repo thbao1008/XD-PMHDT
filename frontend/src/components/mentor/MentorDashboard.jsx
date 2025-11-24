@@ -9,8 +9,11 @@ import {
   FiStar, 
   FiAlertCircle,
   FiCheckCircle,
-  FiBook
+  FiBook,
+  FiPlay,
+  FiRefreshCw
 } from "react-icons/fi";
+import { FaRobot } from "react-icons/fa";
 import "../../styles/mentor-dashboard.css";
 
 export default function MentorDashboard() {
@@ -27,6 +30,15 @@ export default function MentorDashboard() {
   });
   const [pendingSubmissions, setPendingSubmissions] = useState([]);
   const [loadingSubmissions, setLoadingSubmissions] = useState(false);
+  const [aiProgress, setAiProgress] = useState({
+    trainingSamples: 0,
+    aiReports: 0,
+    accuracy: null,
+    status: 'initializing'
+  });
+  const [aiActivities, setAiActivities] = useState([]);
+  const [initializingAI, setInitializingAI] = useState(false);
+  const [loadingAI, setLoadingAI] = useState(false);
 
   useEffect(() => {
     if (!userId) {
@@ -54,6 +66,17 @@ export default function MentorDashboard() {
 
     loadDashboardData();
     loadPendingSubmissions();
+    loadAIProgress();
+    loadAIActivities();
+    
+    // Auto-refresh AI progress mỗi 10 giây
+    const interval = setInterval(() => {
+      loadAIProgress();
+      loadAIActivities();
+    }, 10000);
+    
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mentorId]);
 
   const loadDashboardData = async () => {
@@ -86,6 +109,70 @@ export default function MentorDashboard() {
       hour: '2-digit',
       minute: '2-digit'
     });
+  };
+
+  const loadAIProgress = async () => {
+    if (!mentorId) return;
+    setLoadingAI(true);
+    try {
+      const res = await api.get(`/mentors/${mentorId}/ai/progress`);
+      if (res.data?.progress) {
+        setAiProgress(res.data.progress);
+      }
+    } catch (err) {
+      console.error("Error loading AI progress:", err);
+    } finally {
+      setLoadingAI(false);
+    }
+  };
+
+  const loadAIActivities = async () => {
+    if (!mentorId) return;
+    try {
+      const res = await api.get(`/mentors/${mentorId}/ai/activities?limit=10`);
+      setAiActivities(res.data.activities || []);
+    } catch (err) {
+      console.error("Error loading AI activities:", err);
+    }
+  };
+
+  const handleInitializeAI = async () => {
+    if (!mentorId) return;
+    setInitializingAI(true);
+    try {
+      const res = await api.post(`/mentors/${mentorId}/ai/initialize`);
+      if (res.data.success) {
+        alert(res.data.message || "Đã khởi tạo AI learning thành công!");
+        // Reload AI progress và activities
+        await loadAIProgress();
+        await loadAIActivities();
+      }
+    } catch (err) {
+      console.error("Error initializing AI:", err);
+      alert("Lỗi khi khởi tạo AI learning: " + (err.response?.data?.message || err.message));
+    } finally {
+      setInitializingAI(false);
+    }
+  };
+
+  const getAIStatusColor = (status) => {
+    switch (status) {
+      case 'excellent': return '#10b981';
+      case 'good': return '#3b82f6';
+      case 'training': return '#f59e0b';
+      case 'initializing': return '#6b7280';
+      default: return '#6b7280';
+    }
+  };
+
+  const getAIStatusText = (status) => {
+    switch (status) {
+      case 'excellent': return 'Xuất sắc';
+      case 'good': return 'Tốt';
+      case 'training': return 'Đang học';
+      case 'initializing': return 'Chưa khởi tạo';
+      default: return 'Chưa khởi tạo';
+    }
   };
 
   if (loading) {
@@ -162,8 +249,112 @@ export default function MentorDashboard() {
           </div>
         </div>
 
-        {/* Right Column: Pending Submissions */}
+        {/* Right Column: Pending Submissions & AI Progress */}
         <div className="dashboard-right-column">
+          {/* AI Progress Section */}
+          <div className="dashboard-section ai-section" style={{ marginBottom: "20px" }}>
+            <div className="section-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h2>
+                <FaRobot style={{ marginRight: "8px" }} />
+                Tiến trình AI & Công suất
+              </h2>
+              <button
+                onClick={handleInitializeAI}
+                disabled={initializingAI}
+                style={{
+                  padding: "8px 16px",
+                  background: initializingAI ? "#9ca3af" : "#10b981",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: initializingAI ? "not-allowed" : "pointer",
+                  fontSize: "13px",
+                  fontWeight: "500",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px"
+                }}
+              >
+                {initializingAI ? (
+                  <>
+                    <FiRefreshCw style={{ animation: "spin 1s linear infinite" }} />
+                    Đang khởi tạo...
+                  </>
+                ) : (
+                  <>
+                    <FiPlay />
+                    Khởi tạo
+                  </>
+                )}
+              </button>
+            </div>
+            
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginTop: "16px" }}>
+              <div style={{ padding: "16px", background: "#f9fafb", borderRadius: "8px" }}>
+                <div style={{ fontSize: "12px", color: "#6b7280", marginBottom: "4px" }}>Training Samples</div>
+                <div style={{ fontSize: "24px", fontWeight: "600", color: "#1f2937" }}>
+                  {aiProgress.trainingSamples.toLocaleString()}
+                </div>
+                <div style={{ fontSize: "11px", color: "#9ca3af", marginTop: "4px" }}>Mẫu đã huấn luyện</div>
+              </div>
+              
+              <div style={{ padding: "16px", background: "#f9fafb", borderRadius: "8px" }}>
+                <div style={{ fontSize: "12px", color: "#6b7280", marginBottom: "4px" }}>AI Reports</div>
+                <div style={{ fontSize: "24px", fontWeight: "600", color: "#1f2937" }}>
+                  {aiProgress.aiReports.toLocaleString()}
+                </div>
+                <div style={{ fontSize: "11px", color: "#9ca3af", marginTop: "4px" }}>Báo cáo đã tạo</div>
+              </div>
+              
+              <div style={{ padding: "16px", background: "#f9fafb", borderRadius: "8px" }}>
+                <div style={{ fontSize: "12px", color: "#6b7280", marginBottom: "4px" }}>Công suất</div>
+                <div style={{ fontSize: "24px", fontWeight: "600", color: getAIStatusColor(aiProgress.status) }}>
+                  {aiProgress.trainingSamples > 0 && aiProgress.aiReports > 0 
+                    ? ((aiProgress.aiReports / aiProgress.trainingSamples) * 100).toFixed(1)
+                    : '0'}%
+                </div>
+                <div style={{ fontSize: "11px", color: "#9ca3af", marginTop: "4px" }}>Tỷ lệ sử dụng</div>
+              </div>
+              
+              <div style={{ padding: "16px", background: "#f9fafb", borderRadius: "8px" }}>
+                <div style={{ fontSize: "12px", color: "#6b7280", marginBottom: "4px" }}>Trạng thái</div>
+                <div style={{ fontSize: "14px", fontWeight: "600", color: getAIStatusColor(aiProgress.status) }}>
+                  {getAIStatusText(aiProgress.status)}
+                </div>
+                {aiProgress.accuracy !== null && (
+                  <div style={{ fontSize: "11px", color: "#9ca3af", marginTop: "4px" }}>
+                    Độ chính xác: {(aiProgress.accuracy * 100).toFixed(1)}%
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            {/* AI Activities */}
+            {aiActivities.length > 0 && (
+              <div style={{ marginTop: "20px", paddingTop: "20px", borderTop: "1px solid #e5e7eb" }}>
+                <div style={{ fontSize: "13px", color: "#6b7280", marginBottom: "12px", fontWeight: "500" }}>
+                  Hoạt động gần đây
+                </div>
+                <div style={{ maxHeight: "200px", overflowY: "auto" }}>
+                  {aiActivities.slice(0, 5).map((activity, idx) => (
+                    <div key={idx} style={{ 
+                      padding: "8px 12px", 
+                      background: "#f9fafb", 
+                      borderRadius: "6px",
+                      marginBottom: "8px",
+                      fontSize: "12px"
+                    }}>
+                      <div style={{ color: "#1f2937", marginBottom: "4px" }}>{activity.title}</div>
+                      <div style={{ color: "#9ca3af", fontSize: "11px" }}>
+                        {formatDate(activity.timestamp)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="dashboard-section submissions-section">
             <div className="section-header">
               <h2>
@@ -214,3 +405,4 @@ export default function MentorDashboard() {
     </div>
   );
 }
+

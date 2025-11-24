@@ -53,6 +53,9 @@ const upload = multer({ storage: storage });
 router.get("/:mentorId/dashboard/stats", dashboardCtrl.getDashboardStats);
 router.get("/:mentorId/dashboard/pending-submissions", dashboardCtrl.getPendingSubmissions);
 router.get("/:mentorId/dashboard/schedules", dashboardCtrl.getSchedules);
+router.post("/:mentorId/ai/initialize", dashboardCtrl.initializeAILearning);
+router.get("/:mentorId/ai/progress", dashboardCtrl.getAIProgress);
+router.get("/:mentorId/ai/activities", dashboardCtrl.getAIActivities);
 
 // AI endpoints
 router.post("/topics/:topicId/challenges/ai", mentorCtrl.createChallengeAI);

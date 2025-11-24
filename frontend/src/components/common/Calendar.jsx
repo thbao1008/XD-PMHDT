@@ -203,6 +203,8 @@ export default function Calendar({ learnerId, mentorId }) {
         return 'Đang diễn ra';
       case 'cancelled':
         return 'Đã hủy';
+      case 'paused':
+        return 'Tạm ngưng';
       default:
         return status;
     }
@@ -297,6 +299,7 @@ export default function Calendar({ learnerId, mentorId }) {
                             <div className="schedule-block-type">
                               {schedule.type === 'online' ? '🌐 Online' : '🏠 Offline'}
                               {schedule.is_exam && <span className="exam-badge-inline">Lịch thi</span>}
+                              {schedule.status === 'paused' && <span className="paused-badge-inline">Tạm ngưng</span>}
                             </div>
                             {schedule.type === 'online' && schedule.meeting_link && (
                               <div className="schedule-block-link">

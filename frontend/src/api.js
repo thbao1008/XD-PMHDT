@@ -1,5 +1,6 @@
 // api.js
 import axios from "axios";
+import { clearAuth } from "./utils/auth";
 
 // Tạo instance Axios với baseURL chuẩn
 // Dùng relative URL để đi qua Vite proxy
@@ -43,7 +44,26 @@ api.interceptors.response.use(
   (error) => {
     // Don't crash - log error and return friendly message
     if (error.response) {
-      console.error("API error - api.js:34", error.response.status, error.response.data);
+      const status = error.response.status;
+      const data = error.response.data;
+      
+      // Xử lý lỗi session không hợp lệ (403 với requiresLogin)
+      // Không tự động logout ở đây, để AuthContext xử lý và hiển thị modal
+      if (status === 403 && data?.requiresLogin) {
+        error.message = data.message || "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
+        error.requiresLogin = true;
+        // Trigger event để AuthContext biết và hiển thị modal
+        window.dispatchEvent(new CustomEvent('session-expired'));
+      }
+      
+      // Xử lý lỗi banned user (403 với banned)
+      if (status === 403 && data?.banned) {
+        error.message = data.message || "Tài khoản của bạn đang bị tạm khóa. Hãy liên hệ hỗ trợ để được giải quyết.";
+        error.banned = true;
+        error.banReason = data.banReason;
+      }
+      
+      console.error("API error - api.js:34", status, data);
     } else if (error.request) {
       // Backend không phản hồi - không crash, chỉ log
       console.warn("⚠️  Backend services chưa sẵn sàng. Vui lòng kiểm tra backend services đã chạy chưa.");

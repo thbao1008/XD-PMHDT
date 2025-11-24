@@ -138,14 +138,27 @@ export async function getStoryHistory(req, res) {
  * Generate TTS audio using FPT.AI
  */
 export async function generateTTS(req, res) {
+  // Set timeout cho request (30 giây)
+  const timeout = setTimeout(() => {
+    if (!res.headersSent) {
+      res.status(504).json({ 
+        success: false,
+        message: "TTS request timeout, using browser TTS",
+        fallback: true
+      });
+    }
+  }, 30000); // 30 giây timeout
+
   try {
     const { text, voiceType, voiceOrigin, region } = req.body;
 
     if (!text || text.length < 3) {
+      clearTimeout(timeout);
       return res.status(400).json({ message: "Text must be at least 3 characters" });
     }
 
     if (text.length > 5000) {
+      clearTimeout(timeout);
       return res.status(400).json({ message: "Text must not exceed 5000 characters" });
     }
 
@@ -153,13 +166,20 @@ export async function generateTTS(req, res) {
     if (voiceOrigin === 'asian') {
       try {
         // Luôn dùng giọng miền Bắc, bỏ qua region parameter
-        const result = await fptTtsService.generateSpeechForFrontend(
-          text,
-          voiceType,
-          voiceOrigin,
-          'north' // Luôn dùng miền Bắc
-        );
+        // Thêm timeout ngắn hơn (20 giây) cho FPT.AI
+        const result = await Promise.race([
+          fptTtsService.generateSpeechForFrontend(
+            text,
+            voiceType,
+            voiceOrigin,
+            'north' // Luôn dùng miền Bắc
+          ),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('FPT.AI TTS timeout')), 20000)
+          )
+        ]);
 
+        clearTimeout(timeout);
         if (result) {
           return res.json({
             success: true,
@@ -168,6 +188,7 @@ export async function generateTTS(req, res) {
           });
         }
       } catch (err) {
+        clearTimeout(timeout);
         console.error("❌ FPT.AI TTS error:", err);
         // Fallback: trả về null để frontend dùng SpeechSynthesis
         return res.json({
@@ -178,6 +199,7 @@ export async function generateTTS(req, res) {
       }
     }
 
+    clearTimeout(timeout);
     // Các giọng khác dùng SpeechSynthesis ở frontend
     return res.json({
       success: false,
@@ -185,8 +207,11 @@ export async function generateTTS(req, res) {
       fallback: true
     });
   } catch (err) {
+    clearTimeout(timeout);
     console.error("❌ generateTTS error:", err);
-    res.status(500).json({ message: err.message || "Server error" });
+    if (!res.headersSent) {
+      res.status(500).json({ message: err.message || "Server error" });
+    }
   }
 }
 

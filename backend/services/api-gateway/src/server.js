@@ -440,8 +440,8 @@ app.use("/api/learners", createProxyMiddleware({
     }
     return newPath;
   },
-  timeout: 30000,
-  proxyTimeout: 30000,
+  timeout: 15000, // Giảm timeout xuống 15 giây
+  proxyTimeout: 15000,
   onProxyReq: (proxyReq, req, res) => {
     // Forward all headers (except host and connection)
     Object.keys(req.headers).forEach(key => {
@@ -454,14 +454,33 @@ app.use("/api/learners", createProxyMiddleware({
     // Set x-forwarded-host and x-forwarded-proto for microservices to build correct URLs
     proxyReq.setHeader("x-forwarded-host", req.get("host") || "localhost:4000");
     proxyReq.setHeader("x-forwarded-proto", req.protocol || "http");
+    
+    // Log request for debugging
+    if (process.env.NODE_ENV === "development") {
+      console.log(`[API Gateway] Proxying /api/learners${req.url} → ${SERVICES.learner}/learners${req.url}`);
+    }
+  },
+  onProxyRes: (proxyRes, req, res) => {
+    // Log response for debugging
+    if (process.env.NODE_ENV === "development" && proxyRes.statusCode >= 400) {
+      console.error(`[API Gateway] Learner Service error: ${req.url} → ${proxyRes.statusCode}`);
+    }
   },
   onError: (err, req, res) => {
-    console.error("Proxy error for /api/learners:", err.message);
+    console.error(`[API Gateway] Proxy error for /api/learners${req.url}:`, err.message);
     if (!res.headersSent) {
-      res.status(502).json({ 
-        message: "Không thể kết nối đến Learner Service.",
-        error: process.env.NODE_ENV === "development" ? err.message : undefined
-      });
+      // Check if it's a timeout error
+      if (err.code === 'ECONNRESET' || err.code === 'ETIMEDOUT' || err.message.includes('timeout')) {
+        res.status(504).json({ 
+          message: "Learner Service timeout. The service may be unavailable or overloaded.",
+          error: process.env.NODE_ENV === "development" ? err.message : undefined
+        });
+      } else {
+        res.status(502).json({ 
+          message: "Không thể kết nối đến Learner Service.",
+          error: process.env.NODE_ENV === "development" ? err.message : undefined
+        });
+      }
     }
   }
 }));

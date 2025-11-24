@@ -11,6 +11,7 @@ import {
   updateUserPasswordByEmail,
   updateUserPasswordById,
 } from "../models/userModel.js";
+import * as sessionService from "../services/sessionService.js";
 
 function safeUserForClient(user) {
   if (!user) return null;
@@ -28,7 +29,26 @@ function validatePhone(phone) {
 }
 
 function validatePassword(pw) {
-  return typeof pw === "string" && pw.length >= 6;
+  if (typeof pw !== "string") return false;
+  
+  // Mật khẩu chặt chẽ: tối thiểu 8 ký tự, có chữ hoa, chữ thường, số, ký tự đặc biệt
+  const minLength = pw.length >= 8;
+  const hasUpperCase = /[A-Z]/.test(pw);
+  const hasLowerCase = /[a-z]/.test(pw);
+  const hasNumber = /[0-9]/.test(pw);
+  const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pw);
+  
+  return minLength && hasUpperCase && hasLowerCase && hasNumber && hasSpecialChar;
+}
+
+function getPasswordValidationMessage(pw) {
+  if (typeof pw !== "string") return "Mật khẩu không hợp lệ";
+  if (pw.length < 8) return "Mật khẩu phải có ít nhất 8 ký tự";
+  if (!/[A-Z]/.test(pw)) return "Mật khẩu phải có ít nhất 1 chữ hoa";
+  if (!/[a-z]/.test(pw)) return "Mật khẩu phải có ít nhất 1 chữ thường";
+  if (!/[0-9]/.test(pw)) return "Mật khẩu phải có ít nhất 1 số";
+  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pw)) return "Mật khẩu phải có ít nhất 1 ký tự đặc biệt";
+  return null;
 }
 
 const JWT_SECRET = process.env.JWT_SECRET || "secret_key";
@@ -42,8 +62,18 @@ export async function register(req, res) {
     if (!email && !phone) {
       return res.status(400).json({ message: "Vui lòng cung cấp email hoặc số điện thoại" });
     }
-    if (!validatePassword(password)) {
-      return res.status(400).json({ message: "Mật khẩu tối thiểu 6 ký tự" });
+    const passwordError = getPasswordValidationMessage(password);
+    if (passwordError) {
+      return res.status(400).json({ 
+        message: passwordError,
+        requirements: {
+          minLength: 8,
+          needsUpperCase: true,
+          needsLowerCase: true,
+          needsNumber: true,
+          needsSpecialChar: true
+        }
+      });
     }
     if (email && !validateEmail(email)) {
       return res.status(400).json({ message: "Email không hợp lệ" });
@@ -114,16 +144,40 @@ export async function login(req, res) {
     
     if (!user) return res.status(401).json({ message: "Sai tài khoản hoặc mật khẩu" });
 
+    // Check if user is banned
+    if (user.status === 'banned') {
+      return res.status(403).json({ 
+        message: "Tài khoản của bạn đang bị tạm khóa. Hãy liên hệ hỗ trợ để được giải quyết.",
+        banned: true,
+        banReason: user.ban_reason || null
+      });
+    }
+
     const match = await bcrypt.compare(password, user.password);
     if (!match) return res.status(401).json({ message: "Sai tài khoản hoặc mật khẩu" });
 
-    const token = jwt.sign(
-      { id: user.id, email: user.email, phone: user.phone, role: user.role, name: user.name },
-      JWT_SECRET,
-      { expiresIn: JWT_EXPIRES }
+    // Lấy thông tin device từ request
+    const deviceInfo = req.headers['user-agent'] || 'Unknown';
+    const ipAddress = req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for'] || 'Unknown';
+    const userAgent = req.headers['user-agent'] || 'Unknown';
+
+    // Tạo session mới (sẽ tự động invalidate tất cả sessions cũ của user này)
+    // Tính theo phiên hoạt động (session), không phải thiết bị
+    // 1 tài khoản chỉ có 1 session active tại một thời điểm
+    // Khi đăng nhập từ tab/window mới → tự động invalidate session cũ (tab/window cũ sẽ tự động logout)
+    const { token, session } = await sessionService.createSession(
+      user.id,
+      deviceInfo,
+      ipAddress,
+      userAgent
     );
 
-    return res.json({ message: "Đăng nhập thành công", token, user: safeUserForClient(user) });
+    return res.json({ 
+      message: "Đăng nhập thành công", 
+      token, 
+      user: safeUserForClient(user),
+      sessionId: session.id
+    });
   } catch (err) {
     console.error("Login error:", err);
     console.error("Error stack:", err.stack);
@@ -205,11 +259,41 @@ export async function verifySecurityAnswer(req, res) {
   }
 }
 
+export async function logout(req, res) {
+  try {
+    const authHeader = req.headers.authorization;
+    if (authHeader) {
+      const token = authHeader.split(" ")[1];
+      if (token) {
+        await sessionService.deleteSession(token);
+      }
+    }
+    return res.json({ message: "Đăng xuất thành công" });
+  } catch (err) {
+    console.error("Logout error:", err);
+    return res.status(500).json({ message: "Lỗi server" });
+  }
+}
+
 export async function resetPassword(req, res) {
   try {
     const { token, newPassword } = req.body;
-    if (!token || !validatePassword(newPassword)) {
-      return res.status(400).json({ message: "Token hoặc mật khẩu mới không hợp lệ" });
+    if (!token) {
+      return res.status(400).json({ message: "Token không hợp lệ" });
+    }
+    
+    const passwordError = getPasswordValidationMessage(newPassword);
+    if (passwordError) {
+      return res.status(400).json({ 
+        message: passwordError,
+        requirements: {
+          minLength: 8,
+          needsUpperCase: true,
+          needsLowerCase: true,
+          needsNumber: true,
+          needsSpecialChar: true
+        }
+      });
     }
 
     let decoded;
@@ -324,8 +408,21 @@ export async function changePassword(req, res) {
     const { oldPassword, newPassword } = req.body;
     const requester = req.user;
     if (!requester) return res.status(401).json({ message: "Chưa đăng nhập" });
-    if (!validatePassword(newPassword)) return res.status(400).json({ message: "Mật khẩu mới không hợp lệ" });
     if (!oldPassword) return res.status(400).json({ message: "Vui lòng cung cấp mật khẩu cũ" });
+    
+    const passwordError = getPasswordValidationMessage(newPassword);
+    if (passwordError) {
+      return res.status(400).json({ 
+        message: passwordError,
+        requirements: {
+          minLength: 8,
+          needsUpperCase: true,
+          needsLowerCase: true,
+          needsNumber: true,
+          needsSpecialChar: true
+        }
+      });
+    }
 
     let dbUser = null;
     if (requester.id) {

@@ -51,6 +51,20 @@ export async function login(identifier, password) {
     console.log("🔎 API /login response:", data);
 
     if (!res.ok) {
+      // Xử lý lỗi banned user
+      if (res.status === 403 && data?.banned) {
+        const error = new Error(data.message || "Tài khoản của bạn đang bị tạm khóa. Hãy liên hệ hỗ trợ để được giải quyết.");
+        error.banned = true;
+        error.banReason = data.banReason;
+        throw error;
+      }
+      // Xử lý lỗi có session active (đang đăng nhập trên thiết bị khác)
+      if (res.status === 403 && data?.hasActiveSession) {
+        const error = new Error(data.message || "Tài khoản của bạn đang được sử dụng trên thiết bị khác. Vui lòng đăng xuất khỏi thiết bị đó trước khi đăng nhập lại.");
+        error.hasActiveSession = true;
+        error.deviceInfo = data.deviceInfo;
+        throw error;
+      }
       throw new Error(data.message || `Đăng nhập thất bại (${res.status})`);
     }
 

@@ -19,6 +19,7 @@ export async function getPosts({ userId = null, role = null, includePending = fa
       p.*,
       u.name AS author_name,
       u.email AS author_email,
+      u.avatar_url AS author_avatar_url,
       reviewer.name AS reviewer_name,
       CASE WHEN pv.id IS NULL THEN 0 ELSE 1 END AS is_viewed
     FROM community_posts p
@@ -51,6 +52,7 @@ export async function getPostById(postId, { userId = null, role = null } = {}) {
       p.*,
       u.name AS author_name,
       u.email AS author_email,
+      u.avatar_url AS author_avatar_url,
       reviewer.name AS reviewer_name
     FROM community_posts p
     JOIN users u ON p.author_id = u.id
@@ -76,6 +78,7 @@ export async function getUserPosts(userId, { page = 1, limit = 20 } = {}) {
       p.*,
       u.name AS author_name,
       u.email AS author_email,
+      u.avatar_url AS author_avatar_url,
       reviewer.name AS reviewer_name
     FROM community_posts p
     JOIN users u ON p.author_id = u.id
@@ -95,6 +98,7 @@ export async function getLikedPosts(userId, { page = 1, limit = 20 } = {}) {
       p.*,
       u.name AS author_name,
       u.email AS author_email,
+      u.avatar_url AS author_avatar_url,
       reviewer.name AS reviewer_name
     FROM community_posts p
     JOIN post_likes pl ON p.id = pl.post_id
@@ -117,7 +121,8 @@ export async function getPendingPosts({ page = 1, limit = 20 } = {}) {
       p.*,
       u.name AS author_name,
       u.email AS author_email,
-      u.role AS author_role
+      u.role AS author_role,
+      u.avatar_url AS author_avatar_url
     FROM community_posts p
     JOIN users u ON p.author_id = u.id
     WHERE p.is_deleted = false AND p.status = 'pending'
@@ -200,7 +205,8 @@ export async function getPostComments(postId, { includeReplies = true } = {}) {
     SELECT 
       c.*,
       u.name AS author_name,
-      u.email AS author_email
+      u.email AS author_email,
+      u.avatar_url AS author_avatar_url
     FROM post_comments c
     JOIN users u ON c.author_id = u.id
     WHERE c.post_id = $1 AND c.is_deleted = false

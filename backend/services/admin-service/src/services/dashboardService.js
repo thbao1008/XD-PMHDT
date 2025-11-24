@@ -11,12 +11,13 @@ export async function getDashboardStats() {
     const mentorsResult = await pool.query(`SELECT COUNT(*) as count FROM mentors`);
     const totalMentors = parseInt(mentorsResult.rows[0].count) || 0;
 
-    // Tổng doanh thu (từ purchases với status = 'active' hoặc 'expired', bao gồm cả user bị ban)
+    // Tổng doanh thu: tính TẤT CẢ purchases khi được tạo (không phụ thuộc vào status)
+    // Doanh thu = tổng giá trị gói tại thời điểm purchase được tạo
     const revenueResult = await pool.query(`
       SELECT COALESCE(SUM(p.price), 0) as total_revenue
       FROM purchases pur
       JOIN packages p ON pur.package_id = p.id
-      WHERE pur.status IN ('active', 'expired')
+      -- Không filter theo status: tính tất cả purchases khi được tạo
     `);
     const totalRevenue = parseFloat(revenueResult.rows[0].total_revenue) || 0;
 
@@ -360,14 +361,14 @@ export async function getChartData(
     const traffic7Days = await pool.query(trafficQuery);
 
     // Revenue theo timeframe với offset
+    // Tính tất cả purchases khi được tạo (không filter theo status)
     const revenue6Months = await pool.query(`
       SELECT 
         DATE_TRUNC('${revenueConfig.trunc}', pur.created_at) as period,
         COALESCE(SUM(p.price), 0) as revenue
       FROM purchases pur
       JOIN packages p ON pur.package_id = p.id
-      WHERE pur.status IN ('active', 'expired')
-        AND pur.created_at >= ${revenueConfig.startDate}::timestamp
+      WHERE pur.created_at >= ${revenueConfig.startDate}::timestamp
         AND pur.created_at < (${revenueConfig.endDate} + INTERVAL '1 day')::timestamp
       GROUP BY DATE_TRUNC('${revenueConfig.trunc}', pur.created_at)
       ORDER BY period ASC
@@ -387,6 +388,7 @@ export async function getChartData(
     `);
 
     // Daily Revenue theo timeframe với offset
+    // Tính tất cả purchases khi được tạo (không filter theo status)
     let dailyRevenueQuery = '';
     if (dailyTimeframe === 'week') {
       dailyRevenueQuery = `
@@ -395,8 +397,7 @@ export async function getChartData(
           COALESCE(SUM(p.price), 0) as revenue
         FROM purchases pur
         JOIN packages p ON pur.package_id = p.id
-        WHERE pur.status IN ('active', 'expired')
-          AND pur.created_at >= ${dailyConfig.startDate}::timestamp
+        WHERE pur.created_at >= ${dailyConfig.startDate}::timestamp
           AND pur.created_at < (${dailyConfig.endDate} + INTERVAL '1 day')::timestamp
         GROUP BY DATE(pur.created_at)
         ORDER BY period ASC
@@ -408,8 +409,7 @@ export async function getChartData(
           COALESCE(SUM(p.price), 0) as revenue
         FROM purchases pur
         JOIN packages p ON pur.package_id = p.id
-        WHERE pur.status IN ('active', 'expired')
-          AND pur.created_at >= ${dailyConfig.startDate}::timestamp
+        WHERE pur.created_at >= ${dailyConfig.startDate}::timestamp
           AND pur.created_at < (${dailyConfig.endDate} + INTERVAL '1 day')::timestamp
         GROUP BY DATE_TRUNC('${dailyConfig.trunc}', pur.created_at)
         ORDER BY period ASC
@@ -481,8 +481,7 @@ export async function getChartData(
         FROM purchases pur
         JOIN packages p ON pur.package_id = p.id
         JOIN learners l ON pur.learner_id = l.id
-        WHERE pur.status IN ('active', 'expired')
-          AND pur.created_at >= CURRENT_DATE - INTERVAL '6 months'
+        WHERE pur.created_at >= CURRENT_DATE - INTERVAL '6 months'
         GROUP BY DATE_TRUNC('month', pur.created_at)
       ),
       monthly_users AS (

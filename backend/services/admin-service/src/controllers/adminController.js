@@ -34,15 +34,19 @@ export async function listUsers(req, res) {
   ORDER BY u.id DESC
     `);
 
-    // Format avatar_url to absolute URLs (giống code cũ trong src)
-    // Sử dụng x-forwarded-host và x-forwarded-proto từ API Gateway
+    // Format avatar_url to absolute URLs (chỉ format relative paths, không format base64)
+    // Base64 images (data:image/...) không cần format
     const protocol = req.get("x-forwarded-proto") || req.protocol || "http";
     const host = req.get("x-forwarded-host") || req.get("host") || "localhost:4000";
     const baseUrl = `${protocol}://${host}`;
     
     const formattedUsers = result.rows.map(user => ({
       ...user,
-      avatar_url: user.avatar_url?.startsWith("/") ? `${baseUrl}${user.avatar_url}` : user.avatar_url
+      avatar_url: user.avatar_url?.startsWith("data:") 
+        ? user.avatar_url  // Base64, giữ nguyên
+        : user.avatar_url?.startsWith("/") 
+          ? `${baseUrl}${user.avatar_url}`  // Relative path, format thành absolute
+          : user.avatar_url  // Đã là absolute URL hoặc null
     }));
 
     return res.json({ success: true, users: formattedUsers });
@@ -107,7 +111,8 @@ export async function getUser(req, res) {
     const baseUrl = `${protocol}://${host}`;
     
     const user = result.rows[0];
-    if (user.avatar_url && user.avatar_url.startsWith("/")) {
+    // Format avatar_url (chỉ format relative paths, không format base64)
+    if (user.avatar_url && !user.avatar_url.startsWith("data:") && user.avatar_url.startsWith("/")) {
       user.avatar_url = `${baseUrl}${user.avatar_url}`;
     }
 
@@ -208,6 +213,7 @@ export async function updateUser(req, res) {
 }
 
 // Upload avatar
+// Lưu base64 vào avatar_url, không lưu file vào thư mục upload
 export async function uploadAvatar(req, res) {
   try {
     const { id } = req.params;
@@ -222,12 +228,10 @@ export async function uploadAvatar(req, res) {
       return res.status(400).json({ success: false, message: "Không có file được upload" });
     }
 
-    // Format avatar URL to absolute URL (giống code cũ trong src)
-    // Sử dụng x-forwarded-host và x-forwarded-proto từ API Gateway
-    const protocol = req.get("x-forwarded-proto") || req.protocol || "http";
-    const host = req.get("x-forwarded-host") || req.get("host") || "localhost:4000";
-    const baseUrl = `${protocol}://${host}`;
-    const avatarUrl = `${baseUrl}/uploads/${req.file.filename}`;
+    // Convert file buffer to base64
+    const base64String = req.file.buffer.toString('base64');
+    const mimeType = req.file.mimetype || 'image/jpeg';
+    const avatarUrl = `data:${mimeType};base64,${base64String}`;
 
     const updated = await updateUserInDb(id, { avatar_url: avatarUrl });
     if (!updated) {
@@ -258,9 +262,51 @@ export async function deleteUser(req, res) {
 export async function toggleUserStatus(req, res) {
   try {
     const { id } = req.params;
+    const { status, ban_reason, unban_reason } = req.body;
+    
+    if (!status || (status !== 'active' && status !== 'banned')) {
+      return res.status(400).json({ success: false, message: "Status phải là 'active' hoặc 'banned'" });
+    }
+
+    // Lấy user hiện tại để check status cũ
+    const currentUser = await pool.query("SELECT status FROM users WHERE id = $1", [id]);
+    if (currentUser.rows.length === 0) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    const oldStatus = currentUser.rows[0].status;
+
+    // Nếu ban thì phải có lý do
+    if (status === 'banned' && !ban_reason?.trim()) {
+      return res.status(400).json({ success: false, message: "Vui lòng nhập lý do ban" });
+    }
+
+    // Nếu unban (từ banned về active) thì phải có lý do
+    if (status === 'active' && oldStatus === 'banned' && !unban_reason?.trim()) {
+      return res.status(400).json({ success: false, message: "Vui lòng nhập lý do mở ban" });
+    }
+    
     // Đổi trạng thái user
-    const updated = await toggleUserStatusInDb(id);
+    const updated = await toggleUserStatusInDb(
+      id, 
+      status, 
+      status === 'banned' ? ban_reason.trim() : null,
+      status === 'active' ? unban_reason.trim() : null
+    );
     if (!updated) return res.status(404).json({ success: false, message: "Not found" });
+
+    // Lưu vào ban_history
+    const adminId = req.user?.id;
+    await pool.query(
+      `INSERT INTO ban_history (user_id, action, reason, admin_id)
+       VALUES ($1, $2, $3, $4)`,
+      [
+        id,
+        status === 'banned' ? 'banned' : 'unbanned',
+        status === 'banned' ? ban_reason.trim() : unban_reason.trim(),
+        adminId || null
+      ]
+    );
 
     // Nếu là learner thì cập nhật purchases
     if (updated.role === "learner") {

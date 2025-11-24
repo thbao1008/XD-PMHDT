@@ -53,7 +53,17 @@ export default function Login({ onLogin }) {
       else navigate("/learn", { replace: true });
     } catch (err) {
       console.error("Login error:", err);
-      setError(err?.message || "Sai tài khoản hoặc mật khẩu");
+      // Xử lý lỗi banned user
+      if (err?.banned) {
+        setError(err?.message || "Tài khoản của bạn đang bị tạm khóa. Hãy liên hệ hỗ trợ để được giải quyết.");
+      } 
+      // Xử lý lỗi có session active (đang đăng nhập trên thiết bị khác)
+      else if (err?.hasActiveSession) {
+        setError(err?.message || "Tài khoản của bạn đang được sử dụng trên thiết bị khác. Vui lòng đăng xuất khỏi thiết bị đó trước khi đăng nhập lại.");
+      } 
+      else {
+        setError(err?.message || "Sai tài khoản hoặc mật khẩu");
+      }
     } finally {
       setLoading(false);
     }
@@ -117,8 +127,21 @@ export default function Login({ onLogin }) {
     if (!newPassword.trim()) {
       return setError("Vui lòng nhập mật khẩu mới");
     }
-    if (newPassword.length < 6) {
-      return setError("Mật khẩu phải có ít nhất 6 ký tự");
+    // Validate mật khẩu chặt chẽ
+    if (newPassword.length < 8) {
+      return setError("Mật khẩu phải có ít nhất 8 ký tự");
+    }
+    if (!/[A-Z]/.test(newPassword)) {
+      return setError("Mật khẩu phải có ít nhất 1 chữ hoa");
+    }
+    if (!/[a-z]/.test(newPassword)) {
+      return setError("Mật khẩu phải có ít nhất 1 chữ thường");
+    }
+    if (!/[0-9]/.test(newPassword)) {
+      return setError("Mật khẩu phải có ít nhất 1 số");
+    }
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(newPassword)) {
+      return setError("Mật khẩu phải có ít nhất 1 ký tự đặc biệt");
     }
     if (newPassword !== confirmPassword) {
       return setError("Mật khẩu xác nhận không khớp");
@@ -361,7 +384,7 @@ export default function Login({ onLogin }) {
                   className={`input ${error ? "error" : ""}`}
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Nhập mật khẩu mới (tối thiểu 6 ký tự)"
+                  placeholder="Nhập mật khẩu mới (tối thiểu 8 ký tự, có chữ hoa, thường, số và ký tự đặc biệt)"
                   autoComplete="new-password"
                 />
               </div>

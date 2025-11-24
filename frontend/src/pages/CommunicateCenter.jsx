@@ -637,7 +637,11 @@ export default function CommunicateCenter() {
         <div className="post-form-card">
           <div className="post-form-header">
             <div className="author-avatar">
-              {user?.name?.charAt(0).toUpperCase() || "U"}
+              {user?.avatar_url ? (
+                <img src={user.avatar_url} alt={user?.name || "User"} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }} />
+              ) : (
+                user?.name?.charAt(0).toUpperCase() || "U"
+              )}
             </div>
             <div className="post-form-title">
               Cùng chia sẻ học thuật thôi {userName ? userName : "bạn"}
@@ -805,7 +809,11 @@ export default function CommunicateCenter() {
               <div className="post-header">
                 <div className="post-author">
                   <div className="author-avatar">
-                    {post.author_name?.charAt(0).toUpperCase() || "U"}
+                    {post.author_avatar_url ? (
+                      <img src={post.author_avatar_url} alt={post.author_name || "User"} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }} />
+                    ) : (
+                      post.author_name?.charAt(0).toUpperCase() || "U"
+                    )}
                   </div>
                   <div>
                     <div className="author-name">{post.author_name || "Người dùng"}</div>
@@ -894,7 +902,11 @@ export default function CommunicateCenter() {
                 {isReply && <FiCornerDownRight className="reply-indicator" />}
                 <div className="comment-author">
                   <div className="author-avatar small">
-                    {comment.author_name?.charAt(0).toUpperCase() || "U"}
+                    {comment.author_avatar_url ? (
+                      <img src={comment.author_avatar_url} alt={comment.author_name || "User"} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }} />
+                    ) : (
+                      comment.author_name?.charAt(0).toUpperCase() || "U"
+                    )}
                   </div>
                   <div className="comment-content-wrapper">
                     <div className="author-name">
@@ -944,7 +956,11 @@ export default function CommunicateCenter() {
                 <div className="post-header">
                   <div className="post-author">
                     <div className="author-avatar">
-                      {post.author_name?.charAt(0).toUpperCase() || "U"}
+                      {post.author_avatar_url ? (
+                        <img src={post.author_avatar_url} alt={post.author_name || "User"} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }} />
+                      ) : (
+                        post.author_name?.charAt(0).toUpperCase() || "U"
+                      )}
                     </div>
                     <div>
                       <div className="author-name">{post.author_name || "Người dùng"}</div>
@@ -998,7 +1014,11 @@ export default function CommunicateCenter() {
                     {/* Comment Form */}
                     <div className="comment-form-inline">
                       <div className="author-avatar small">
-                        {user?.name?.charAt(0).toUpperCase() || "U"}
+                        {user?.avatar_url ? (
+                          <img src={user.avatar_url} alt={user?.name || "User"} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }} />
+                        ) : (
+                          user?.name?.charAt(0).toUpperCase() || "U"
+                        )}
                       </div>
                       <div className="comment-input-wrapper">
                         {replyingTo[selectedPostId] && (

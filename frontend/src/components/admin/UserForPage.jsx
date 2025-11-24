@@ -13,6 +13,11 @@ export default function UserForPage({ userId, onClose, onStatusChange }) {
   const [showMentorInfo, setShowMentorInfo] = useState(false);
   const [learnerTotalRating, setLearnerTotalRating] = useState(null);
   const [mentorBio, setMentorBio] = useState("");
+  const [showBanModal, setShowBanModal] = useState(false);
+  const [banReason, setBanReason] = useState("");
+  const [showUnbanModal, setShowUnbanModal] = useState(false);
+  const [unbanReason, setUnbanReason] = useState("");
+  const [banHistory, setBanHistory] = useState([]);
 
   const auth = getAuth();
   const isAdmin = auth?.user?.role?.toUpperCase() === "ADMIN";
@@ -91,19 +96,85 @@ export default function UserForPage({ userId, onClose, onStatusChange }) {
       }
     };
     fetchUser();
+    loadBanHistory();
   }, [userId]);
 
-  const toggleBan = async () => {
+  const handleBanClick = () => {
+    if (user.status === "active") {
+      // Hiển thị modal nhập lý do ban
+      setShowBanModal(true);
+      setBanReason("");
+    } else {
+      // Hiển thị modal nhập lý do unban
+      setShowUnbanModal(true);
+      setUnbanReason("");
+    }
+  };
+
+  const handleConfirmBan = async () => {
+    if (!banReason.trim()) {
+      alert("Vui lòng nhập lý do ban");
+      return;
+    }
+    
     try {
-      const newStatus = user.status === "active" ? "banned" : "active";
-      const res = await api.put(`/admin/users/${userId}/status`, { status: newStatus });
+      const res = await api.put(`/admin/users/${userId}/status`, { 
+        status: "banned",
+        ban_reason: banReason.trim()
+      });
       if (res.data?.user) {
         const updated = res.data.user;
         setUser(updated);
+        setShowBanModal(false);
+        setBanReason("");
+        // Reload ban history
+        loadBanHistory();
         if (onStatusChange) onStatusChange(updated);
       }
     } catch (err) {
-      console.error("❌ Lỗi đổi trạng thái:", err);
+      console.error("❌ Lỗi ban user:", err);
+      alert(err?.response?.data?.message || "Có lỗi xảy ra khi ban user");
+    }
+  };
+
+  const handleConfirmUnban = async () => {
+    if (!unbanReason.trim()) {
+      alert("Vui lòng nhập lý do mở ban");
+      return;
+    }
+    
+    try {
+      const res = await api.put(`/admin/users/${userId}/status`, { 
+        status: "active",
+        unban_reason: unbanReason.trim()
+      });
+      if (res.data?.user) {
+        const updated = res.data.user;
+        setUser(updated);
+        setShowUnbanModal(false);
+        setUnbanReason("");
+        // Reload ban history
+        loadBanHistory();
+        // Reload user để lấy ban_reason mới (null khi unban)
+        const userRes = await api.get(`/admin/users/${userId}`);
+        const u = userRes.data.user || userRes.data;
+        setUser(u);
+        if (onStatusChange) onStatusChange(updated);
+      }
+    } catch (err) {
+      console.error("❌ Lỗi unban user:", err);
+      alert(err?.response?.data?.message || "Có lỗi xảy ra khi mở ban user");
+    }
+  };
+
+  const loadBanHistory = async () => {
+    try {
+      const res = await api.get(`/admin/users/${userId}/ban-history`);
+      if (res.data?.history) {
+        setBanHistory(res.data.history);
+      }
+    } catch (err) {
+      console.error("❌ Lỗi load ban history:", err);
     }
   };
 
@@ -315,16 +386,198 @@ export default function UserForPage({ userId, onClose, onStatusChange }) {
           </div>
           
           {isAdmin && (
-            <button
-              onClick={toggleBan}
-              className="user-for-page-btn user-for-page-btn-danger"
-              style={{ marginTop: "16px", width: "100%" }}
-            >
-              {user.status === "active" ? "Ban user" : "Unban user"}
-            </button>
+            <>
+              <button
+                onClick={handleBanClick}
+                className="user-for-page-btn user-for-page-btn-danger"
+                style={{ marginTop: "16px", width: "100%" }}
+              >
+                {user.status === "active" ? "Ban user" : "Unban user"}
+              </button>
+
+              {/* Hiển thị lý do ban nếu user bị banned */}
+              {user.status === "banned" && user.ban_reason && (
+                <div style={{ 
+                  marginTop: "16px", 
+                  padding: "12px", 
+                  background: "#fef2f2", 
+                  border: "1px solid #fecaca",
+                  borderRadius: "8px",
+                  fontSize: "14px"
+                }}>
+                  <strong style={{ color: "#dc2626" }}>Lý do ban:</strong>
+                  <p style={{ margin: "8px 0 0 0", color: "#991b1b" }}>{user.ban_reason}</p>
+                </div>
+              )}
+
+              {/* Hiển thị lịch sử ban/unban */}
+              {banHistory.length > 0 && (
+                <div style={{ 
+                  marginTop: "16px", 
+                  padding: "12px", 
+                  background: "#f9fafb", 
+                  border: "1px solid #e5e7eb",
+                  borderRadius: "8px",
+                  fontSize: "13px"
+                }}>
+                  <strong style={{ color: "#374151" }}>Lịch sử ban/unban:</strong>
+                  <div style={{ marginTop: "8px", maxHeight: "200px", overflowY: "auto" }}>
+                    {banHistory.map((record, idx) => (
+                      <div key={idx} style={{ 
+                        marginBottom: "8px", 
+                        padding: "8px", 
+                        background: "white",
+                        borderRadius: "4px",
+                        borderLeft: `3px solid ${record.action === 'banned' ? '#ef4444' : '#10b981'}`
+                      }}>
+                        <div style={{ fontWeight: "600", color: record.action === 'banned' ? '#dc2626' : '#059669' }}>
+                          {record.action === 'banned' ? '🚫 Bị ban' : '✅ Mở ban'}
+                        </div>
+                        <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "4px" }}>
+                          {new Date(record.created_at).toLocaleString('vi-VN')}
+                        </div>
+                        {record.reason && (
+                          <div style={{ marginTop: "4px", color: "#374151" }}>
+                            <strong>Lý do:</strong> {record.reason}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
+
+      {/* Modal nhập lý do ban */}
+      {showBanModal && (
+        <Modal 
+          title="Ban User" 
+          onClose={() => {
+            setShowBanModal(false);
+            setBanReason("");
+          }}
+        >
+          <div style={{ padding: "20px" }}>
+            <p style={{ marginBottom: "16px", color: "#374151" }}>
+              Vui lòng nhập lý do ban cho user <strong>{user?.name}</strong>:
+            </p>
+            <textarea
+              value={banReason}
+              onChange={(e) => setBanReason(e.target.value)}
+              placeholder="Nhập lý do ban..."
+              style={{
+                width: "100%",
+                minHeight: "100px",
+                padding: "12px",
+                border: "1px solid #d1d5db",
+                borderRadius: "8px",
+                fontSize: "14px",
+                fontFamily: "inherit",
+                resize: "vertical"
+              }}
+            />
+            <div style={{ marginTop: "20px", display: "flex", gap: "12px", justifyContent: "flex-end" }}>
+              <button
+                onClick={() => {
+                  setShowBanModal(false);
+                  setBanReason("");
+                }}
+                style={{
+                  padding: "10px 20px",
+                  background: "#f3f4f6",
+                  border: "none",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                  fontSize: "14px"
+                }}
+              >
+                Hủy
+              </button>
+              <button
+                onClick={handleConfirmBan}
+                style={{
+                  padding: "10px 20px",
+                  background: "#dc2626",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                  fontSize: "14px"
+                }}
+              >
+                Xác nhận ban
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Modal nhập lý do unban */}
+      {showUnbanModal && (
+        <Modal 
+          title="Unban User" 
+          onClose={() => {
+            setShowUnbanModal(false);
+            setUnbanReason("");
+          }}
+        >
+          <div style={{ padding: "20px" }}>
+            <p style={{ marginBottom: "16px", color: "#374151" }}>
+              Vui lòng nhập lý do mở ban cho user <strong>{user?.name}</strong>:
+            </p>
+            <textarea
+              value={unbanReason}
+              onChange={(e) => setUnbanReason(e.target.value)}
+              placeholder="Nhập lý do mở ban..."
+              style={{
+                width: "100%",
+                minHeight: "100px",
+                padding: "12px",
+                border: "1px solid #d1d5db",
+                borderRadius: "8px",
+                fontSize: "14px",
+                fontFamily: "inherit",
+                resize: "vertical"
+              }}
+            />
+            <div style={{ marginTop: "20px", display: "flex", gap: "12px", justifyContent: "flex-end" }}>
+              <button
+                onClick={() => {
+                  setShowUnbanModal(false);
+                  setUnbanReason("");
+                }}
+                style={{
+                  padding: "10px 20px",
+                  background: "#f3f4f6",
+                  border: "none",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                  fontSize: "14px"
+                }}
+              >
+                Hủy
+              </button>
+              <button
+                onClick={handleConfirmUnban}
+                style={{
+                  padding: "10px 20px",
+                  background: "#10b981",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                  fontSize: "14px"
+                }}
+              >
+                Xác nhận mở ban
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {showAssigned && (
         <AssignedLearnersModal mentorId={user.id} onClose={() => setShowAssigned(false)} />

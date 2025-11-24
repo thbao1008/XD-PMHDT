@@ -41,6 +41,16 @@ export async function createStorySession(learnerId, userId) {
     throw new Error("Invalid learner_id or user_id");
   }
 
+  // Lấy thông tin user để truyền vào AI context
+  const userRes = await pool.query(
+    `SELECT u.name, u.email, u.dob, u.role 
+     FROM users u
+     JOIN learners l ON u.id = l.user_id
+     WHERE l.id = $1`,
+    [actualLearnerId]
+  );
+  const userInfo = userRes.rows[0] || {};
+
   // Tạo session mới
   const result = await pool.query(
     `INSERT INTO story_sessions (learner_id, status, created_at)
@@ -51,8 +61,8 @@ export async function createStorySession(learnerId, userId) {
 
   const session = result.rows[0];
 
-  // Tạo initial message từ AI
-  const initialMessage = await generateInitialStoryMessage();
+  // Tạo initial message từ AI, truyền user info để AI chào bằng tên
+  const initialMessage = await generateInitialStoryMessage(userInfo);
 
   // Lưu initial message vào conversation
   await pool.query(
@@ -73,16 +83,42 @@ export async function createStorySession(learnerId, userId) {
 
 /**
  * Tạo initial message cho story session
+ * @param {Object} userInfo - Thông tin người dùng {name, email, dob, role}
  */
-async function generateInitialStoryMessage() {
+async function generateInitialStoryMessage(userInfo = {}) {
+  const userName = userInfo.name || "bạn";
+  const userRole = userInfo.role === 'learner' ? "học viên" : userInfo.role;
+  const userDob = userInfo.dob ? new Date(userInfo.dob).toLocaleDateString('vi-VN') : "không rõ";
+  
+  // Tạo câu chào thông minh dựa trên thông tin user (CHỈ TIẾNG ANH)
+  const personalizedGreeting = userInfo.name 
+    ? `Hello ${userName}! I'm so happy to meet you. Please tell me your story by speaking into the microphone!`
+    : "Hello! I'm your friend. Please tell me your story by speaking into the microphone!";
+
   const messages = [
     {
       role: "system",
-      content: `You are a warm, empathetic friend starting a conversation. Greet the user warmly and invite them to share their story. Keep it short (1-2 sentences), warm, and inviting. Use simple English.`
+      content: `You are a warm, empathetic friend starting a conversation with a user. 
+
+USER INFORMATION:
+- Name: ${userName}
+- Role: ${userRole}
+- Date of Birth: ${userDob}
+
+IMPORTANT INSTRUCTIONS:
+1. ALWAYS greet the user by their name if you have it (${userInfo.name ? `use "${userName}"` : "no name available"})
+2. Be warm, genuine, and emotionally present
+3. Use natural, everyday language with real emotion
+4. Keep it short (1-2 sentences), warm, and inviting
+5. If the user's name is available, use it naturally in your greeting
+6. CRITICAL: You MUST speak ONLY in English. Do NOT use Vietnamese or any other language. This is an English speaking practice session.
+7. Invite them to share their story by speaking into the microphone in English
+
+Generate a personalized greeting in English that makes the user feel welcomed and valued.`
     },
     {
       role: "user",
-      content: "Start the conversation"
+      content: "Start the conversation with a warm greeting"
     }
   ];
 
@@ -90,20 +126,29 @@ async function generateInitialStoryMessage() {
     const response = await aiServiceClient.callOpenRouter(messages, {
       model: "openai/gpt-4o-mini",
       temperature: 0.9,
-      max_tokens: 100
+      max_tokens: 150
     });
 
-    return response.choices?.[0]?.message?.content || 
-           "Hello! I'm your friend. Please tell me your story by speaking into the microphone!";
+    const aiGreeting = response.choices?.[0]?.message?.content?.trim();
+    
+    // Nếu AI trả về câu chào hợp lệ, dùng nó
+    if (aiGreeting && aiGreeting.length > 10) {
+      return aiGreeting;
+    }
+    
+    // Fallback về câu chào đã tạo sẵn
+    return personalizedGreeting;
   } catch (err) {
     // Log error with helpful context
     if (err.code === "API_KEY_MISSING" || err.code === "API_KEY_INVALID") {
       console.error("❌ OpenRouter API key issue. Please set OPENROUTER_API_KEY in .env file:", err.message);
+    } else if (err.message?.includes("404")) {
+      console.warn("⚠️ AI Service not available (404). Using fallback greeting.");
     } else {
       console.error("❌ Error generating initial message:", err.message);
     }
-    // Return fallback message
-    return "Hello! I'm your friend. Please tell me your story by speaking into the microphone!";
+    // Return personalized fallback message
+    return personalizedGreeting;
   }
 }
 
@@ -155,8 +200,20 @@ export async function processStoryMessage(sessionId, text, audioUrl) {
     [sessionId]
   );
 
-  // Tạo AI response với tone đồng cảm, truyền cảm
-  const aiResponse = await generateStoryResponse(userMessage, history.rows.reverse());
+  // Lấy thông tin user từ session để AI có context
+  const sessionInfo = await pool.query(
+    `SELECT ss.learner_id, l.user_id, u.name, u.email, u.dob, u.role
+     FROM story_sessions ss
+     LEFT JOIN learners l ON ss.learner_id = l.id
+     LEFT JOIN users u ON l.user_id = u.id
+     WHERE ss.id = $1`,
+    [sessionId]
+  );
+
+  const userInfo = sessionInfo.rows[0] || null;
+
+  // Tạo AI response với tone đồng cảm, truyền cảm, có thông tin user
+  const aiResponse = await generateStoryResponse(userMessage, history.rows.reverse(), userInfo);
 
   // Lưu user message - đảm bảo tất cả giá trị null là thực sự null, không phải string "null"
   await pool.query(
@@ -193,10 +250,10 @@ export async function processStoryMessage(sessionId, text, audioUrl) {
  * Tạo AI response cho story mode - OpenRouter là nhân tố chính, AiESP học tập
  * AiESP sẽ tiếp tục học từ mọi response của OpenRouter để có sự phán đoán logic tốt hơn
  */
-async function generateStoryResponse(userMessage, history) {
+async function generateStoryResponse(userMessage, history, userInfo = null) {
   // TODO: Replace with API calls to AI Service
   // 1. OPENROUTER LÀ NHÂN TỐ PHẢN HỒI CHÍNH (primary responder)
-  const openRouterResponse = await generateStoryResponseFallback(userMessage, history);
+  const openRouterResponse = await generateStoryResponseFallback(userMessage, history, userInfo);
   
   // 2. LƯU OpenRouter RESPONSE ĐỂ AiESP HỌC (async, không block response)
   // AiESP sẽ lắng nghe và học từ mọi response của OpenRouter
@@ -207,7 +264,13 @@ async function generateStoryResponse(userMessage, history) {
     body: JSON.stringify({
       userMessage,
       history,
-      openRouterResponse
+      openRouterResponse,
+      userInfo: userInfo ? {
+        name: userInfo.name,
+        email: userInfo.email,
+        dob: userInfo.dob,
+        role: userInfo.role
+      } : null
     })
   }).catch(err => {
     console.warn("⚠️ Failed to save learning data:", err);
@@ -221,7 +284,13 @@ async function generateStoryResponse(userMessage, history) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       message: userMessage,
-      history
+      history,
+      userInfo: userInfo ? {
+        name: userInfo.name,
+        email: userInfo.email,
+        dob: userInfo.dob,
+        role: userInfo.role
+      } : null
     })
   })
     .then(res => res.json())
@@ -241,14 +310,35 @@ async function generateStoryResponse(userMessage, history) {
 /**
  * Fallback cho story response - AI nói truyền cảm, đồng cảm, TỰ NHIÊN NHƯ CON NGƯỜI
  */
-async function generateStoryResponseFallback(userMessage, history) {
+async function generateStoryResponseFallback(userMessage, history, userInfo = null) {
   // Kiểm tra OpenRouter API key trước
   if (!process.env.OPENROUTER_API_KEY) {
     console.error("❌ OPENROUTER_API_KEY is not set in .env file");
     return "I'm sorry, but I'm having trouble connecting right now. Please check the API configuration.";
   }
+  
+  // Tạo user context string nếu có thông tin user
+  let userContext = '';
+  if (userInfo) {
+    const userDetails = [];
+    if (userInfo.name) userDetails.push(`Name: ${userInfo.name}`);
+    if (userInfo.dob) {
+      const age = new Date().getFullYear() - new Date(userInfo.dob).getFullYear();
+      userDetails.push(`Age: approximately ${age} years old`);
+    }
+    if (userInfo.role) userDetails.push(`Role: ${userInfo.role}`);
+    if (userDetails.length > 0) {
+      userContext = `\n\nUSER CONTEXT (use this to personalize your responses naturally):\n${userDetails.join('\n')}\nUse this information to make the conversation more personal and relevant, but don't mention it directly unless it's natural.`;
+    }
+  }
+  
   // Tạo prompt ngắn gọn nhưng đầy đủ để phản hồi nhanh
-  const systemPrompt = `You're a real friend—warm, genuine, and emotionally present. Speak like a HUMAN, not a robot. Use natural, everyday language with real emotion.
+  const systemPrompt = `You're a real friend—warm, genuine, and emotionally present. Speak like a HUMAN, not a robot. Use natural, everyday language with real emotion.${userContext}
+
+CRITICAL LANGUAGE RULE:
+- You MUST speak ONLY in English. This is an English speaking practice session.
+- Do NOT use Vietnamese, Chinese, or any other language. Only English.
+- Even if the user speaks Vietnamese, you respond in English to help them practice.
 
 CORE PRINCIPLES:
 - Talk like you're texting a close friend—casual, real, heartfelt
@@ -257,6 +347,7 @@ CORE PRINCIPLES:
 - Vary your language—don't repeat the same phrases
 - Be spontaneous—let your words flow naturally
 - Keep it SHORT (1-3 sentences max) for quick, natural responses
+- ALWAYS respond in English only
 
 NATURAL HUMAN LANGUAGE EXAMPLES:
 - Instead of "I understand your feelings" → "I totally get that" or "That makes so much sense"
