@@ -5,6 +5,7 @@ import { getAuth } from "../../utils/auth";
 import AudioRecorder from "../common/AudioRecorder";
 import { FiCpu, FiUserCheck } from "react-icons/fi";
 import "../../styles/challenge.css";
+import { normalizeAudioUrl, getApiBaseUrl } from "../../utils/apiHelpers.js";
 
 export default function AssessmentModal({ submissionId, onClose, onSaved }) {
   console.log("[AssessmentModal] mounted, submissionId:", submissionId);
@@ -179,8 +180,11 @@ export default function AssessmentModal({ submissionId, onClose, onSaved }) {
 
   function renderSegmentedTranscript(submission) {
     const segments = submission?.segments ?? [];
-    const audioUrl = submission?.audio_url ?? submission?.audioUrl ?? null;
+    let audioUrl = submission?.audio_url ?? submission?.audioUrl ?? null;
     if (!audioUrl || !Array.isArray(segments) || segments.length === 0) return null;
+    
+    // Normalize audio URL to ensure it goes through Vite proxy
+    audioUrl = normalizeAudioUrl(audioUrl);
 
     return (
       <div className="transcript-scroll">
@@ -234,8 +238,11 @@ export default function AssessmentModal({ submissionId, onClose, onSaved }) {
 
   function renderConversationOnly(rawSubmission) {
     const submission = normalizeSubmission(rawSubmission);
-    const audioUrl = submission?.audio_url ?? submission?.audioUrl ?? null;
+    let audioUrl = submission?.audio_url ?? submission?.audioUrl ?? null;
     if (!audioUrl) return <p className="text-muted">Không có audio</p>;
+    
+    // Normalize audio URL to ensure it goes through Vite proxy
+    audioUrl = normalizeAudioUrl(audioUrl);
 
     const segments =
       Array.isArray(submission?.segments) && submission.segments.length
@@ -388,11 +395,11 @@ export default function AssessmentModal({ submissionId, onClose, onSaved }) {
         const lc = normalized.learner_challenge;
         
         // Load điểm từ mentor_review (đã chấm) hoặc từ AI assessment
-        // Điểm trong DB là thang 100, chia 10 để hiển thị thang 10 cho mentor
+        // Điểm trong DB là thang 100, hiển thị trực tiếp thang 100
         const rawPron = mr?.pronunciation_score ?? normalized.mentor_pronunciation_score ?? normalized.pronunciation_score ?? 0;
         const rawFlu = mr?.fluency_score ?? normalized.mentor_fluency_score ?? normalized.fluency_score ?? 0;
-        const pronScore = rawPron ? (rawPron / 10).toFixed(1) : "0";
-        const fluScore = rawFlu ? (rawFlu / 10).toFixed(1) : "0";
+        const pronScore = rawPron ? Number(rawPron).toFixed(1) : "0";
+        const fluScore = rawFlu ? Number(rawFlu).toFixed(1) : "0";
         setPronunciation(pronScore);
         setFluency(fluScore);
         
@@ -402,7 +409,7 @@ export default function AssessmentModal({ submissionId, onClose, onSaved }) {
           const avg = ((Number(pronScore) + Number(fluScore)) / 2).toFixed(1);
           setFinalScore(avg);
         } else {
-          const finalNorm = existingFinal ? (existingFinal / 10).toFixed(1) : "0";
+          const finalNorm = existingFinal ? Number(existingFinal).toFixed(1) : "0";
           setFinalScore(finalNorm);
         }
         
@@ -413,13 +420,8 @@ export default function AssessmentModal({ submissionId, onClose, onSaved }) {
         // Load audio URL từ mentor_review (ưu tiên nhất)
         const audioUrl = mr?.audio_url || normalized.feedback?.audio_url || normalized.mentor_audio_play_url;
         if (audioUrl) {
-          // Normalize audio URL - nếu là relative path thì thêm base URL
-          let normalizedAudioUrl = audioUrl;
-          if (typeof audioUrl === "string" && audioUrl.startsWith("/uploads/")) {
-            const baseURL = import.meta.env.VITE_API_BASE || "http://localhost:4002/api";
-            const apiBase = baseURL.replace("/api", "");
-            normalizedAudioUrl = `${apiBase}${audioUrl}`;
-          }
+          // Always normalize audio URL to ensure it goes through Vite proxy
+          const normalizedAudioUrl = normalizeAudioUrl(audioUrl);
           setUploadedUrl(normalizedAudioUrl);
         } else {
           setUploadedUrl(null);
@@ -468,7 +470,8 @@ export default function AssessmentModal({ submissionId, onClose, onSaved }) {
     const fd = new FormData();
     fd.append("file", file);
     const res = await api.post("/uploads", fd, {
-      headers: { "Content-Type": "multipart/form-data" },
+      // Don't set Content-Type - Axios will set it automatically with boundary for FormData
+      timeout: 60000, // 60 seconds for large file uploads
       onUploadProgress: e => {
         if (e.total) {
           const percent = Math.round((e.loaded / e.total) * 100);
@@ -529,12 +532,7 @@ export default function AssessmentModal({ submissionId, onClose, onSaved }) {
       
       // Cập nhật uploadedUrl nếu có audio mới
       if (res.data.review.audio_url) {
-        let normalizedAudioUrl = res.data.review.audio_url;
-        if (typeof normalizedAudioUrl === "string" && normalizedAudioUrl.startsWith("/uploads/")) {
-          const baseURL = import.meta.env.VITE_API_BASE || "http://localhost:4002/api";
-          const apiBase = baseURL.replace("/api", "");
-          normalizedAudioUrl = `${apiBase}${normalizedAudioUrl}`;
-        }
+        const normalizedAudioUrl = normalizeAudioUrl(res.data.review.audio_url);
         setUploadedUrl(normalizedAudioUrl);
       }
       
@@ -615,14 +613,14 @@ export default function AssessmentModal({ submissionId, onClose, onSaved }) {
               }
             : null;
           
-          // Normalize điểm AI từ thang 100 về thang 10 nếu cần
+          // Điểm AI từ DB là thang 100, hiển thị trực tiếp
           const aiPronScore = submission?.pronunciation_score;
           const aiFluScore = submission?.fluency_score;
           const aiOverallScore = submission?.overall_score ?? submission?.score;
           
-          const normalizedAiPron = aiPronScore != null ? (aiPronScore > 10 ? (aiPronScore / 10).toFixed(1) : aiPronScore) : null;
-          const normalizedAiFlu = aiFluScore != null ? (aiFluScore > 10 ? (aiFluScore / 10).toFixed(1) : aiFluScore) : null;
-          const normalizedAiOverall = aiOverallScore != null ? (aiOverallScore > 10 ? (aiOverallScore / 10).toFixed(1) : aiOverallScore) : null;
+          const normalizedAiPron = aiPronScore != null ? Number(aiPronScore).toFixed(1) : null;
+          const normalizedAiFlu = aiFluScore != null ? Number(aiFluScore).toFixed(1) : null;
+          const normalizedAiOverall = aiOverallScore != null ? Number(aiOverallScore).toFixed(1) : null;
 
           return (
             <div className="section">
@@ -715,33 +713,33 @@ export default function AssessmentModal({ submissionId, onClose, onSaved }) {
           <input 
             type="range" 
             min="0" 
-            max="10" 
+            max="100" 
             step="0.1"
             value={pronunciation} 
             onChange={e => setPronunciation(e.target.value)} 
             disabled={!isEditing}
             style={{ opacity: isEditing ? 1 : 0.6, cursor: isEditing ? "pointer" : "not-allowed" }}
           />
-          <div className="help-text">Điểm phát âm: <strong>{pronunciation}/10</strong></div>
+          <div className="help-text">Điểm phát âm: <strong>{pronunciation}/100</strong></div>
 
           <label className="label" style={{ marginTop: 8 }}>Fluency score</label>
           <input 
             type="range" 
             min="0" 
-            max="10" 
+            max="100" 
             step="0.1"
             value={fluency} 
             onChange={e => setFluency(e.target.value)} 
             disabled={!isEditing}
             style={{ opacity: isEditing ? 1 : 0.6, cursor: isEditing ? "pointer" : "not-allowed" }}
           />
-          <div className="help-text">Điểm lưu loát: <strong>{fluency}/10</strong></div>
+          <div className="help-text">Điểm lưu loát: <strong>{fluency}/100</strong></div>
 
           <label className="label" style={{ marginTop: 8 }}>Final score</label>
           <input 
             type="number" 
             min="0" 
-            max="10" 
+            max="100" 
             step="0.1"
             value={finalScore} 
             onChange={e => setFinalScore(e.target.value)} 
@@ -749,7 +747,7 @@ export default function AssessmentModal({ submissionId, onClose, onSaved }) {
             readOnly
             style={{ backgroundColor: "#f3f4f6", cursor: "not-allowed" }}
           />
-          <div className="help-text">Điểm cuối: <strong>{finalScore}/10</strong> (tự động tính trung bình)</div>
+          <div className="help-text">Điểm cuối: <strong>{finalScore}/100</strong> (tự động tính trung bình)</div>
 
           <label className="label" style={{ marginTop: 8 }}>
             Feedback
@@ -789,23 +787,18 @@ export default function AssessmentModal({ submissionId, onClose, onSaved }) {
                     className="btn-ghost" 
                     onClick={() => {
                       // Hủy chỉnh sửa: load lại dữ liệu từ submission
-                      // Điểm trong DB là thang 100, chia 10 để hiển thị thang 10 cho mentor
+                      // Điểm trong DB là thang 100, hiển thị trực tiếp
                       const mr = submission.mentor_review;
                       if (mr) {
-                        const pronScore = mr.pronunciation_score ? (mr.pronunciation_score / 10).toFixed(1) : "0";
-                        const fluScore = mr.fluency_score ? (mr.fluency_score / 10).toFixed(1) : "0";
+                        const pronScore = mr.pronunciation_score ? Number(mr.pronunciation_score).toFixed(1) : "0";
+                        const fluScore = mr.fluency_score ? Number(mr.fluency_score).toFixed(1) : "0";
                         setPronunciation(pronScore);
                         setFluency(fluScore);
-                        const finalNorm = mr.final_score ? (mr.final_score / 10).toFixed(1) : "0";
+                        const finalNorm = mr.final_score ? Number(mr.final_score).toFixed(1) : "0";
                         setFinalScore(finalNorm);
                         setFeedback(mr.feedback || "");
                         if (mr.audio_url) {
-                          let normalizedAudioUrl = mr.audio_url;
-                          if (typeof normalizedAudioUrl === "string" && normalizedAudioUrl.startsWith("/uploads/")) {
-                            const baseURL = import.meta.env.VITE_API_BASE || "http://localhost:4002/api";
-                            const apiBase = baseURL.replace("/api", "");
-                            normalizedAudioUrl = `${apiBase}${normalizedAudioUrl}`;
-                          }
+                          const normalizedAudioUrl = normalizeAudioUrl(mr.audio_url);
                           setUploadedUrl(normalizedAudioUrl);
                         }
                         setRecordedAudio(null);

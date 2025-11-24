@@ -5,24 +5,77 @@ export async function login(identifier, password) {
     throw new Error("Vui lòng nhập đầy đủ thông tin");
   }
 
-  const res = await fetch(`${BASE_URL}/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ identifier, password }),
-  });
+  // Create AbortController for timeout
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 seconds timeout
 
-  const data = await res.json();
-  console.log("🔎 API /login response: - authService.js:15", data);
+  try {
+    const res = await fetch(`${BASE_URL}/login`, {
+      method: "POST",
+      headers: { 
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      body: JSON.stringify({ identifier, password }),
+      signal: controller.signal,
+      credentials: "include", // Include cookies
+      keepalive: true, // Keep connection alive
+    });
 
-  if (!res.ok) {
-    throw new Error(data.message || "Đăng nhập thất bại");
+    clearTimeout(timeoutId);
+
+    // Check if response is empty
+    if (!res || res.status === 0) {
+      throw new Error("Không nhận được phản hồi từ server. Vui lòng kiểm tra backend services đã chạy chưa.");
+    }
+
+    // Xử lý response text trước khi parse JSON
+    const text = await res.text();
+    
+    // Check if response is empty
+    if (!text || text.trim() === "") {
+      throw new Error("Server trả về response rỗng. Vui lòng kiểm tra backend services.");
+    }
+
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      console.error("Failed to parse JSON response:", text);
+      if (res.status === 504 || res.status === 503) {
+        throw new Error("Gateway Timeout - Vui lòng kiểm tra backend services đã chạy chưa");
+      }
+      throw new Error(`Lỗi server: ${text.substring(0, 100)}`);
+    }
+    
+    console.log("🔎 API /login response:", data);
+
+    if (!res.ok) {
+      throw new Error(data.message || `Đăng nhập thất bại (${res.status})`);
+    }
+
+    const token = data.token || data.data?.token;
+    const user = data.user || data.data?.user;
+
+    if (!token || !user) {
+      throw new Error("Phản hồi đăng nhập không hợp lệ");
+    }
+    return { token, user };
+  } catch (err) {
+    clearTimeout(timeoutId);
+    
+    // Handle specific errors
+    if (err.name === "AbortError") {
+      throw new Error("Request timeout - Vui lòng kiểm tra backend services đã chạy chưa");
+    }
+    if (err.message?.includes("Failed to fetch") || err.message?.includes("ERR_EMPTY_RESPONSE")) {
+      throw new Error("Không thể kết nối đến server. Vui lòng kiểm tra backend services đã chạy chưa.");
+    }
+    if (err.message?.includes("NetworkError") || err.message?.includes("ERR_CONNECTION_REFUSED")) {
+      throw new Error("Không thể kết nối đến server. Vui lòng kiểm tra API Gateway đã chạy chưa.");
+    }
+    
+    // Re-throw other errors
+    throw err;
   }
-
-  const token = data.token || data.data?.token;
-  const user = data.user || data.data?.user;
-
-  if (!token || !user) {
-    throw new Error("Phản hồi đăng nhập không hợp lệ");
-  }
-  return { token, user };
 }

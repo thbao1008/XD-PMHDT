@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import api from "../../api";
 import "../../styles/admin-purchase.css";
 
 export default function PurchasesPage() {
-  const { id } = useParams();
+  const { id } = useParams(); // Route param từ /admin/learners/:id/purchases
+  const [searchParams] = useSearchParams(); // Query param từ /admin/purchases?learnerId=...
+  const learnerId = id || searchParams.get("learnerId"); // Ưu tiên route param, fallback query param
+  
   const [purchases, setPurchases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showChangePackageModal, setShowChangePackageModal] = useState(false);
@@ -13,18 +16,24 @@ export default function PurchasesPage() {
 
   useEffect(() => {
     const fetchPurchases = async () => {
-      if (!id) return;
+      if (!learnerId) {
+        setLoading(false);
+        return;
+      }
       try {
-        const res = await api.get(`/admin/purchases/${id}`);
+        const res = await api.get(`/admin/purchases/${learnerId}`);
         setPurchases(res.data.purchases || []);
       } catch (err) {
         console.error("❌ Lỗi khi load purchases:", err);
+        if (err.response?.status === 404) {
+          console.error("❌ Route không tồn tại hoặc learnerId không hợp lệ:", learnerId);
+        }
       } finally {
         setLoading(false);
       }
     };
     fetchPurchases();
-  }, [id]);
+  }, [learnerId]);
 
   useEffect(() => {
     const fetchPackages = async () => {
@@ -45,7 +54,7 @@ export default function PurchasesPage() {
       if (res.data.success) {
         alert(res.data.message || "Gia hạn thành công");
         // Refresh purchases
-        const refreshRes = await api.get(`/admin/purchases/${id}`);
+        const refreshRes = await api.get(`/admin/purchases/${learnerId}`);
         setPurchases(refreshRes.data.purchases || []);
       }
     } catch (err) {
@@ -61,7 +70,7 @@ export default function PurchasesPage() {
     }
     try {
       const res = await api.post("/admin/purchases/change-package", {
-        learnerId: id,
+        learnerId: learnerId,
         newPackageId: selectedPackageId,
       });
       if (res.data.success) {
@@ -69,7 +78,7 @@ export default function PurchasesPage() {
         setShowChangePackageModal(false);
         setSelectedPackageId(null);
         // Refresh purchases
-        const refreshRes = await api.get(`/admin/purchases/${id}`);
+        const refreshRes = await api.get(`/admin/purchases/${learnerId}`);
         setPurchases(refreshRes.data.purchases || []);
       }
     } catch (err) {
@@ -80,7 +89,7 @@ export default function PurchasesPage() {
 
   if (loading) return <p>Đang tải dữ liệu...</p>;
 
-  const learnerName = purchases.length > 0 ? purchases[0].learner_name : `Learner #${id}`;
+  const learnerName = purchases.length > 0 ? purchases[0].learner_name : `Learner #${learnerId}`;
 
   // Tìm gói gần nhất vừa hết (gói đầu tiên có status expired và days_left <= 0)
   // QUAN TRỌNG: Dùng purchase_status từ bảng purchases, không phải package_status

@@ -1,0 +1,18 @@
+{
+  "name": "purchase-service",
+  "version": "1.0.0",
+  "description": "Purchase Service for AESP - Subscription Management",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "pg": "^8.11.3"
+  }
+}
+

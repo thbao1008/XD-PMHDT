@@ -1,0 +1,102 @@
+/* Audio Player Styles */
+.audio-player-custom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #f3f4f6;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 400px;
+  margin-top: 12px;
+}
+
+.audio-play-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #000;
+  border: none;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 0.2s;
+}
+
+.audio-play-btn:hover {
+  transform: scale(1.1);
+}
+
+.audio-separator {
+  width: 4px;
+  height: 4px;
+  background: #000;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.audio-waveform-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  height: 40px;
+  overflow: hidden;
+}
+
+.audio-waveform-bars {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  height: 100%;
+  width: 100%;
+}
+
+.waveform-bar-item {
+  width: 3px;
+  background: #000;
+  border-radius: 2px;
+  min-height: 4px;
+  transition: height 0.1s;
+  animation: waveformIdle 1.5s ease-in-out infinite;
+}
+
+.waveform-bar-item.playing {
+  animation: waveformPlaying 0.6s ease-in-out infinite;
+}
+
+@keyframes waveformIdle {
+  0%, 100% { 
+    transform: scaleY(0.4);
+    opacity: 0.6;
+  }
+  50% { 
+    transform: scaleY(0.8);
+    opacity: 0.8;
+  }
+}
+
+@keyframes waveformPlaying {
+  0%, 100% { 
+    transform: scaleY(0.3);
+    opacity: 0.5;
+  }
+  50% { 
+    transform: scaleY(1.2);
+    opacity: 1;
+  }
+}
+
+.audio-duration-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: #000;
+  min-width: 40px;
+  text-align: right;
+  flex-shrink: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+

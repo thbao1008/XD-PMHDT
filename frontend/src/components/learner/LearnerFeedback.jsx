@@ -4,6 +4,7 @@ import api from "../../api";
 import { getAuth } from "../../utils/auth";
 import { FiUserCheck, FiClock, FiStar, FiAlertTriangle, FiCpu } from "react-icons/fi";
 import "../../styles/feedback.css";
+import { normalizeAudioUrl, getApiBaseUrl } from "../../utils/apiHelpers.js";
 
 export default function LearnerFeedback() {
   const [learnerId, setLearnerId] = useState(null);
@@ -307,7 +308,7 @@ export default function LearnerFeedback() {
           
           <audio
             ref={el => { if (el) audioRefs.current[submissionId] = el; }}
-            src={audioUrl.startsWith("/uploads/") ? `${import.meta.env.VITE_API_BASE?.replace("/api", "") || "http://localhost:4002"}${audioUrl}` : audioUrl}
+            src={normalizeAudioUrl(audioUrl)}
             controls
             className="feedback-audio-control"
             preload="auto"
@@ -353,15 +354,15 @@ export default function LearnerFeedback() {
             <div className="score-grid">
               <div>
                 <span className="label">Tổng điểm</span>
-                <span className="value">{submission.overall_score ?? "—"}/10</span>
+                <span className="value">{submission.overall_score != null ? Number(submission.overall_score).toFixed(1) : "—"}/100</span>
               </div>
               <div>
                 <span className="label">Phát âm</span>
-                <span className="value">{submission.pronunciation_score ?? "—"}/10</span>
+                <span className="value">{submission.pronunciation_score != null ? Number(submission.pronunciation_score).toFixed(1) : "—"}/100</span>
               </div>
               <div>
                 <span className="label">Trôi chảy</span>
-                <span className="value">{submission.fluency_score ?? "—"}/10</span>
+                <span className="value">{submission.fluency_score != null ? Number(submission.fluency_score).toFixed(1) : "—"}/100</span>
               </div>
             </div>
             {submission.topic && (
@@ -621,29 +622,27 @@ export default function LearnerFeedback() {
                   <div className="feedback-score-item">
                     <div className="feedback-score-label">Điểm tổng</div>
                     <div className="feedback-score-value total">
-                      {fb.final_score ? (fb.final_score / 10).toFixed(1) : "—"}/10
+                      {fb.final_score ? Number(fb.final_score).toFixed(1) : "—"}/100
                     </div>
                   </div>
                   <div className="feedback-score-item">
                     <div className="feedback-score-label">Phát âm</div>
                     <div className="feedback-score-value">
-                      {fb.pronunciation_score ? (fb.pronunciation_score / 10).toFixed(1) : "—"}/10
+                      {fb.pronunciation_score ? Number(fb.pronunciation_score).toFixed(1) : "—"}/100
                     </div>
                   </div>
                   <div className="feedback-score-item">
                     <div className="feedback-score-label">Trôi chảy</div>
                     <div className="feedback-score-value">
-                      {fb.fluency_score ? (fb.fluency_score / 10).toFixed(1) : "—"}/10
+                      {fb.fluency_score ? Number(fb.fluency_score).toFixed(1) : "—"}/100
                     </div>
                   </div>
                 </div>
 
                 {(() => {
                   let audioUrl = fb.audio_url;
-                  if (audioUrl && typeof audioUrl === "string" && audioUrl.startsWith("/uploads/")) {
-                    const baseURL = import.meta.env.VITE_API_BASE || "http://localhost:4002/api";
-                    const apiBase = baseURL.replace("/api", "");
-                    audioUrl = `${apiBase}${audioUrl}`;
+                  if (audioUrl) {
+                    audioUrl = normalizeAudioUrl(audioUrl);
                   }
                   return audioUrl ? (
                     <div style={{ marginBottom: 12 }}>

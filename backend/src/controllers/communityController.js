@@ -35,14 +35,14 @@ export async function createPost(req, res) {
 
     if (req.files) {
       if (req.files.audio && req.files.audio[0]) {
-        finalAudioUrl = `${req.protocol}://${req.get("host")}/uploads/${req.files.audio[0].filename}`;
+        finalAudioUrl = `/uploads/${req.files.audio[0].filename}`;
       }
       // Image hoặc video đều lưu vào image_url (database chỉ có image_url)
       if (req.files.image && req.files.image[0]) {
-        finalImageUrl = `${req.protocol}://${req.get("host")}/uploads/${req.files.image[0].filename}`;
+        finalImageUrl = `/uploads/${req.files.image[0].filename}`;
       }
       if (req.files.video && req.files.video[0]) {
-        finalImageUrl = `${req.protocol}://${req.get("host")}/uploads/${req.files.video[0].filename}`;
+        finalImageUrl = `/uploads/${req.files.video[0].filename}`;
       }
     }
 
@@ -373,7 +373,7 @@ export async function createComment(req, res) {
     // Handle file upload
     let finalAudioUrl = audioUrl || null;
     if (req.file) {
-      finalAudioUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
+      finalAudioUrl = `/uploads/${req.file.filename}`;
     }
 
     if (!content && !finalAudioUrl) {

@@ -1,0 +1,106 @@
+import pool from "../config/db.js";
+
+export async function getAllUsers() {
+  const { rows } = await pool.query("SELECT * FROM users ORDER BY id ASC");
+  return rows;
+}
+
+export async function findUserById(id) {
+  const { rows } = await pool.query("SELECT * FROM users WHERE id = $1", [id]);
+  return rows[0];
+}
+
+export async function findUserByEmail(email) {
+  const { rows } = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
+  return rows[0];
+}
+
+export async function findUserByPhone(phone) {
+  const { rows } = await pool.query("SELECT * FROM users WHERE phone = $1", [phone]);
+  return rows[0];
+}
+
+export async function findUserByIdentifier(identifier) {
+  if (!identifier) return null;
+
+  if (typeof identifier === "string" && /\S+@\S+\.\S+/.test(identifier)) {
+    return await findUserByEmail(identifier.toLowerCase());
+  }
+
+  if (typeof identifier === "string" && /^0\d{9}$/.test(identifier)) {
+    return await findUserByPhone(identifier);
+  }
+
+  const idNum = Number(identifier);
+  if (!Number.isNaN(idNum)) {
+    return await findUserById(idNum);
+  }
+
+  return null;
+}
+
+export async function createUserInDb(user) {
+  const result = await pool.query(
+    `INSERT INTO users (name, email, phone, dob, role, password, status)
+     VALUES ($1,$2,$3,$4,$5,$6,$7)
+     RETURNING *`,
+    [
+      user.name,
+      user.email,
+      user.phone,
+      user.dob,
+      user.role,
+      user.password,
+      user.status || 'active'
+    ]
+  );
+  return result.rows[0];
+}
+
+export async function updateUserInDb(id, updates) {
+  const allowedFields = ["name", "email", "phone", "dob", "role", "password", "status", "package_id", "avatar_url", "security_question", "security_answer"];
+  const fields = Object.keys(updates).filter(f => allowedFields.includes(f));
+  if (fields.length === 0) return null;
+
+  const setClause = fields.map((f, i) => `${f} = $${i + 2}`).join(", ");
+  const values = [id, ...fields.map(f => updates[f])];
+
+  const { rows } = await pool.query(
+    `UPDATE users SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *`,
+    values
+  );
+  return rows[0];
+}
+
+export async function deleteUserInDb(id) {
+  const result = await pool.query("DELETE FROM users WHERE id = $1 RETURNING id", [id]);
+  return result.rowCount > 0;
+}
+
+export async function toggleUserStatusInDb(id) {
+  const { rows } = await pool.query(
+    `UPDATE users
+     SET status = CASE WHEN status = 'active' THEN 'banned' ELSE 'active' END,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = $1 RETURNING *`,
+    [id]
+  );
+  return rows[0];
+}
+
+export async function updateUserPasswordByEmail(email, hashedPassword) {
+  const { rows } = await pool.query(
+    "UPDATE users SET password = $1, updated_at = CURRENT_TIMESTAMP WHERE email = $2 RETURNING *",
+    [hashedPassword, email]
+  );
+  return rows[0];
+}
+
+export async function updateUserPasswordById(id, hashedPassword) {
+  const { rows } = await pool.query(
+    "UPDATE users SET password = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *",
+    [hashedPassword, id]
+  );
+  return rows[0];
+}
+

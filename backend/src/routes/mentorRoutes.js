@@ -1,12 +1,36 @@
 // backend/src/routes/mentorRoutes.js
 import express from "express";
 import multer from "multer";
+import path from "path";
+import fs from "fs";
+import { fileURLToPath } from "url";
 import * as mentorCtrl from "../controllers/mentorController.js";
 import * as scheduleCtrl from "../controllers/scheduleController.js";
 import * as dashboardCtrl from "../controllers/mentorDashboardController.js";
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const router = express.Router();
-const upload = multer({ dest: "uploads/" });
+
+// Ensure uploads directory exists
+const uploadsDir = path.resolve(process.cwd(), "uploads");
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadsDir);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    cb(null, file.fieldname + "-" + uniqueSuffix + ext);
+  }
+});
+
+const upload = multer({ storage: storage });
 
 /* -----------------------
    Specific routes first

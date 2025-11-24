@@ -64,8 +64,8 @@ export default function ProfilePage() {
       }
 
       try {
-        // Load user info
-        const userRes = await api.get(`/admin/users/${userId}`);
+        // Load user info (dùng route /users/me thay vì /admin/users/:id)
+        const userRes = await api.get(`/users/me`);
         if (userRes.data?.user) {
           const userData = userRes.data.user;
           setUser(userData);
@@ -195,7 +195,7 @@ export default function ProfilePage() {
       const formData = new FormData();
       formData.append("avatar", blob, "avatar.jpg");
 
-      const res = await api.post(`/admin/users/${userId}/avatar`, formData, {
+      const res = await api.post(`/users/me/avatar`, formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
 

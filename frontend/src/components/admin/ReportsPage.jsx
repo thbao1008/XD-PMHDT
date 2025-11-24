@@ -4,6 +4,7 @@ import { FaCommentDots, FaSearch } from "react-icons/fa";
 import "../../styles/reportpage.css";
 import UserForPage from "./UserForPage.jsx";
 import ProgressAnalytics from "../learner/ProgressAnalytics.jsx";
+import { normalizeFileUrl, normalizeImageUrl, normalizeVideoUrl } from "../../utils/apiHelpers.js";
 
 export default function ReportsPage() {
   const [filters, setFilters] = useState({ from: "", to: "", status: "pending" });
@@ -196,7 +197,7 @@ export default function ReportsPage() {
 
   // Hàm mở modal phóng to hình ảnh/video
   const openMediaModal = (type, url) => {
-    const fullUrl = url.startsWith("/uploads/") ? `http://localhost:4002${url}` : url;
+    const fullUrl = normalizeFileUrl(url);
     setSelectedMedia({ type, url: fullUrl });
     setShowMediaModal(true);
   };
@@ -284,7 +285,7 @@ export default function ReportsPage() {
                   {f.image_url && (
                     <div style={{ marginTop: 8 }}>
                       <img 
-                        src={f.image_url.startsWith("/uploads/") ? `http://localhost:4002${f.image_url}` : f.image_url}
+                        src={normalizeImageUrl(f.image_url)}
                         alt="Report image"
                         onClick={() => openMediaModal("image", f.image_url)}
                         style={{ 
@@ -303,7 +304,7 @@ export default function ReportsPage() {
                   {f.video_url && (
                     <div style={{ marginTop: 8 }}>
                       <video 
-                        src={f.video_url.startsWith("/uploads/") ? `http://localhost:4002${f.video_url}` : f.video_url}
+                        src={normalizeVideoUrl(f.video_url)}
                         controls
                         onClick={() => openMediaModal("video", f.video_url)}
                         style={{ 
@@ -519,7 +520,7 @@ export default function ReportsPage() {
                 <strong>Hình ảnh:</strong>
                 <div style={{ marginTop: 8 }}>
                   <img 
-                    src={selectedReport.image_url.startsWith("/uploads/") ? `http://localhost:4002${selectedReport.image_url}` : selectedReport.image_url}
+                    src={normalizeImageUrl(selectedReport.image_url)}
                     alt="Report"
                     onClick={() => openMediaModal("image", selectedReport.image_url)}
                     style={{ 
@@ -541,7 +542,7 @@ export default function ReportsPage() {
                 <strong>Video:</strong>
                 <div style={{ marginTop: 8 }}>
                   <video 
-                    src={selectedReport.video_url.startsWith("/uploads/") ? `http://localhost:4002${selectedReport.video_url}` : selectedReport.video_url}
+                    src={normalizeVideoUrl(selectedReport.video_url)}
                     controls
                     onClick={() => openMediaModal("video", selectedReport.video_url)}
                     style={{ 

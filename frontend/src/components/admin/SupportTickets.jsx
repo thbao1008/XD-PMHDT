@@ -1,5 +1,6 @@
 ﻿import React, { useState, useEffect } from "react";
 import Modal from "../common/Modal.jsx";
+import api from "../../api";
 
 export default function SupportTickets() {
   const [tickets, setTickets] = useState([]);
@@ -9,14 +10,16 @@ export default function SupportTickets() {
 
   const fetchTickets = async () => {
     try {
-      const res = await fetch("/api/admin/support");
-      const data = await res.json();
-      const sorted = (data.requests || []).sort(
+      const res = await api.get("/admin/support");
+      const sorted = (res.data.requests || []).sort(
         (a, b) => new Date(b.created_at) - new Date(a.created_at)
       );
       setTickets(sorted);
     } catch (err) {
       console.error("Lỗi lấy support requests:", err);
+      if (err.response?.status === 401) {
+        alert("❌ Bạn cần đăng nhập với quyền admin để xem support requests");
+      }
     }
   };
 
@@ -26,12 +29,8 @@ export default function SupportTickets() {
 
   const markResolved = async (id) => {
     try {
-      const res = await fetch(`/api/admin/support/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "resolved" }),
-      });
-      if (res.ok) {
+      const res = await api.patch(`/admin/support/${id}`, { status: "resolved" });
+      if (res.status === 200 || res.status === 204) {
         alert("✅ Đã đánh dấu yêu cầu là 'Đã hỗ trợ'");
         fetchTickets();
       } else {
@@ -39,6 +38,11 @@ export default function SupportTickets() {
       }
     } catch (err) {
       console.error("Lỗi PATCH:", err);
+      if (err.response?.status === 401) {
+        alert("❌ Bạn cần đăng nhập với quyền admin để cập nhật support requests");
+      } else {
+        alert("❌ Có lỗi khi cập nhật trạng thái: " + (err.response?.data?.message || err.message));
+      }
     }
   };
 

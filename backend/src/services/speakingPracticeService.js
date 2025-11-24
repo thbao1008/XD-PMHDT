@@ -341,7 +341,7 @@ async function getTrainingDataFromPython(trainingType, options = {}) {
       if (trainingType === 'prompt_generator') {
         // Lấy topics và challenges từ database
         const topics = await pool.query(`SELECT id, title, description, level FROM topics ORDER BY RANDOM() LIMIT 20`);
-        const challenges = await pool.query(`SELECT id, title, description, level, topic_id, type FROM challenges ORDER BY RANDOM() LIMIT 20`);
+        const challenges = await pool.query(`SELECT id, title, description, level, type FROM challenges ORDER BY RANDOM() LIMIT 20`);
         
         const topicsJson = JSON.stringify(topics.rows);
         const challengesJson = JSON.stringify(challenges.rows);

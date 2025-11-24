@@ -38,16 +38,24 @@ export default function Home() {
   const [packages, setPackages] = useState([]);
 
   // Lấy packages từ API
- useEffect(() => {
-  api.get("/packages/public")
-    .then((res) => {
-      const data = res.data;
-      const list = Array.isArray(data) ? data : (data.packages || []);
-      const sorted = list.sort((a, b) => a.price - b.price);
-      setPackages(sorted);
-    })
-    .catch((err) => console.error("❌ Lỗi khi load packages:", err));
-}, []);
+  useEffect(() => {
+    api.get("/packages/public")
+      .then((res) => {
+        console.log("📦 Packages response:", res.data);
+        const data = res.data;
+        const list = Array.isArray(data) ? data : (data.packages || []);
+        const sorted = list.sort((a, b) => (a.price || 0) - (b.price || 0));
+        console.log("📦 Sorted packages:", sorted);
+        setPackages(sorted);
+      })
+      .catch((err) => {
+        // Don't crash - just log and show empty state
+        console.warn("⚠️  Không thể load packages. Backend services có thể chưa sẵn sàng.");
+        console.warn("⚠️  Error details:", err.response?.data || err.message);
+        // Set empty array instead of crashing
+        setPackages([]);
+      });
+  }, []);
 
   // Hàm xử lý đăng ký
   const handleRegister = async (e) => {
@@ -60,13 +68,8 @@ export default function Home() {
     };
 
     try {
-      const res = await fetch("/api/admin/support", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      });
-
-      if (res.ok) {
+      const res = await api.post("/admin/support", formData);
+      if (res.status === 200 || res.status === 201) {
         alert("✅ Đăng ký thành công! Admin sẽ nhận được thông tin hỗ trợ.");
         e.target.reset();
       } else {
@@ -74,7 +77,7 @@ export default function Home() {
       }
     } catch (err) {
       console.error("Lỗi gửi đăng ký:", err);
-      alert("❌ Server error");
+      alert("❌ Server error: " + (err.response?.data?.message || err.message));
     }
   };
   // Observer cho từng câu trong "Về AESP"
@@ -216,29 +219,35 @@ export default function Home() {
     </p>
   </div>
   <div className="package-list">
-    {packages.map((pkg) => (
-      <div key={pkg.id} className="card package-card">
-        <h3>{pkg.name}</h3>
-        <div className="price-block">
-          {pkg.original_price && (
-            <div className="original">
-              {pkg.original_price.toLocaleString()} đ
+    {packages.length > 0 ? (
+      packages.map((pkg) => (
+        <div key={pkg.id} className="card package-card">
+          <h3>{pkg.name}</h3>
+          <div className="price-block">
+            {pkg.original_price && (
+              <div className="original">
+                {pkg.original_price.toLocaleString()} đ
+              </div>
+            )}
+            <div className="current">
+              {pkg.price?.toLocaleString() || "0"} đ / {pkg.duration_days || pkg.durationMonths || 30} Ngày
             </div>
-          )}
-          <div className="current">
-            {pkg.price.toLocaleString()} đ / {pkg.duration_days} Ngày
           </div>
+          <button
+            className="btn btn-primary"
+            onClick={() =>
+              document.getElementById("register").scrollIntoView({ behavior: "smooth" })
+            }
+          >
+            Đăng ký ngay để nhận ưu đãi
+          </button>
         </div>
-        <button
-          className="btn btn-primary"
-          onClick={() =>
-            document.getElementById("register").scrollIntoView({ behavior: "smooth" })
-          }
-        >
-          Đăng ký ngay để nhận ưu đãi
-        </button>
+      ))
+    ) : (
+      <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "40px", color: "var(--text-light)" }}>
+        <p>Đang tải gói học...</p>
       </div>
-    ))}
+    )}
   </div>
 </section>
       {/* MENTOR INTRO */}

@@ -433,11 +433,27 @@ export default function MentorSchedules() {
     });
   };
   
-  // Kiểm tra xem có thể chỉnh sửa/xóa lịch không (chỉ khi chưa đến tuần đó)
+  // Kiểm tra xem có thể chỉnh sửa/xóa lịch không
+  // Logic: Chỉ có thể sửa/xóa khi tuần của lịch CHƯA ĐẾN (tuần tương lai)
+  // Nếu tuần của lịch đã đến hoặc đã qua (tuần hiện tại hoặc tuần đã qua), thì không thể sửa/xóa, chỉ có thể tạm ngưng
   const canEditSchedule = (schedule) => {
     const scheduleDate = new Date(schedule.start_time);
-    const weekMonday = getMondayOfWeek(scheduleDate);
-    return !isWeekPassed(weekMonday);
+    const scheduleWeekMonday = getMondayOfWeek(scheduleDate);
+    
+    // Lấy thứ 2 của tuần hiện tại (hôm nay)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const currentWeekMonday = getMondayOfWeek(today);
+    
+    // So sánh tuần của schedule với tuần hiện tại
+    // Nếu tuần của schedule < tuần hiện tại (đã qua) → không thể sửa/xóa
+    // Nếu tuần của schedule = tuần hiện tại (đang trong tuần) → không thể sửa/xóa (đã đến tuần)
+    // Nếu tuần của schedule > tuần hiện tại (tuần tương lai) → có thể sửa/xóa (chưa đến tuần)
+    const scheduleWeekTime = scheduleWeekMonday.getTime();
+    const currentWeekTime = currentWeekMonday.getTime();
+    
+    // Chỉ có thể sửa/xóa nếu tuần của schedule > tuần hiện tại (chưa đến tuần)
+    return scheduleWeekTime > currentWeekTime;
   };
 
   // Kiểm tra schedule đã qua chưa
@@ -695,6 +711,10 @@ export default function MentorSchedules() {
                       <div className="day-schedules">
                         {daySchedules.map((schedule) => {
                           const canEdit = canEditSchedule(schedule);
+                          const isPaused = schedule.status === 'paused';
+                          // Nếu đã tạm ngưng thì không thể sửa/xóa nữa (đã khóa)
+                          const canModify = canEdit && !isPaused;
+                          
                           return (
                             <div 
                               key={schedule.id} 
@@ -710,8 +730,13 @@ export default function MentorSchedules() {
                                   <FiAlertCircle /> Lịch thi
                                 </div>
                               )}
+                              {isPaused && (
+                                <div className="exam-badge" style={{ backgroundColor: '#f59e0b', color: '#fff' }}>
+                                  <FiPause /> Tạm ngưng
+                                </div>
+                              )}
                               <div className="schedule-type">{schedule.type === 'online' ? '🌐 Online' : '🏠 Offline'}</div>
-                              {canEdit && (
+                              {canModify ? (
                                 <div className="schedule-actions">
                                   <button 
                                     className="btn-icon-small"
@@ -728,15 +753,18 @@ export default function MentorSchedules() {
                                     <FiTrash2 />
                                   </button>
                                 </div>
-                              )}
-                              {!canEdit && schedule.status !== 'paused' && (
-                                <button 
-                                  className="btn-pause"
-                                  onClick={() => handlePause(schedule.id)}
-                                  title="Tạm ngưng"
-                                >
-                                  <FiPause /> Tạm ngưng
-                                </button>
+                              ) : (
+                                // Tuần đã qua hoặc đã tạm ngưng - chỉ hiển thị nút tạm ngưng (nếu chưa paused)
+                                // Nếu đã paused rồi thì không hiển thị nút nữa (đã khóa)
+                                !isPaused && (
+                                  <button 
+                                    className="btn-pause"
+                                    onClick={() => handlePause(schedule.id)}
+                                    title="Tạm ngưng"
+                                  >
+                                    <FiPause /> Tạm ngưng
+                                  </button>
+                                )
                               )}
                             </div>
                           );

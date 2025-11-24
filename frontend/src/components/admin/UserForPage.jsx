@@ -218,7 +218,7 @@ export default function UserForPage({ userId, onClose, onStatusChange }) {
                     </div>
                     <button
                       className="user-for-page-btn user-for-page-btn-primary"
-                      onClick={() => window.location.href = `/admin/learners/${user.learner_id}/purchases`}
+                      onClick={() => window.location.href = `/admin/purchases/${user.learner_id}`}
                     >
                       Xem chi tiết gói học
                     </button>

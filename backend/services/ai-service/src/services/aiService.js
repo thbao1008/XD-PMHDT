@@ -1,0 +1,188 @@
+// AI Service - OpenRouter integration
+import { exec } from "child_process";
+import path from "path";
+import fs from "fs";
+import { fileURLToPath } from "url";
+import dotenv from "dotenv";
+
+// Load .env from project root
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+// Go up from ai-service/src/services to project root
+const projectRoot = path.resolve(__dirname, "..", "..", "..", "..");
+const envPath = path.resolve(projectRoot, ".env");
+dotenv.config({ path: envPath });
+
+const OR_BASE = process.env.OPENROUTER_API_BASE || "https://openrouter.ai/api/v1";
+const OR_KEY = process.env.OPENROUTER_API_KEY;
+const OR_MODEL = process.env.OPENROUTER_MODEL || "gpt-4o-mini";
+
+if (!OR_KEY) {
+  console.warn("OpenRouter key not set. Set OPENROUTER_API_KEY in .env - ai-service aiService.js:11");
+}
+
+/**
+ * getFetch - ensure fetch is available (Node >=18 or node-fetch)
+ */
+async function getFetch() {
+  if (typeof globalThis.fetch === "function") return globalThis.fetch.bind(globalThis);
+  try {
+    const mod = await import("node-fetch");
+    return mod.default ?? mod;
+  } catch (err) {
+    throw new Error("No fetch available. Install node-fetch or run Node >= 18");
+  }
+}
+
+/**
+ * callOpenRouter - generic wrapper to call OpenRouter-like chat completions
+ * messages: [{role, content}, ...]
+ * opts: {temperature, max_tokens}
+ */
+export async function callOpenRouter(messages, opts = {}) {
+  if (!OR_KEY) {
+    const err = new Error("AI provider not configured (OPENROUTER_API_KEY missing)");
+    err.status = 503;
+    err.code = "API_KEY_MISSING";
+    throw err;
+  }
+  
+  const fetchFn = await getFetch();
+  const model = opts.model || OR_MODEL;
+  const body = {
+    model: model,
+    messages,
+    temperature: opts.temperature ?? 0.7,
+    max_tokens: opts.max_tokens ?? 800
+  };
+
+  const res = await fetchFn(`${OR_BASE}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${OR_KEY}`
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "<no body>");
+    let errorMessage = `AI provider error ${res.status}: ${txt}`;
+    
+    // Provide helpful error messages
+    if (res.status === 401) {
+      try {
+        const errorJson = JSON.parse(txt);
+        if (errorJson.error?.message?.includes("User not found")) {
+          errorMessage = `OpenRouter API key is invalid or expired. Please check your OPENROUTER_API_KEY in .env file. Original error: ${txt}`;
+        } else {
+          errorMessage = `OpenRouter authentication failed. Please verify your OPENROUTER_API_KEY. Original error: ${txt}`;
+        }
+      } catch (e) {
+        errorMessage = `OpenRouter authentication failed (401). Please check your OPENROUTER_API_KEY in .env file.`;
+      }
+    } else if (res.status === 429) {
+      errorMessage = `OpenRouter rate limit exceeded. Please try again later. Original error: ${txt}`;
+    } else if (res.status === 402) {
+      // Parse error để lấy số tokens có thể afford
+      try {
+        const errorJson = JSON.parse(txt);
+        const errorMsg = errorJson.error?.message || txt;
+        // Extract số tokens có thể afford từ message
+        const affordMatch = errorMsg.match(/can only afford (\d+)/i);
+        const maxAffordableTokens = affordMatch ? parseInt(affordMatch[1]) : null;
+        
+        errorMessage = `OpenRouter payment required. Please check your account balance. Original error: ${txt}`;
+        
+        const err = new Error(errorMessage);
+        err.status = res.status;
+        err.code = "PAYMENT_REQUIRED";
+        err.maxAffordableTokens = maxAffordableTokens; // Thêm thông tin tokens có thể afford
+        throw err;
+      } catch (e) {
+        // Nếu e là error đã throw ở trên, re-throw nó
+        if (e.status === 402 && e.code === "PAYMENT_REQUIRED") {
+          throw e;
+        }
+        // Nếu là lỗi parse JSON, tạo error mới
+        errorMessage = `OpenRouter payment required. Please check your account balance. Original error: ${txt}`;
+        const err = new Error(errorMessage);
+        err.status = res.status;
+        err.code = "PAYMENT_REQUIRED";
+        throw err;
+      }
+    }
+    
+    const err = new Error(errorMessage);
+    err.status = res.status;
+    err.code = res.status === 401 ? "API_KEY_INVALID" : "API_ERROR";
+    throw err;
+  }
+
+  return res.json();
+}
+
+/**
+ * transcribeWithWhisperX - run local Python whisperx transcriber and return parsed JSON or text
+ * localPath: path to audio file
+ * returns: { json: <full whisperx json>, text: <joined words text> }
+ */
+export async function transcribeWithWhisperX(localPath) {
+  // Use backendDir defined at top of file
+  const outDir = path.resolve(backendDir, "outputs");
+  if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+
+  const outputPath = path.join(outDir, path.basename(localPath).replace(/\.[^/.]+$/, ".json"));
+
+  return new Promise((resolve, reject) => {
+    // Use python script that prints JSON to stdout; we redirect to file for reliability
+    const cmd = `python whisperx/transcribe_whisperx.py "${localPath}" > "${outputPath}"`;
+    exec(cmd, (err) => {
+      if (err) return reject(err);
+      try {
+        const raw = fs.readFileSync(outputPath, "utf-8");
+        const json = JSON.parse(raw);
+        const text = (json.words || []).map(w => w.text).join(" ");
+        resolve({ json, text });
+      } catch (e) {
+        reject(e);
+      }
+    });
+  });
+}
+
+/**
+ * compareTranscript - simple token-level comparison helper
+ * transcript: string
+ * sampleText: string
+ * wordSegments: optional array of {word,start,end,score}
+ */
+export function compareTranscript(transcript, sampleText, wordSegments = []) {
+  const transcriptWords = (transcript || "").toLowerCase().split(/\s+/).filter(Boolean);
+  const sampleWords = (sampleText || "").toLowerCase().split(/\s+/).filter(Boolean);
+
+  return transcriptWords.map((word, idx) => {
+    const expected = sampleWords[idx] || null;
+    const segment = wordSegments[idx] || {};
+    return {
+      word,
+      expected,
+      correct: expected === word,
+      start: segment.start ?? null,
+      end: segment.end ?? null,
+      confidence: segment.score ?? null
+    };
+  });
+}
+
+/**
+ * safeParseJSON - helper to parse AI responses
+ */
+export function safeParseJSON(text) {
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    return null;
+  }
+}
+

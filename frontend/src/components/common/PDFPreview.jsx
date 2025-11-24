@@ -1,16 +1,15 @@
 // src/components/common/PDFPreview.jsx
 import React, { useState, useEffect } from "react";
 import { FiX } from "react-icons/fi";
+import { normalizeFileUrl } from "../../utils/apiHelpers";
 
 export default function PDFPreview({ url, title, onClose }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [blobUrl, setBlobUrl] = useState(null);
 
-  // Format URL - đảm bảo là absolute URL
-  const fullUrl = url?.startsWith("/") 
-    ? `${window.location.origin}${url}` 
-    : url;
+  // Format URL - dùng normalizeFileUrl để đi qua Vite proxy
+  const fullUrl = normalizeFileUrl(url);
 
   useEffect(() => {
     setLoading(true);
@@ -19,15 +18,19 @@ export default function PDFPreview({ url, title, onClose }) {
     // Fetch PDF as blob để tránh browser download
     const fetchPDF = async () => {
       try {
+        console.log("[PDFPreview] Loading PDF from URL:", fullUrl);
         const response = await fetch(fullUrl, {
           method: "GET",
           headers: {
             "Accept": "application/pdf"
-          }
+          },
+          credentials: "include" // Include cookies for authentication
         });
         
+        console.log("[PDFPreview] Response status:", response.status, response.statusText);
         if (!response.ok) {
-          throw new Error("Failed to load PDF");
+          console.error("[PDFPreview] Failed to load PDF:", response.status, response.statusText);
+          throw new Error(`Failed to load PDF: ${response.status} ${response.statusText}`);
         }
         
         // Kiểm tra content type

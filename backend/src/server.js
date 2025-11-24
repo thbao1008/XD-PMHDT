@@ -6,21 +6,11 @@ import { fileURLToPath } from "url";
 import { spawn } from "child_process";
 
 
-// Controllers
-import * as learnerCtrl from "./controllers/learnerController.js";
-import { getLearnersByMentor } from "./controllers/mentorController.js";
-import { getPackages } from "./controllers/packageController.js";
+// NOTE: Controllers and routes have been migrated to microservices
+// This server now only handles file uploads and static file serving
+// All API routes are handled by API Gateway and respective microservices
 
-// Multer for file uploads
-import multer from "multer";
-
-// Routes
-import authRoutes from "./routes/authRoutes.js";
-import adminRoutes from "./routes/adminRoutes.js";
-import learnerRoutes from "./routes/learnerRoutes.js";
-import mentorRoutes from "./routes/mentorRoutes.js";
-import communityRoutes from "./routes/communityRoutes.js";
-import notificationRoutes from "./routes/notificationRoutes.js";
+// NOTE: File uploads have been migrated to File Service
 
 // Middleware
 import { errorHandler } from "./middleware/errorHandler.js";
@@ -56,28 +46,7 @@ app.use(express.json());
 app.use(requestLogger);
 app.use(trackTraffic); // Track traffic và online users
 
-// ====== Multer config for file uploads ======
-import fs from "fs";
-
-// Ensure uploads directory exists
-const uploadsDir = path.resolve(process.cwd(), "uploads");
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadsDir);
-  },
-  filename: function (req, file, cb) {
-    // Preserve original extension
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname);
-    cb(null, file.fieldname + "-" + uniqueSuffix + ext);
-  }
-});
-
-const upload = multer({ storage: storage });
+// NOTE: Multer config has been migrated to File Service
 
 // ====== Health check ======
 app.get("/health/ai", (_req, res) => {
@@ -88,66 +57,23 @@ app.get("/health/ai", (_req, res) => {
 });
 
 // ====== Routes ======
-app.use("/api/auth", authRoutes);
-app.use("/api/admin", adminRoutes);
+// NOTE: All routes have been migrated to microservices
+// Routes are now handled by API Gateway which proxies to respective services:
+// - /api/auth -> User Service
+// - /api/admin -> Admin Service
+// - /api/learners -> Learner Service
+// - /api/mentors -> Mentor Service
+// - /api/community -> Community Service
+// - /api/notifications -> Notification Service
+// - /api/challenges -> Learner Service
+// - /api/packages -> Package Service
+// - /api/purchases -> Purchase Service
+// - /api/ai -> AI Service
 
-app.use("/api/learners", learnerRoutes);
-app.use("/api/mentors", mentorRoutes);
-app.use("/api/community", communityRoutes);
-app.use("/api/notifications", notificationRoutes);
-
-// Challenge routes
-app.get("/api/challenges", learnerCtrl.listAllChallenges);
-app.get("/api/challenges/:id", learnerCtrl.getChallengeById);
-
-// Public packages route moved to adminRoutes.js (/api/admin/packages/public)
-
-// Mentor learners
-app.get("/api/admin/mentors/:id/learners", getLearnersByMentor);
-
-// ====== File upload endpoint ======
-app.post("/api/uploads", upload.single("file"), (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: "No file uploaded" });
-  }
-  const fileUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
-  res.json({ url: fileUrl, filename: req.file.filename });
-});
-
-// ====== Static uploads with proper Content-Type ======
-app.use("/uploads", (req, res, next) => {
-  const filePath = path.resolve(process.cwd(), "uploads", req.path);
-  const ext = path.extname(req.path).toLowerCase();
-  
-  // Set Content-Type based on extension
-  const mimeTypes = {
-    '.jpg': 'image/jpeg',
-    '.jpeg': 'image/jpeg',
-    '.png': 'image/png',
-    '.gif': 'image/gif',
-    '.webp': 'image/webp',
-    '.mp4': 'video/mp4',
-    '.webm': 'video/webm',
-    '.ogg': 'video/ogg',
-    '.mov': 'video/quicktime',
-    '.avi': 'video/x-msvideo',
-    '.wmv': 'video/x-ms-wmv',
-    '.flv': 'video/x-flv',
-    '.mkv': 'video/x-matroska',
-    '.pdf': 'application/pdf',
-    '.mp3': 'audio/mpeg',
-    '.wav': 'audio/wav',
-    '.ogg': 'audio/ogg',
-    '.m4a': 'audio/mp4'
-  };
-  
-  if (mimeTypes[ext]) {
-    res.setHeader('Content-Type', mimeTypes[ext]);
-  }
-  
-  // Use express.static to serve the file
-  express.static(path.resolve(process.cwd(), "uploads"))(req, res, next);
-});
+// NOTE: File uploads and static file serving have been migrated to File Service
+// Routes are now handled by API Gateway which proxies to File Service:
+// - /api/uploads -> File Service
+// - /uploads -> File Service
 
 // ====== Simple logger ======
 app.use((req, _res, next) => {

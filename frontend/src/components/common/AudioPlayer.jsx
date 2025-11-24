@@ -1,9 +1,12 @@
 // src/components/common/AudioPlayer.jsx
 import React, { useState, useRef, useEffect } from "react";
 import { FiPlay, FiPause } from "react-icons/fi";
+import { normalizeAudioUrl } from "../../utils/apiHelpers";
 import "../../styles/audio-player.css";
 
 export default function AudioPlayer({ src, duration = null }) {
+  // Normalize audio URL to ensure it works with proxy
+  const normalizedSrc = src ? normalizeAudioUrl(src) : null;
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [audioDuration, setAudioDuration] = useState(duration || 0);
@@ -11,7 +14,8 @@ export default function AudioPlayer({ src, duration = null }) {
   const [waveformData, setWaveformData] = useState([]);
 
   useEffect(() => {
-    if (audioRef.current) {
+    if (audioRef.current && normalizedSrc) {
+      audioRef.current.src = normalizedSrc;
       audioRef.current.addEventListener("loadedmetadata", () => {
         setAudioDuration(audioRef.current.duration || duration || 0);
       });
@@ -29,7 +33,7 @@ export default function AudioPlayer({ src, duration = null }) {
       const bars = Array.from({ length: 50 }, () => Math.random() * 60 + 20);
       setWaveformData(bars);
     }
-  }, [src, duration]);
+  }, [normalizedSrc, duration]);
 
   function togglePlay() {
     if (audioRef.current) {
@@ -51,7 +55,7 @@ export default function AudioPlayer({ src, duration = null }) {
 
   return (
     <div className="audio-player-custom">
-      <audio ref={audioRef} src={src} style={{ display: "none" }} />
+      <audio ref={audioRef} src={normalizedSrc} style={{ display: "none" }} />
       <button className="audio-play-btn" onClick={togglePlay}>
         {isPlaying ? <FiPause size={16} /> : <FiPlay size={16} />}
       </button>

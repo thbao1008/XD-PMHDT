@@ -1,6 +1,8 @@
 import express from "express";
 import multer from "multer";
 import path from "path";
+import fs from "fs";
+import { fileURLToPath } from "url";
 import { authGuard } from "../middleware/authGuard.js";
 import { adminGuard } from "../middleware/adminGuard.js";
 import pool from "../config/db.js";
@@ -53,10 +55,16 @@ import { findUserByIdentifier } from "../models/userModel.js";
 
 const router = express.Router();
 
+// Ensure uploads directory exists
+const uploadsDir = path.resolve(process.cwd(), "uploads");
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
 // Multer config for avatar upload
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, "uploads/");
+    cb(null, uploadsDir);
   },
   filename: function (req, file, cb) {
     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1E9);

@@ -7,6 +7,7 @@ import AudioPlayer from "../components/common/AudioPlayer";
 import Notifications from "../components/common/Notifications";
 import AdminCommunity from "../components/admin/AdminCommunity";
 import { getAuth } from "../utils/auth";
+import { normalizeFileUrl, normalizeVideoUrl, normalizeImageUrl, normalizeAudioUrl } from "../utils/apiHelpers";
 import "../styles/communicate.css";
 
 export default function CommunicateCenter() {
@@ -318,11 +319,14 @@ export default function CommunicateCenter() {
   function renderMedia(url) {
     if (!url) return null;
     
+    // Normalize URL to ensure it works with proxy
+    const normalizedUrl = normalizeFileUrl(url);
+    
     if (isVideoUrl(url)) {
       return (
         <div className="media-preview" style={{ marginTop: "12px" }}>
           <video 
-            src={url} 
+            src={normalizedUrl} 
             controls 
             style={{ 
               width: "100%", 
@@ -331,7 +335,7 @@ export default function CommunicateCenter() {
               display: "block"
             }}
             onError={(e) => {
-              console.error("Error loading video:", url);
+              console.error("Error loading video:", normalizedUrl);
               e.target.style.display = "none";
             }}
           />
@@ -341,7 +345,7 @@ export default function CommunicateCenter() {
       return (
         <div className="media-preview" style={{ marginTop: "12px" }}>
           <img 
-            src={url} 
+            src={normalizedUrl} 
             alt="Post media" 
             style={{ 
               width: "100%", 
@@ -351,9 +355,9 @@ export default function CommunicateCenter() {
               display: "block",
               cursor: "pointer"
             }} 
-            onClick={() => setSelectedMedia({ url, type: 'image' })}
+            onClick={() => setSelectedMedia({ url: normalizedUrl, type: 'image' })}
             onError={(e) => {
-              console.error("Error loading image:", url);
+              console.error("Error loading image:", normalizedUrl);
               e.target.style.display = "none";
             }}
           />
@@ -829,7 +833,7 @@ export default function CommunicateCenter() {
               <div className="post-content">
                 {post.content && <p>{post.content}</p>}
                 {post.audio_url && (
-                  <AudioPlayer src={post.audio_url} />
+                  <AudioPlayer src={normalizeAudioUrl(post.audio_url)} />
                 )}
                 {post.image_url && renderMedia(post.image_url)}
               </div>
@@ -899,7 +903,7 @@ export default function CommunicateCenter() {
                     </div>
                     <div className="comment-content">
                       {comment.content && <p>{comment.content}</p>}
-                      {comment.audio_url && <AudioPlayer src={comment.audio_url} />}
+                      {comment.audio_url && <AudioPlayer src={normalizeAudioUrl(comment.audio_url)} />}
                     </div>
                     <div className="comment-meta">
                       {new Date(comment.created_at).toLocaleDateString("vi-VN", {

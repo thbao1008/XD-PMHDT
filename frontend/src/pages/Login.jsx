@@ -38,8 +38,8 @@ export default function Login({ onLogin }) {
     setLoading(true);
     try {
       const result = await apiLogin(identifier.trim(), password);
-      const { token, user } = result.data || result;
-      if (!token || !user) throw new Error(result?.message || "Phản hồi đăng nhập không hợp lệ");
+      const { token, user } = result;
+      if (!token || !user) throw new Error("Phản hồi đăng nhập không hợp lệ");
 
       saveAuth({ token, user }, remember);
       onLogin?.(user);
@@ -52,7 +52,8 @@ export default function Login({ onLogin }) {
       else if (role === "mentor") navigate("/mentor", { replace: true });
       else navigate("/learn", { replace: true });
     } catch (err) {
-      setError(err?.response?.data?.message || err?.message || "Sai tài khoản hoặc mật khẩu");
+      console.error("Login error:", err);
+      setError(err?.message || "Sai tài khoản hoặc mật khẩu");
     } finally {
       setLoading(false);
     }

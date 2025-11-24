@@ -26,7 +26,12 @@ async function initS3() {
 
 // ensure local upload dir exists
 async function ensureLocalDir() {
-  await fs.mkdir(UPLOAD_DIR, { recursive: true });
+  try {
+    await fs.mkdir(UPLOAD_DIR, { recursive: true });
+  } catch (err) {
+    console.error("Error creating upload directory:", err);
+    throw err;
+  }
 }
 
 /* Upload file (multer file object expected) */

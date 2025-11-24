@@ -5,6 +5,7 @@ import SubmissionForm from "./SubmissionForm";
 import UserForPage from "../admin/UserForPage";
 import { FiClock, FiCheckCircle, FiXCircle, FiUserCheck, FiCpu } from "react-icons/fi";
 import "../../styles/challenge.css";
+import { normalizeAudioUrl } from "../../utils/apiHelpers.js";
 
 export default function ChallengeDetail({ id, learnerId, onClose = () => {} }) {
   const [challenge, setChallenge] = useState(null);
@@ -321,7 +322,7 @@ export default function ChallengeDetail({ id, learnerId, onClose = () => {} }) {
 
     return (
       <div className="conversation">
-        <audio ref={audioRef} id="player" src={audioUrl} controls className="audio-control" />
+        <audio ref={audioRef} id="player" src={normalizeAudioUrl(audioUrl)} controls className="audio-control" />
         <div className="conversation-toggle">
           <button
             className="btn-secondary"
@@ -458,7 +459,12 @@ export default function ChallengeDetail({ id, learnerId, onClose = () => {} }) {
     try {
       const res = await api.get(`/learners/submissions/${submissionId}`);
       const sub = res.data?.submission ?? res.data ?? null;
-      setSelectedSubmission(sub || { id: submissionId, audio_url, status: "pending_transcription" });
+      if (sub && sub.audio_url) {
+        // Normalize audio_url when setting submission
+        sub.audio_url = normalizeAudioUrl(sub.audio_url);
+        sub.audioUrl = sub.audio_url;
+      }
+      setSelectedSubmission(sub || { id: submissionId, audio_url: audio_url ? normalizeAudioUrl(audio_url) : null, status: "pending_transcription" });
     } catch (_) {
       setSelectedSubmission({ id: submissionId, audio_url, status: "pending_transcription" });
     } finally {
@@ -566,67 +572,73 @@ return (
                 <>
                   <div className="section">{renderConversationOnly(selectedSubmission)}</div>
 
-                  {canShowAnalysis && (
-                    <div className="section">
-                      <div className="section-title-inline"><FiCpu className="section-icon" /><strong>Đánh giá tự động</strong></div>
-                      <div className="score-grid">
-                        <div><span className="label">Tổng</span><div className="value">{selectedSubmission.overall_score ?? selectedSubmission.score ?? "—"}</div></div>
-                        <div><span className="label">Phát âm</span><div className="value">{selectedSubmission.pronunciation_score ?? "—"}</div></div>
-                        <div><span className="label">Trôi chảy</span><div className="value">{selectedSubmission.fluency_score ?? "—"}</div></div>
-                      </div>
+                  {canShowAnalysis && (() => {
+                    // Điểm AI từ DB là thang 100, hiển thị trực tiếp
+                    const aiPronScore = selectedSubmission?.pronunciation_score;
+                    const aiFluScore = selectedSubmission?.fluency_score;
+                    const aiOverallScore = selectedSubmission?.overall_score ?? selectedSubmission?.score;
+                    
+                    const normalizedAiPron = aiPronScore != null ? Number(aiPronScore).toFixed(1) : null;
+                    const normalizedAiFlu = aiFluScore != null ? Number(aiFluScore).toFixed(1) : null;
+                    const normalizedAiOverall = aiOverallScore != null ? Number(aiOverallScore).toFixed(1) : null;
+                    
+                    return (
+                      <div className="section">
+                        <div className="section-title-inline"><FiCpu className="section-icon" /><strong>Đánh giá tự động</strong></div>
+                        <div className="score-grid">
+                          <div><span className="label">Tổng</span><div className="value">{normalizedAiOverall ?? "—"}/100</div></div>
+                          <div><span className="label">Phát âm</span><div className="value">{normalizedAiPron ?? "—"}/100</div></div>
+                          <div><span className="label">Trôi chảy</span><div className="value">{normalizedAiFlu ?? "—"}/100</div></div>
+                        </div>
 
-                      {aiSummary && (
-                        <div className="ai-topic-box">
-                          <div className="label">Chủ đề</div>
-                          <div className="value">
-                            {aiSummary.topic ?? "—"}
-                            {typeof aiSummary.topicConfidence === "number" && (
-                              <span className="sub-note"> (tự tin: {aiSummary.topicConfidence.toFixed(2)})</span>
+                        {aiSummary && (
+                          <div className="ai-topic-box">
+                            <div className="label">Chủ đề</div>
+                            <div className="value">
+                              {aiSummary.topic ?? "—"}
+                              {typeof aiSummary.topicConfidence === "number" && (
+                                <span className="sub-note"> (tự tin: {aiSummary.topicConfidence.toFixed(2)})</span>
+                              )}
+                            </div>
+
+                            {aiSummary.alignment && (
+                              <div className="alignment-block">
+                                <div className="label">Phù hợp challenge</div>
+                                <div className="value">
+                                  Điểm: {aiSummary.alignment.score ?? "—"}
+                                  {Array.isArray(aiSummary.alignment.notes) && aiSummary.alignment.notes.length > 0 && (
+                                    <ul className="notes">
+                                      {aiSummary.alignment.notes.map((n, idx) => <li key={idx}>{n}</li>)}
+                                    </ul>
+                                  )}
+                                </div>
+                              </div>
                             )}
                           </div>
+                        )}
 
-                          {aiSummary.alignment && (
-                            <div className="alignment-block">
-                              <div className="label">Phù hợp challenge</div>
-                              <div className="value">
-                                Điểm: {aiSummary.alignment.score ?? "—"}
-                                {Array.isArray(aiSummary.alignment.notes) && aiSummary.alignment.notes.length > 0 && (
-                                  <ul className="notes">
-                                    {aiSummary.alignment.notes.map((n, idx) => <li key={idx}>{n}</li>)}
-                                  </ul>
-                                )}
-                              </div>
-                            </div>
-                          )}
+                        <div className="auto-feedback">
+                          <div className="label">Nhận xét tự động</div>
+                          <div className="value">{selectedSubmission.analysis?.feedback ?? selectedSubmission.suggestions ?? "—"}</div>
                         </div>
-                      )}
-
-                      <div className="auto-feedback">
-                        <div className="label">Nhận xét tự động</div>
-                        <div className="value">{selectedSubmission.analysis?.feedback ?? selectedSubmission.suggestions ?? "—"}</div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   <div className="section mentor-review">
                     <div className="section-title-inline"><FiUserCheck className="section-icon" /><strong>Nhận xét Mentor</strong></div>
                     {selectedSubmission.mentor_review ? (
                       <div className="text-sm">
                         <div className="score-grid">
-                          <div><span className="label">Điểm tổng</span><div className="value">{selectedSubmission.mentor_review.final_score ? (selectedSubmission.mentor_review.final_score / 10).toFixed(1) : "—"}/10</div></div>
-                          <div><span className="label">Phát âm</span><div className="value">{selectedSubmission.mentor_review.pronunciation_score ? (selectedSubmission.mentor_review.pronunciation_score / 10).toFixed(1) : "—"}/10</div></div>
-                          <div><span className="label">Trôi chảy</span><div className="value">{selectedSubmission.mentor_review.fluency_score ? (selectedSubmission.mentor_review.fluency_score / 10).toFixed(1) : "—"}/10</div></div>
+                          <div><span className="label">Điểm tổng</span><div className="value">{selectedSubmission.mentor_review.final_score ? Number(selectedSubmission.mentor_review.final_score).toFixed(1) : "—"}/100</div></div>
+                          <div><span className="label">Phát âm</span><div className="value">{selectedSubmission.mentor_review.pronunciation_score ? Number(selectedSubmission.mentor_review.pronunciation_score).toFixed(1) : "—"}/100</div></div>
+                          <div><span className="label">Trôi chảy</span><div className="value">{selectedSubmission.mentor_review.fluency_score ? Number(selectedSubmission.mentor_review.fluency_score).toFixed(1) : "—"}/100</div></div>
                         </div>
                         {(() => {
                           // Normalize audio_url - có thể là relative path hoặc full URL
                           let audioUrl = selectedSubmission.mentor_review.audio_url;
                           if (audioUrl) {
-                            // Nếu là relative path (bắt đầu với /uploads/), thêm base URL
-                            if (typeof audioUrl === "string" && audioUrl.startsWith("/uploads/")) {
-                              const baseURL = import.meta.env.VITE_API_BASE || "http://localhost:4002/api";
-                              const apiBase = baseURL.replace("/api", ""); // Remove /api để lấy base server URL
-                              audioUrl = `${apiBase}${audioUrl}`;
-                            }
+                            audioUrl = normalizeAudioUrl(audioUrl);
                             return (
                               <div style={{ marginTop: 12 }}>
                                 <div className="label">Audio nhận xét</div>
@@ -712,7 +724,7 @@ return (
 
                   {s.audio_url && (
                     <div className="result-audio">
-                      <audio controls src={s.audio_url} />
+                      <audio controls src={normalizeAudioUrl(s.audio_url)} />
                     </div>
                   )}
 

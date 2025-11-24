@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import api from "../../api";
 import { FaMicrophone } from "react-icons/fa";
 import "../../styles/speaking-scenario.css";
+import { normalizeAudioUrl } from "../../utils/apiHelpers.js";
 
 export default function SpeakingScenario({ sessionId, scenario, onComplete, onCancel }) {
   const [vocabulary, setVocabulary] = useState([]);
@@ -167,7 +168,7 @@ export default function SpeakingScenario({ sessionId, scenario, onComplete, onCa
   };
 
   const playAIAudio = (audioUrl) => {
-    const audio = new Audio(audioUrl.startsWith('http') ? audioUrl : `http://localhost:4002${audioUrl}`);
+    const audio = new Audio(normalizeAudioUrl(audioUrl));
     setIsPlayingAI(true);
     audio.onended = () => setIsPlayingAI(false);
     audio.onerror = () => {

@@ -359,29 +359,56 @@
     ========================= */
 
   export async function mentorCreateReport({ reporter_id, target_id, content, image_url, video_url }) {
-    // Check 24h constraint
-    const canReportRes = await pool.query(
-      `SELECT MAX(created_at) AS last_report_date
-       FROM reports
-       WHERE reporter_id = $1 AND target_id = $2`,
+    // Check if report already exists
+    const existingReport = await pool.query(
+      `SELECT id, status, created_at FROM reports
+       WHERE reporter_id = $1 AND target_id = $2
+       ORDER BY created_at DESC LIMIT 1`,
       [reporter_id, target_id]
     );
     
-    const lastDate = canReportRes.rows[0]?.last_report_date;
-    if (lastDate) {
-      const lastReportTime = new Date(lastDate).getTime();
-      const now = Date.now();
-      const hoursSince = (now - lastReportTime) / (1000 * 60 * 60);
-      if (hoursSince < 24) {
-        const hoursRemaining = Math.ceil(24 - hoursSince);
-        const error = new Error(`Bạn chỉ có thể report lại sau 24 giờ. Còn ${hoursRemaining} giờ nữa.`);
-        error.canReport = false;
-        error.hoursRemaining = hoursRemaining;
-        throw error;
+    // If report exists and status is 'pending' or 'rejected', allow update
+    if (existingReport.rows.length > 0) {
+      const existing = existingReport.rows[0];
+      
+      // If status is 'resolved' or 'dismissed', check 24h constraint
+      if (existing.status === 'resolved' || existing.status === 'dismissed') {
+        const lastReportTime = new Date(existing.created_at).getTime();
+        const now = Date.now();
+        const hoursSince = (now - lastReportTime) / (1000 * 60 * 60);
+        if (hoursSince < 24) {
+          const hoursRemaining = Math.ceil(24 - hoursSince);
+          const error = new Error(`Bạn chỉ có thể report lại sau 24 giờ. Còn ${hoursRemaining} giờ nữa.`);
+          error.canReport = false;
+          error.hoursRemaining = hoursRemaining;
+          throw error;
+        }
+      }
+      
+      // Update existing report (if pending or rejected, allow update)
+      try {
+        const result = await pool.query(
+          `UPDATE reports 
+           SET content = $1, status = 'pending', updated_at = NOW(), image_url = COALESCE($2, image_url), video_url = COALESCE($3, video_url)
+           WHERE id = $4 RETURNING *`,
+          [content, image_url || null, video_url || null, existing.id]
+        );
+        return result.rows[0];
+      } catch (err) {
+        if (err.code === "42703" || err.message.includes("image_url") || err.message.includes("video_url")) {
+          const result = await pool.query(
+            `UPDATE reports 
+             SET content = $1, status = 'pending', updated_at = NOW()
+             WHERE id = $2 RETURNING *`,
+            [content, existing.id]
+          );
+          return result.rows[0];
+        }
+        throw err;
       }
     }
     
-    // Try insert with image/video, fallback if columns don't exist
+    // Create new report if doesn't exist
     try {
       const result = await pool.query(
         `INSERT INTO reports (reporter_id, target_id, content, status, created_at, updated_at, image_url, video_url)
@@ -397,6 +424,22 @@
           [reporter_id, target_id, content]
         );
         return result.rows[0];
+      }
+      // If unique constraint violation, try to update instead
+      if (err.code === "23505") {
+        const existing = await pool.query(
+          `SELECT id FROM reports WHERE reporter_id = $1 AND target_id = $2 ORDER BY created_at DESC LIMIT 1`,
+          [reporter_id, target_id]
+        );
+        if (existing.rows.length > 0) {
+          const result = await pool.query(
+            `UPDATE reports 
+             SET content = $1, status = 'pending', updated_at = NOW(), image_url = COALESCE($2, image_url), video_url = COALESCE($3, video_url)
+             WHERE id = $4 RETURNING *`,
+            [content, image_url || null, video_url || null, existing.rows[0].id]
+          );
+          return result.rows[0];
+        }
       }
       throw err;
     }

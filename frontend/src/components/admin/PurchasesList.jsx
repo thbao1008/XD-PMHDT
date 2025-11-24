@@ -15,7 +15,8 @@ export default function PurchasesList({ learnerId }) {
       try {
         let res;
         if (learnerId) {
-          res = await api.get(`/admin/learners/${learnerId}/purchases`);
+          // Route đúng: /admin/purchases/:learnerId
+          res = await api.get(`/admin/purchases/${learnerId}`);
         } else {
           res = await api.get("/admin/purchases");
         }
@@ -135,7 +136,7 @@ export default function PurchasesList({ learnerId }) {
                       <button
                         className="btn-view"
                         onClick={() =>
-                          navigate(`/admin/learners/${p.learner_id}/purchases`)
+                          navigate(`/admin/purchases/${p.learner_id}`)
                         }
                       >
                         Xem

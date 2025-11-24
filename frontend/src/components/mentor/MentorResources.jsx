@@ -4,6 +4,7 @@ import "../../styles/resources.css";
 import api from "../../api";
 import Modal from "../common/Modal";
 import PDFPreview from "../common/PDFPreview";
+import { normalizeVideoUrl } from "../../utils/apiHelpers";
 import { FiFileText, FiVideo, FiPlus, FiX, FiEdit2, FiTrash2, FiEye, FiEyeOff } from "react-icons/fi";
 
 export default function MentorResources() {
@@ -189,7 +190,7 @@ export default function MentorResources() {
           ) : selectedResource.type === "video" ? (
             <div>
               <video 
-                src={selectedResource.file_url} 
+                src={normalizeVideoUrl(selectedResource.file_url)} 
                 controls 
                 width="100%" 
                 style={{ 
@@ -286,13 +287,15 @@ function ResourceModal({ mentorId, resource, onClose, onSuccess }) {
 
       if (resource) {
         // Update existing resource
+        // Don't set Content-Type - Axios interceptor will handle it automatically for FormData
         await api.put(`/mentors/resources/${resource.id}`, formData, {
-          headers: { "Content-Type": "multipart/form-data" }
+          timeout: 60000 // 60 seconds for large file uploads
         });
       } else {
         // Create new resource
+        // Don't set Content-Type - Axios interceptor will handle it automatically for FormData
         await api.post(`/mentors/${mentorId}/resources`, formData, {
-          headers: { "Content-Type": "multipart/form-data" }
+          timeout: 60000 // 60 seconds for large file uploads
         });
       }
       

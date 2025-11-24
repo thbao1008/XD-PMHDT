@@ -3,6 +3,7 @@ import { getAuth } from "../../utils/auth";
 import api from "../../api";
 import Modal from "../common/Modal";
 import PDFPreview from "../common/PDFPreview";
+import { normalizeVideoUrl } from "../../utils/apiHelpers";
 import "../../styles/catalog.css";
 import { FiFileText, FiVideo } from "react-icons/fi";
 
@@ -142,7 +143,7 @@ export default function LearningCatalog() {
           ) : selectedResource.type === "video" ? (
             <div>
               <video 
-                src={selectedResource.file_url} 
+                src={normalizeVideoUrl(selectedResource.file_url)} 
                 controls 
                 width="100%" 
                 style={{ 

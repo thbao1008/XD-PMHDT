@@ -70,6 +70,7 @@ export default function AppRoutes() {
         <Route path="users" element={<UsersList />} />
         <Route path="packages" element={<PackagesList />} />
         <Route path="purchases" element={<PurchasesList />} />
+        <Route path="purchases/:id" element={<PurchasesPage />} />
         <Route path="learners/:id/purchases" element={<PurchasesPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="support" element={<SupportTickets />} />

@@ -2,7 +2,7 @@
 import { getAuth } from "../../utils/auth";
 import Modal from "../common/Modal";
 import "../../styles/learnersofmentor.css";
-import api from "../../api";   // axios instance với baseURL http://localhost:4002/api
+import api from "../../api";   // axios instance với baseURL http://localhost:4000/api (API Gateway)
 
 export default function MentorLearners() {
   const auth = getAuth();
