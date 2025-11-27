@@ -266,3 +266,4 @@ docker exec aesp-db-1 psql -U postgres -d aesp -c "SELECT COUNT(*) FROM informat
 
 
 
+
