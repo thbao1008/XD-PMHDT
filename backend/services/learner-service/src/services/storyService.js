@@ -17,8 +17,22 @@ function getProjectRoot() {
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = path.dirname(__filename);
   // __dirname = backend/services/learner-service/src/services
-  // Đi lên 3 cấp: services -> src -> learner-service -> services -> backend
-  return path.resolve(__dirname, "..", "..", "..");
+  // Đi lên 4 cấp: services -> src -> learner-service -> services -> backend
+  // .. -> src
+  // .. -> learner-service
+  // .. -> services
+  // .. -> backend ✅
+  const backendDir = path.resolve(__dirname, "..", "..", "..", "..");
+  
+  // Debug: Log để đảm bảo path đúng
+  console.log("🔍 getProjectRoot() called from storyService.js:", {
+    __dirname: __dirname,
+    backendDir: backendDir,
+    uploadsDir: path.join(backendDir, "uploads"),
+    uploadsExists: fs.existsSync(path.join(backendDir, "uploads"))
+  });
+  
+  return backendDir;
 }
 
 /**
@@ -171,8 +185,18 @@ export async function processStoryMessage(sessionId, text, audioUrl) {
       ? path.join(backendDir, audioUrl)
       : audioUrl;
 
+    console.log("🎤 Starting transcription:", {
+      audioUrl: audioUrl,
+      backendDir: backendDir,
+      localPath: localPath,
+      fileExists: fs.existsSync(localPath),
+      fileSize: fs.existsSync(localPath) ? fs.statSync(localPath).size : 0,
+      audioUrlStartsWithUploads: audioUrl.startsWith("/uploads/")
+    });
+
     if (fs.existsSync(localPath)) {
       try {
+        console.log("🔄 Running WhisperX transcription...");
         const { json: transcriptJson } = await runWhisperX(localPath, {
           model: "base",
           computeType: "float32"
@@ -183,10 +207,25 @@ export async function processStoryMessage(sessionId, text, audioUrl) {
           (transcript.segments || [])
             .map((s) => s.text || "")
             .join(" ");
+        
+        console.log("✅ Transcription completed:", {
+          hasTranscript: !!transcript,
+          transcriptText: transcriptText?.substring(0, 100) || "empty",
+          transcriptLength: transcriptText?.length || 0,
+          segmentsCount: transcript?.segments?.length || 0
+        });
       } catch (err) {
         console.error("❌ Story transcription error:", err);
+        console.error("❌ Transcription error details:", {
+          message: err.message,
+          stack: err.stack
+        });
       }
+    } else {
+      console.error("❌ Audio file not found at path:", localPath);
     }
+  } else {
+    console.log("⚠️ No audioUrl provided, skipping transcription");
   }
 
   const userMessage = text || transcriptText;
@@ -216,10 +255,19 @@ export async function processStoryMessage(sessionId, text, audioUrl) {
   const aiResponse = await generateStoryResponse(userMessage, history.rows.reverse(), userInfo);
 
   // Lưu user message - đảm bảo tất cả giá trị null là thực sự null, không phải string "null"
-  await pool.query(
+  console.log("💾 Saving user message to database:", {
+    sessionId,
+    hasText: !!text,
+    hasAudioUrl: !!audioUrl,
+    audioUrl: audioUrl,
+    hasTranscript: !!transcript
+  });
+
+  const insertResult = await pool.query(
     `INSERT INTO story_conversations 
      (session_id, message_type, text_content, audio_url, transcript, ai_response)
-     VALUES ($1, 'user', $2, $3, $4, $5)`,
+     VALUES ($1, 'user', $2, $3, $4, $5)
+     RETURNING id, audio_url, transcript`,
     [
       sessionId, // Integer
       text && text !== "null" ? text : null,
@@ -228,6 +276,31 @@ export async function processStoryMessage(sessionId, text, audioUrl) {
       null // User message không có ai_response
     ]
   );
+
+  const savedMessage = insertResult.rows[0];
+  
+  // PostgreSQL JSONB có thể trả về object hoặc string, cần xử lý cả 2 trường hợp
+  let transcriptObj = null;
+  if (savedMessage.transcript) {
+    if (typeof savedMessage.transcript === 'string') {
+      try {
+        transcriptObj = JSON.parse(savedMessage.transcript);
+      } catch (e) {
+        console.warn("⚠️ Failed to parse transcript string:", e);
+        transcriptObj = null;
+      }
+    } else if (typeof savedMessage.transcript === 'object') {
+      transcriptObj = savedMessage.transcript; // Đã là object rồi
+    }
+  }
+  
+  console.log("✅ User message saved to database:", {
+    messageId: savedMessage.id,
+    audioUrl: savedMessage.audio_url,
+    hasTranscript: !!savedMessage.transcript,
+    transcriptType: typeof savedMessage.transcript,
+    transcriptLength: transcriptObj?.text?.length || 0
+  });
   
   // Lưu AI response như một message riêng
   if (aiResponse) {

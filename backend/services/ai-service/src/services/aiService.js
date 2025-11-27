@@ -5,13 +5,24 @@ import fs from "fs";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 
-// Load .env from project root
+// Load .env from backend/ai_models/.env
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-// Go up from ai-service/src/services to project root
-const projectRoot = path.resolve(__dirname, "..", "..", "..", "..");
-const envPath = path.resolve(projectRoot, ".env");
-dotenv.config({ path: envPath });
+// Go up from ai-service/src/services to backend root
+const backendRoot = path.resolve(__dirname, "..", "..", "..", "..");
+// Try backend/ai_models/.env first, then fallback to backend/.env
+const envPath1 = path.resolve(backendRoot, "ai_models", ".env");
+const envPath2 = path.resolve(backendRoot, ".env");
+if (fs.existsSync(envPath1)) {
+  dotenv.config({ path: envPath1 });
+  console.log(`✅ Loaded .env from: ${envPath1}`);
+} else if (fs.existsSync(envPath2)) {
+  dotenv.config({ path: envPath2 });
+  console.log(`✅ Loaded .env from: ${envPath2}`);
+} else {
+  console.warn(`⚠️ .env file not found at ${envPath1} or ${envPath2}`);
+  dotenv.config(); // Try default locations
+}
 
 const OR_BASE = process.env.OPENROUTER_API_BASE || "https://openrouter.ai/api/v1";
 const OR_KEY = process.env.OPENROUTER_API_KEY;
@@ -35,11 +46,138 @@ async function getFetch() {
 }
 
 /**
- * callOpenRouter - generic wrapper to call OpenRouter-like chat completions
+ * callAiESP - Call AiESP Python script for AI responses
  * messages: [{role, content}, ...]
- * opts: {temperature, max_tokens}
+ * opts: {task_type, temperature, max_tokens}
+ */
+export async function callAiESP(messages, opts = {}) {
+  const { spawn } = await import("child_process");
+  const path = await import("path");
+  const { fileURLToPath } = await import("url");
+  
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  const backendDir = path.resolve(__dirname, "..", "..", "..", "..");
+  const assistantPath = path.resolve(backendDir, "ai_models", "assistantAI.py");
+  
+  // Determine task type from system prompt or default
+  const systemMessage = messages.find(m => m.role === "system");
+  let taskType = opts.task_type || "conversation_ai";
+  
+  // Auto-detect task type from system prompt
+  if (systemMessage?.content) {
+    if (systemMessage.content.includes("speech") || systemMessage.content.includes("pronunciation")) {
+      taskType = "speaking_practice";
+    } else if (systemMessage.content.includes("alignment") || systemMessage.content.includes("challenge")) {
+      taskType = "speaking_practice";
+    }
+  }
+  
+  return new Promise((resolve, reject) => {
+    try {
+      // Convert messages to input format for AiESP
+      const lastMessage = messages[messages.length - 1];
+      const userMessage = lastMessage?.content || "";
+      const history = messages.slice(0, -1).map(m => ({
+        role: m.role,
+        content: m.content
+      }));
+      
+      const inputData = {
+        user_message: userMessage,
+        history: history,
+        system_prompt: systemMessage?.content || "",
+        full_messages: messages // Pass full messages for complex tasks
+      };
+      
+      const pythonProcess = spawn('python', [assistantPath, 'conversation', taskType], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        shell: true,
+        env: {
+          ...process.env,
+          PYTHONIOENCODING: 'utf-8'
+        }
+      });
+      
+      let stdout = '';
+      let stderr = '';
+      
+      pythonProcess.stdout.on('data', (data) => {
+        stdout += data.toString();
+      });
+      
+      pythonProcess.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+      
+      pythonProcess.on('close', (code) => {
+        if (code !== 0) {
+          reject(new Error(`AiESP error: ${stderr || 'Unknown error'}`));
+          return;
+        }
+        
+        try {
+          // AiESP returns JSON string or plain text
+          const response = stdout.trim();
+          
+          // Try to parse as JSON first (for structured responses)
+          let parsedResponse;
+          try {
+            parsedResponse = JSON.parse(response);
+          } catch {
+            // If not JSON, use as plain text
+            parsedResponse = response;
+          }
+          
+          // Format as OpenRouter-like response
+          resolve({
+            choices: [{
+              message: {
+                role: "assistant",
+                content: typeof parsedResponse === 'string' ? parsedResponse : JSON.stringify(parsedResponse)
+              }
+            }]
+          });
+        } catch (err) {
+          reject(new Error(`AiESP parse error: ${err.message}`));
+        }
+      });
+      
+      pythonProcess.on('error', (err) => {
+        reject(new Error(`AiESP spawn error: ${err.message}`));
+      });
+      
+      // Send input data
+      pythonProcess.stdin.write(JSON.stringify(inputData));
+      pythonProcess.stdin.end();
+      
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+/**
+ * callOpenRouter - generic wrapper to call OpenRouter-like chat completions
+ * Mặc định dùng OpenRouter, có thể dùng AiESP cho training (use_aiesp: true)
+ * messages: [{role, content}, ...]
+ * opts: {temperature, max_tokens, task_type, use_aiesp}
  */
 export async function callOpenRouter(messages, opts = {}) {
+  // Chỉ dùng AiESP nếu explicitly yêu cầu (cho training)
+  const useAiESP = opts.use_aiesp === true;
+  
+  if (useAiESP) {
+    try {
+      const result = await callAiESP(messages, opts);
+      return result;
+    } catch (err) {
+      console.warn(`⚠️ AiESP failed, falling back to OpenRouter: ${err.message}`);
+      // Fall through to OpenRouter
+    }
+  }
+  
+  // Mặc định dùng OpenRouter
   if (!OR_KEY) {
     const err = new Error("AI provider not configured (OPENROUTER_API_KEY missing)");
     err.status = 503;

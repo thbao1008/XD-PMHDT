@@ -15,19 +15,14 @@ Nếu có file `.env.local` hoặc `.env.docker`, copy vào `backend/services/`:
 
 ### 3. Start All Services
 
-**Cách 1: Simple (khuyến nghị - hiển thị lỗi rõ ràng)**
+**Cách 1: Từ root (khuyến nghị)**
 ```bash
-node start-simple.js
+npm run dev:be:micro
 ```
 
-**Cách 2: Standard**
+**Cách 2: Từ backend/services**
 ```bash
 node start-all-services.js
-```
-
-**Cách 3: PowerShell**
-```powershell
-.\start-all-services.ps1
 ```
 
 ### 4. Check Health
@@ -59,9 +54,10 @@ node check-health.js
 3. Xem logs của từng service để biết lỗi
 
 ### Test từng service
-```powershell
-.\test-service-start.ps1 [service-name]
-# Ví dụ: .\test-service-start.ps1 mentor
+```bash
+cd [service-name]
+npm run dev
+# Ví dụ: cd mentor-service && npm run dev
 ```
 
 ## 📝 Notes

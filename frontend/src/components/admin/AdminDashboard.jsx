@@ -63,9 +63,19 @@ export default function Dashboard() {
   const [activity, setActivity] = useState([]);
   const [aiProgress, setAiProgress] = useState({
     trainingSamples: 0,
-    aiReports: 0,
+    newSamples: 0,
+    totalModels: 0,
     accuracy: null,
-    status: 'initializing'
+    status: 'initializing',
+    taskTypes: {},
+    tokenUsage: {
+      used: 0,
+      usedToday: 0,
+      usedThisMonth: 0,
+      limit: 1000000,
+      percentage: 0,
+      status: 'ok'
+    }
   });
   const [chartData, setChartData] = useState({
     revenue6Months: [],
@@ -91,7 +101,6 @@ export default function Dashboard() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [aiEvaluation, setAiEvaluation] = useState(null);
 
   useEffect(() => {
     loadAllData();
@@ -121,7 +130,7 @@ export default function Dashboard() {
         setActivity(activityRes.data.activity || []);
       }
 
-      // Load AI progress
+      // Load AiESP learning progress
       const aiRes = await api.get("/admin/dashboard/ai-progress");
       if (aiRes.data?.success && aiRes.data.progress) {
         setAiProgress(aiRes.data.progress);
@@ -131,12 +140,6 @@ export default function Dashboard() {
       const chartRes = await api.get(`/admin/dashboard/charts?revenue=${timeframe.revenue}&users=${timeframe.users}&traffic=${timeframe.traffic}&daily=${timeframe.daily}&revenueOffset=${periodOffset.revenue}&usersOffset=${periodOffset.users}&trafficOffset=${periodOffset.traffic}&dailyOffset=${periodOffset.daily}`);
       if (chartRes.data?.success && chartRes.data.chartData) {
         setChartData(chartRes.data.chartData);
-      }
-
-      // Load AI evaluation
-      const evalRes = await api.get("/admin/dashboard/ai-evaluation");
-      if (evalRes.data?.success && evalRes.data.analysis) {
-        setAiEvaluation(evalRes.data);
       }
       } catch (err) {
       console.error("❌ Lỗi load dashboard data:", err);
@@ -1141,12 +1144,12 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* AI Progress - Hiển thị công suất và hoạt động */}
+        {/* AiESP Learning Progress */}
         <div className="dashboard-card ai-card">
           <div className="card-header">
             <h3>
               <FaRobot />
-              Tiến trình AI & Công suất
+              Tiến trình AiESP Học Tập
             </h3>
           </div>
           <div className="ai-stats">
@@ -1156,9 +1159,16 @@ export default function Dashboard() {
               <div className="ai-desc">Mẫu đã huấn luyện</div>
             </div>
             <div className="ai-item">
-              <div className="ai-label">AI Reports</div>
-              <div className="ai-value">{aiProgress.aiReports.toLocaleString()}</div>
-              <div className="ai-desc">Báo cáo đã tạo</div>
+              <div className="ai-label">New Samples</div>
+              <div className="ai-value" style={{ color: aiProgress.newSamples > 0 ? '#f59e0b' : '#6b7280' }}>
+                {aiProgress.newSamples.toLocaleString()}
+              </div>
+              <div className="ai-desc">Mẫu mới chưa train</div>
+            </div>
+            <div className="ai-item">
+              <div className="ai-label">Models</div>
+              <div className="ai-value">{aiProgress.totalModels}</div>
+              <div className="ai-desc">Số mô hình đã train</div>
             </div>
             {aiProgress.accuracy !== null && (
               <div className="ai-item">
@@ -1166,18 +1176,9 @@ export default function Dashboard() {
                 <div className="ai-value" style={{ color: getAIStatusColor(aiProgress.status) }}>
                   {(aiProgress.accuracy * 100).toFixed(1)}%
                 </div>
-                <div className="ai-desc">Hiệu suất mô hình</div>
+                <div className="ai-desc">Hiệu suất trung bình</div>
               </div>
             )}
-            <div className="ai-item">
-              <div className="ai-label">Công suất</div>
-              <div className="ai-value" style={{ color: getAIStatusColor(aiProgress.status) }}>
-                {aiProgress.trainingSamples > 0 && aiProgress.aiReports > 0 
-                  ? ((aiProgress.aiReports / aiProgress.trainingSamples) * 100).toFixed(1)
-                  : '0'}%
-              </div>
-              <div className="ai-desc">Tỷ lệ sử dụng</div>
-            </div>
             <div className="ai-status">
               <span 
                 className="status-badge"
@@ -1191,237 +1192,134 @@ export default function Dashboard() {
             </div>
           </div>
           
-          {/* Thêm thông tin bổ sung về AI */}
+          {/* Task Types Breakdown */}
+          {aiProgress.taskTypes && Object.keys(aiProgress.taskTypes).length > 0 && (
           <div style={{ 
             marginTop: "20px", 
             paddingTop: "20px", 
             borderTop: "1px solid #e5e7eb" 
           }}>
-            {/* Breakdown theo loại AI */}
-            <div style={{ marginBottom: "16px" }}>
               <div style={{ fontSize: "13px", color: "#6b7280", marginBottom: "12px", fontWeight: "500" }}>
-                Các mô hình AI đang hoạt động
+                Các Task Types
         </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-                <div style={{ 
+                {Object.entries(aiProgress.taskTypes).map(([taskType, stats]) => (
+                  <div key={taskType} style={{ 
                   padding: "10px", 
-                  background: "#f0fdf4", 
+                    background: stats.latestAccuracy && stats.latestAccuracy >= 0.85 ? "#f0fdf4" : stats.latestAccuracy && stats.latestAccuracy >= 0.70 ? "#fef3c7" : "#fee2e2", 
                   borderRadius: "6px",
-                  border: "1px solid #bbf7d0"
+                    border: `1px solid ${stats.latestAccuracy && stats.latestAccuracy >= 0.85 ? "#bbf7d0" : stats.latestAccuracy && stats.latestAccuracy >= 0.70 ? "#fde68a" : "#fecaca"}`
                 }}>
-                  <div style={{ fontSize: "11px", color: "#166534", marginBottom: "4px" }}>
-                    Challenge AI
+                    <div style={{ fontSize: "11px", color: "#6b7280", marginBottom: "4px" }}>
+                      {taskType.replace('_', ' ').toUpperCase()}
                   </div>
-                  <div style={{ fontSize: "14px", fontWeight: "600", color: "#15803d" }}>
-                    {aiProgress.aiReports > 0 ? "Hoạt động" : "Chưa có dữ liệu"}
+                    <div style={{ fontSize: "14px", fontWeight: "600", color: "#1f2937" }}>
+                      {stats.latestAccuracy ? `${(stats.latestAccuracy * 100).toFixed(1)}%` : "Chưa train"}
+                  </div>
+                    <div style={{ fontSize: "10px", color: "#9ca3af", marginTop: "2px" }}>
+                      {stats.trainingSamples} samples
+                </div>
+                  </div>
+                ))}
                   </div>
                 </div>
-                <div style={{ 
-                  padding: "10px", 
-                  background: "#f0f9ff", 
-                  borderRadius: "6px",
-                  border: "1px solid #bae6fd"
-                }}>
-                  <div style={{ fontSize: "11px", color: "#1e40af", marginBottom: "4px" }}>
-                    Conversation AI
+          )}
                   </div>
-                  <div style={{ fontSize: "14px", fontWeight: "600", color: "#2563eb" }}>
-                    {stats.totalChallenges > 0 ? "Hoạt động" : "Chưa có dữ liệu"}
+
+        {/* Token Usage */}
+        <div className="dashboard-card ai-card">
+          <div className="card-header">
+            <h3>
+              <FaChartLine />
+              Token Usage (OpenRouter)
+            </h3>
                   </div>
+          <div className="ai-stats">
+            <div className="ai-item">
+              <div className="ai-label">Used (Total)</div>
+              <div className="ai-value" style={{ 
+                color: aiProgress.tokenUsage?.status === 'warning' ? '#ef4444' : 
+                       aiProgress.tokenUsage?.status === 'caution' ? '#f59e0b' : '#10b981'
+              }}>
+                {aiProgress.tokenUsage?.used.toLocaleString() || 0}
+                  </div>
+              <div className="ai-desc">Tokens đã sử dụng</div>
+                  </div>
+            <div className="ai-item">
+              <div className="ai-label">Used (Today)</div>
+              <div className="ai-value">{aiProgress.tokenUsage?.usedToday.toLocaleString() || 0}</div>
+              <div className="ai-desc">Tokens hôm nay</div>
                 </div>
-                <div style={{ 
-                  padding: "10px", 
-                  background: "#fef3c7", 
-                  borderRadius: "6px",
-                  border: "1px solid #fde68a"
-                }}>
-                  <div style={{ fontSize: "11px", color: "#92400e", marginBottom: "4px" }}>
-                    Assessment AI
-                  </div>
-                  <div style={{ fontSize: "14px", fontWeight: "600", color: "#b45309" }}>
-                    {aiProgress.trainingSamples > 0 ? "Đang học" : "Chưa khởi tạo"}
-                  </div>
-                </div>
-                <div style={{ 
-                  padding: "10px", 
-                  background: "#fce7f3", 
-                  borderRadius: "6px",
-                  border: "1px solid #fbcfe8"
-                }}>
-                  <div style={{ fontSize: "11px", color: "#9f1239", marginBottom: "4px" }}>
-                    Evaluation AI
-                  </div>
-                  <div style={{ fontSize: "14px", fontWeight: "600", color: "#be185d" }}>
-                    {aiEvaluation ? "Hoạt động" : "Chưa có dữ liệu"}
-                  </div>
-                </div>
+            <div className="ai-item">
+              <div className="ai-label">Used (This Month)</div>
+              <div className="ai-value">{aiProgress.tokenUsage?.usedThisMonth.toLocaleString() || 0}</div>
+              <div className="ai-desc">Tokens tháng này</div>
+            </div>
+            <div className="ai-item">
+              <div className="ai-label">Limit</div>
+              <div className="ai-value">{aiProgress.tokenUsage?.limit.toLocaleString() || 'N/A'}</div>
+              <div className="ai-desc">Giới hạn tokens</div>
               </div>
             </div>
             
-            {/* Performance bar */}
-            <div style={{ marginBottom: "16px" }}>
+          {/* Token Usage Progress Bar */}
+          <div style={{ 
+            marginTop: "20px", 
+            paddingTop: "20px", 
+            borderTop: "1px solid #e5e7eb" 
+          }}>
               <div style={{ fontSize: "13px", color: "#6b7280", marginBottom: "8px", fontWeight: "500" }}>
-                Hiệu suất AI
+              Token Usage: {aiProgress.tokenUsage?.percentage.toFixed(1) || 0}%
               </div>
               <div style={{ 
-                height: "8px", 
+              height: "12px", 
                 background: "#e5e7eb", 
-                borderRadius: "4px",
+              borderRadius: "6px",
                 overflow: "hidden"
               }}>
                 <div style={{
                   height: "100%",
-                  width: `${aiProgress.trainingSamples > 0 
-                    ? Math.min((aiProgress.aiReports / Math.max(aiProgress.trainingSamples, 1)) * 100, 100)
-                    : 0}%`,
-                  background: aiProgress.trainingSamples > 0 && aiProgress.aiReports > 0
-                    ? "linear-gradient(90deg, #10b981, #34d399)"
-                    : "#9ca3af",
+                width: `${Math.min(aiProgress.tokenUsage?.percentage || 0, 100)}%`,
+                background: aiProgress.tokenUsage?.status === 'warning' 
+                  ? "linear-gradient(90deg, #ef4444, #dc2626)"
+                  : aiProgress.tokenUsage?.status === 'caution'
+                  ? "linear-gradient(90deg, #f59e0b, #d97706)"
+                  : "linear-gradient(90deg, #10b981, #059669)",
                   transition: "width 0.3s",
-                  borderRadius: "4px"
+                borderRadius: "6px"
                 }}></div>
               </div>
               <div style={{ fontSize: "11px", color: "#6b7280", marginTop: "4px" }}>
-                {aiProgress.trainingSamples > 0 
-                  ? `${aiProgress.aiReports} báo cáo từ ${aiProgress.trainingSamples} mẫu`
-                  : "Chưa có dữ liệu training"}
+              {aiProgress.tokenUsage?.used.toLocaleString() || 0} / {aiProgress.tokenUsage?.limit.toLocaleString() || 'N/A'} tokens
               </div>
-            </div>
-            
-            {/* Tips và insights */}
+            {aiProgress.tokenUsage?.status === 'warning' && (
             <div style={{ 
-              padding: "12px", 
-              background: "#fef3c7", 
-              borderRadius: "8px",
-              border: "1px solid #fde68a"
+                padding: "8px", 
+                background: "#fee2e2", 
+                borderRadius: "6px",
+                border: "1px solid #fecaca",
+                marginTop: "8px"
             }}>
-              <div style={{ fontSize: "12px", color: "#92400e", fontWeight: "500", marginBottom: "6px" }}>
-                💡 Gợi ý cải thiện AI
+                <div style={{ fontSize: "11px", color: "#dc2626" }}>
+                  ⚠️ Token usage đã vượt quá 90% giới hạn. Vui lòng kiểm tra và điều chỉnh.
               </div>
-              <div style={{ fontSize: "11px", color: "#b45309", lineHeight: "1.5" }}>
-                {aiProgress.trainingSamples < 10 
-                  ? "Tăng số lượng training samples để cải thiện độ chính xác của AI"
-                  : aiProgress.aiReports < aiProgress.trainingSamples
-                  ? "AI đang hoạt động tốt. Tiếp tục thu thập dữ liệu để cải thiện"
-                  : "AI đang hoạt động hiệu quả! Xem xét mở rộng tính năng AI"}
               </div>
-            </div>
-          </div>
-        </div>
-
-        {/* AI System Evaluation & Suggestions */}
-        {aiEvaluation && aiEvaluation.analysis && (
-          <div className="dashboard-card ai-evaluation-card">
-            <div className="card-header">
-              <h3>
-                <FaRobot />
-                Đánh giá Hệ thống & Gợi ý
-              </h3>
-              <span 
-                className="status-badge"
-                style={{ 
-                  background: getAIStatusColor(aiEvaluation.analysis.overallStatus) + "20",
-                  color: getAIStatusColor(aiEvaluation.analysis.overallStatus)
-                }}
-              >
-                {aiEvaluation.analysis.overallScore.toFixed(0)}/100
-              </span>
-            </div>
-            <div className="evaluation-content">
-              <div className="evaluation-overall">
-                <div className="evaluation-message">
-                  <strong>{aiEvaluation.analysis.overallMessage}</strong>
-                </div>
-                <div className="evaluation-score">
-                  <div className="score-circle" style={{
-                    background: `conic-gradient(${getAIStatusColor(aiEvaluation.analysis.overallStatus)} ${aiEvaluation.analysis.overallScore * 3.6}deg, #e5e7eb ${aiEvaluation.analysis.overallScore * 3.6}deg)`
-                  }}>
-                    <div className="score-inner">
-                      <span className="score-value">{aiEvaluation.analysis.overallScore.toFixed(0)}</span>
-                      <span className="score-label">/100</span>
+            )}
+            {aiProgress.tokenUsage?.status === 'caution' && (
+              <div style={{ 
+                padding: "8px", 
+                background: "#fef3c7", 
+                borderRadius: "6px",
+                border: "1px solid #fde68a",
+                marginTop: "8px"
+              }}>
+                <div style={{ fontSize: "11px", color: "#b45309" }}>
+                  ⚠️ Token usage đã vượt quá 70% giới hạn. Cần theo dõi.
                     </div>
-                  </div>
-                </div>
-              </div>
-
-              {aiEvaluation.analysis.strengths && aiEvaluation.analysis.strengths.length > 0 && (
-                <div className="evaluation-section strengths">
-                  <h4 style={{ color: '#10b981', marginBottom: '12px' }}>
-                    <FaUserCheck style={{ marginRight: '8px' }} />
-                    Điểm mạnh
-                  </h4>
-                  <ul>
-                    {aiEvaluation.analysis.strengths.map((strength, idx) => (
-                      <li key={idx} style={{ color: '#059669', marginBottom: '8px' }}>
-                        ✓ {strength}
-                      </li>
-                    ))}
-                  </ul>
                 </div>
               )}
-
-              {aiEvaluation.analysis.issues && aiEvaluation.analysis.issues.length > 0 && (
-                <div className="evaluation-section issues">
-                  <h4 style={{ color: '#ef4444', marginBottom: '12px' }}>
-                    <FaEye style={{ marginRight: '8px' }} />
-                    Vấn đề cần chú ý
-                  </h4>
-                  <ul>
-                    {aiEvaluation.analysis.issues.map((issue, idx) => (
-                      <li key={idx} style={{ color: '#dc2626', marginBottom: '8px' }}>
-                        ⚠ {issue}
-                      </li>
-                    ))}
-                  </ul>
                 </div>
-              )}
-
-              {aiEvaluation.analysis.suggestions && aiEvaluation.analysis.suggestions.length > 0 && (
-                <div className="evaluation-section suggestions">
-                  <h4 style={{ color: '#3b82f6', marginBottom: '12px' }}>
-                    <FaChartLine style={{ marginRight: '8px' }} />
-                    Gợi ý cải tiến
-                  </h4>
-                  <ul>
-                    {aiEvaluation.analysis.suggestions.map((suggestion, idx) => (
-                      <li key={idx} style={{ color: '#2563eb', marginBottom: '10px', paddingLeft: '8px' }}>
-                        💡 {suggestion}
-                      </li>
-                    ))}
-                  </ul>
                 </div>
-              )}
-
-              <div className="evaluation-categories">
-                <h4 style={{ marginBottom: '12px', fontSize: '14px', fontWeight: '600' }}>Đánh giá theo danh mục:</h4>
-                <div className="categories-grid">
-                  {Object.entries(aiEvaluation.analysis.categories || {}).map(([key, category]) => (
-                    <div key={key} className="category-item">
-                      <div className="category-name">
-                        {key === 'userGrowth' ? 'Tăng trưởng người dùng' :
-                         key === 'performance' ? 'Hiệu suất học tập' :
-                         key === 'engagement' ? 'Tương tác' :
-                         key === 'revenue' ? 'Doanh thu' : key}
-                      </div>
-                      <div className="category-score">
-                        <div className="score-bar">
-                          <div 
-                            className="score-fill" 
-                            style={{ 
-                              width: `${category.score}%`,
-                              background: category.score >= 60 ? '#10b981' : category.score >= 40 ? '#f59e0b' : '#ef4444'
-                            }}
-                          ></div>
-                        </div>
-                        <span className="score-text">{category.score}/100</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Charts Section - Professional Analytics Dashboard */}

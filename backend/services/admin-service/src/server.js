@@ -28,25 +28,30 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Seed admins on startup
+// Seed admins on startup (non-blocking - don't exit on error)
+// Admin service should start even if seed fails (table might not exist yet)
 seedAdmins()
   .then(() => {
-    app.listen(PORT, () => {
-      console.log(`👑 Admin Service running on port ${PORT}`);
-      console.log(`✅ Health check: http://localhost:${PORT}/health`);
-    }).on("error", (err) => {
-      if (err.code === "EADDRINUSE") {
-        console.error(`❌ Port ${PORT} is already in use!`);
-      } else {
-        console.error(`❌ Error starting Admin Service:`, err);
-      }
-      process.exit(1);
-    });
+    console.log("✅ Admin seed completed");
   })
   .catch((err) => {
-    console.error("❌ Seed admin error:", err);
-    process.exit(1);
+    console.error("⚠️  Seed admin error (service will continue):", err.message);
+    // Don't exit - service should start anyway
+    // User can run seed manually later: docker-compose run --rm seed
   });
+
+// Start server regardless of seed result
+app.listen(PORT, () => {
+  console.log(`👑 Admin Service running on port ${PORT}`);
+  console.log(`✅ Health check: http://localhost:${PORT}/health`);
+}).on("error", (err) => {
+  if (err.code === "EADDRINUSE") {
+    console.error(`❌ Port ${PORT} is already in use!`);
+  } else {
+    console.error(`❌ Error starting Admin Service:`, err);
+  }
+  process.exit(1);
+});
 
 process.on("uncaughtException", (err) => {
   console.error("❌ Uncaught Exception:", err);

@@ -5,7 +5,7 @@ import { FaMicrophone, FaRedo } from "react-icons/fa";
 import "../../styles/tell-me-story.css";
 
 // Component tooltip thông minh với tự động điều chỉnh vị trí
-const WordTooltipWrapper = ({ word, cleanWord, isOpen, tooltip, loading, onWordClick, onClose }) => {
+const WordTooltipWrapper = ({ word, cleanWord, isOpen, tooltip, loading, onWordClick, onClose, micButtonRef }) => {
   const wordRef = useRef(null);
   const tooltipRef = useRef(null);
   const [tooltipPosition, setTooltipPosition] = useState('top'); // 'top' or 'bottom'
@@ -23,7 +23,7 @@ const WordTooltipWrapper = ({ word, cleanWord, isOpen, tooltip, loading, onWordC
           const padding = 20;
           
           // Tìm mic button để đặt tooltip gần đó
-          const micButton = micButtonRef.current || 
+          const micButton = (micButtonRef && micButtonRef.current) || 
                            document.querySelector('.story-input button') ||
                            document.querySelector('button[style*="borderRadius"]');
           
@@ -301,6 +301,7 @@ export default function TellMeYourStory({ onBack }) {
   };
 
   // Text-to-Speech cho AI response với giọng đã chọn
+  // Sử dụng CSM (Sesame AI) cho giọng native, FPT.AI cho giọng asian, fallback về browser TTS
   const speakText = async (text, messageId, overrideVoiceType = null, overrideVoiceOrigin = null) => {
     // Dừng bất kỳ phát âm nào đang chạy
     window.speechSynthesis.cancel();
@@ -310,48 +311,66 @@ export default function TellMeYourStory({ onBack }) {
     const currentVoiceType = overrideVoiceType !== null ? overrideVoiceType : voiceType;
     const currentVoiceOrigin = overrideVoiceOrigin !== null ? overrideVoiceOrigin : voiceOrigin;
     
-    // Nếu là giọng Việt Nam (cả nam và nữ), dùng FPT.AI TTS
-    if (currentVoiceOrigin === 'asian') {
-      try {
-        const response = await api.post('/learners/tts/generate', {
-          text: text,
-          voiceType: currentVoiceType,
-          voiceOrigin: currentVoiceOrigin,
-          region: 'north' // Luôn dùng giọng miền Bắc
-        });
+    // Xây dựng context từ conversation history cho CSM (chỉ lấy các message gần đây)
+    const recentMessages = conversation
+      .slice(-5) // Lấy 5 message gần nhất
+      .filter(msg => msg.text && msg.text !== "[Đang xử lý...]")
+      .map(msg => ({
+        speaker: msg.type === 'user' ? 0 : 1,
+        text: msg.text
+      }));
+    
+    // Luôn thử gọi TTS API trước (cho cả native và asian) để sử dụng CSM
+    try {
+      const response = await api.post('/learners/tts/generate', {
+        text: text,
+        voiceType: currentVoiceType,
+        voiceOrigin: currentVoiceOrigin,
+        region: currentVoiceOrigin === 'asian' ? 'north' : undefined, // Chỉ cần region cho asian
+        useCSM: true, // Bật CSM để backend thử CSM trước
+        context: recentMessages // Gửi context cho CSM
+      }, {
+        timeout: 60000 // 60 giây timeout (cho lần load model đầu tiên)
+      });
 
-        if (response.data.success && response.data.audioBase64) {
-          // Phát audio từ base64
-          const audioData = Uint8Array.from(atob(response.data.audioBase64), c => c.charCodeAt(0));
-          const blob = new Blob([audioData], { type: response.data.mimeType || 'audio/mpeg' });
-          const audioUrl = URL.createObjectURL(blob);
-          
-          // Lưu audio URL để có thể phát lại sau
-          setAiAudioUrls(prev => ({ ...prev, [messageId]: audioUrl }));
-          
-          const audio = new Audio(audioUrl);
-          audio.onplay = () => setPlayingAudio(messageId);
-          audio.onended = () => {
-            setPlayingAudio(null);
-            // KHÔNG tự động bắt đầu recording nữa - người dùng phải click vào mic
-            console.log("✅ AI finished speaking (FPT TTS) - mic will NOT auto-start");
-          };
-          audio.onerror = () => {
-            setPlayingAudio(null);
-            // Fallback về SpeechSynthesis nếu audio fail
-            speakTextWithBrowser(text, messageId);
-          };
-          
-          audio.play();
-          return;
-        }
-      } catch (err) {
-        console.error("❌ FPT.AI TTS error, falling back to browser TTS:", err);
-        // Fallback về SpeechSynthesis nếu API fail
+      if (response.data.success && response.data.audioBase64) {
+        // Phát audio từ base64 (từ CSM hoặc FPT.AI)
+        const audioData = Uint8Array.from(atob(response.data.audioBase64), c => c.charCodeAt(0));
+        const blob = new Blob([audioData], { type: response.data.mimeType || 'audio/wav' });
+        const audioUrl = URL.createObjectURL(blob);
+        
+        // Lưu audio URL để có thể phát lại sau
+        setAiAudioUrls(prev => ({ ...prev, [messageId]: audioUrl }));
+        
+        const audio = new Audio(audioUrl);
+        audio.onplay = () => setPlayingAudio(messageId);
+        audio.onended = () => {
+          setPlayingAudio(null);
+          // KHÔNG tự động bắt đầu recording nữa - người dùng phải click vào mic
+          const source = response.data.source || 'unknown';
+          console.log(`✅ AI finished speaking (${source === 'csm' ? 'CSM' : source === 'fpt' ? 'FPT.AI' : 'TTS'}) - mic will NOT auto-start`);
+        };
+        audio.onerror = () => {
+          setPlayingAudio(null);
+          // Fallback về SpeechSynthesis nếu audio fail
+          console.warn("⚠️ Audio playback error, falling back to browser TTS");
+          speakTextWithBrowser(text, messageId);
+        };
+        
+        audio.play();
+        return;
+      } else if (response.data.fallback) {
+        // Backend trả về fallback flag, dùng browser TTS
+        console.log("ℹ️ TTS API unavailable, using browser TTS");
+        speakTextWithBrowser(text, messageId);
+        return;
       }
+    } catch (err) {
+      // Nếu API fail (timeout, network error, etc.), fallback về browser TTS
+      console.warn("⚠️ TTS API error, falling back to browser TTS:", err.message);
     }
     
-    // Dùng SpeechSynthesis cho các giọng khác hoặc fallback
+    // Fallback: Dùng SpeechSynthesis cho browser nếu API không available
     speakTextWithBrowser(text, messageId);
   };
 
@@ -909,6 +928,7 @@ export default function TellMeYourStory({ onBack }) {
                 isOpen={openWordTooltip === cleanWord}
                 tooltip={wordTooltip}
                 loading={loadingWord}
+                micButtonRef={micButtonRef}
                 onWordClick={() => {
                   // Click vào từ chỉ để mở tooltip - KHÔNG phát audio
                   // Audio chỉ phát khi click vào nút phát lại bên cạnh timestamp
@@ -969,11 +989,21 @@ export default function TellMeYourStory({ onBack }) {
           type: audioChunksRef.current[0]?.type || "audio/webm" 
         });
         
+        console.log("🎤 Recording stopped:", {
+          blobSize: blob?.size,
+          chunksCount: audioChunksRef.current.length,
+          chunksSizes: audioChunksRef.current.map(chunk => chunk.size),
+          blobType: blob?.type
+        });
+        
         // Luôn tự động gửi khi dừng recording (nếu có audio)
-        if (blob && blob.size > 500) { // Ít nhất 500 bytes
+        // Giảm threshold xuống 100 bytes để bắt được cả audio ngắn
+        if (blob && blob.size > 100) { // Ít nhất 100 bytes (giảm từ 500)
+          console.log("✅ Audio recorded, sending to server. Size:", blob.size, "bytes");
           handleAudioRecorded(blob);
         } else {
           // Nếu không có audio, reset
+          console.warn("⚠️ Audio too small or empty. Size:", blob?.size, "bytes. Not sending.");
           audioChunksRef.current = [];
           setHasRecordedAudio(false);
         }
@@ -1112,14 +1142,32 @@ export default function TellMeYourStory({ onBack }) {
   // Xử lý audio đã ghi
   const handleAudioRecorded = (blob) => {
     // Chỉ tự động gửi nếu có audio data
+    console.log("📤 handleAudioRecorded called:", {
+      blobSize: blob?.size,
+      blobType: blob?.type,
+      hasBlob: !!blob
+    });
+    
     if (blob && blob.size > 0) {
       sendMessage(null, blob);
+    } else {
+      console.warn("⚠️ handleAudioRecorded: Invalid blob, not sending");
     }
   };
 
   // Gửi message (chỉ audio)
   const sendMessage = async (text = null, audio = null) => {
-    if (!audio) return;
+    if (!audio) {
+      console.warn("⚠️ sendMessage: No audio provided");
+      return;
+    }
+
+    console.log("📨 sendMessage called:", {
+      hasAudio: !!audio,
+      audioSize: audio.size,
+      audioType: audio.type,
+      sessionId: sessionId
+    });
 
     const userMessage = {
       type: "user",
@@ -1134,14 +1182,32 @@ export default function TellMeYourStory({ onBack }) {
 
     try {
       const formData = new FormData();
-      if (audio) formData.append("audio", audio);
+      if (audio) {
+        // Đảm bảo audio là File object, không phải Blob
+        const audioFile = audio instanceof File 
+          ? audio 
+          : new File([audio], `recording-${Date.now()}.webm`, { type: audio.type || "audio/webm" });
+        formData.append("audio", audioFile);
+        console.log("📎 Appended audio to FormData:", {
+          fileName: audioFile.name,
+          fileSize: audioFile.size,
+          fileType: audioFile.type
+        });
+      }
       formData.append("session_id", sessionId);
 
+      console.log("🚀 Sending audio to server...");
       const res = await api.post(
         "/learners/speaking-practice/story/message",
         formData,
         { headers: { "Content-Type": "multipart/form-data" } }
       );
+
+      console.log("✅ Server response received:", {
+        hasTranscript: !!res.data.transcript,
+        hasTranscriptJson: !!res.data.transcriptJson,
+        hasResponse: !!res.data.response
+      });
 
       // Tạo audio URL trước khi cập nhật message
       const audioUrl = URL.createObjectURL(audio);
@@ -1155,11 +1221,12 @@ export default function TellMeYourStory({ onBack }) {
         audio: audio // Giữ lại audio blob
       };
       
-      console.log("Updated user message:", {
+      console.log("✅ Updated user message:", {
         id: updatedUserMessage.id,
         hasAudioUrl: !!updatedUserMessage.audioUrl,
         hasTranscriptJson: !!updatedUserMessage.transcriptJson,
-        wordsCount: updatedUserMessage.transcriptJson?.words?.length || 0
+        wordsCount: updatedUserMessage.transcriptJson?.words?.length || 0,
+        audioUrl: updatedUserMessage.audioUrl
       });
 
       const aiMessage = {

@@ -16,8 +16,11 @@ function getProjectRoot() {
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = path.dirname(__filename);
   // __dirname = backend/services/learner-service/src
-  // Đi lên 3 cấp: src -> learner-service -> services -> backend
-  return path.resolve(__dirname, "..", "..", "..");
+  // Go up 4 levels: src -> learner-service -> services -> backend
+  // .. -> learner-service
+  // .. -> services
+  // .. -> backend ✅
+  return path.resolve(__dirname, "..", "..", "..", "..");
 }
 
 function audioUrlToLocalPath(audioUrl) {
@@ -182,35 +185,90 @@ registerProcessor("processSpeakingRound", async (job) => {
       const transcriptText = transcript.text || (transcript.segments || []).map(s => s.text || "").join(" ");
 
       try {
-        // Gọi qua API Gateway thay vì trực tiếp đến AI Service
-        const response = await fetch(`http://localhost:${process.env.API_GATEWAY_PORT || 4000}/api/ai/learner/analyze-transcript`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            transcript: transcriptText,
-            options: {
-              expected: prompt,
-              level,
-              runTopicDetection: false
-            }
-          })
-        });
-
-        if (response.ok) {
-          analysis = await response.json();
-          score = Math.round(analysis.score || 0);
-          feedback = analysis.feedback || "";
-          errors = analysis.errors || [];
-          correctedText = analysis.corrected_text || "";
-        }
+        // QUAN TRỌNG: Dùng analyzePronunciation trực tiếp thay vì gọi API
+        // Để đảm bảo logic tính điểm dựa trên số từ đúng được áp dụng
+        const { analyzePronunciation } = await import("./services/speakingPracticeService.js");
+        
+        // Lấy learner_id từ session
+        const sessionInfo = await pool.query(
+          `SELECT learner_id FROM speaking_practice_sessions WHERE id = $1`,
+          [sessionId]
+        );
+        const learnerId = sessionInfo.rows[0]?.learner_id;
+        
+        analysis = await analyzePronunciation(transcriptText, prompt, level, roundId, sessionId, learnerId);
+        score = Math.round(analysis.score || 0);
+        feedback = analysis.feedback || "";
+        errors = analysis.errors || [];
+        correctedText = analysis.corrected_text || "";
+        
+        console.log(`✅ Queue handler: round ${roundId} analyzed, score=${score}, missing_words=${analysis?.missing_words?.length || 0}`);
       } catch (err) {
-        console.error("❌ AI analysis error:", err);
-        feedback = "Không thể phân tích. Vui lòng thử lại.";
-        score = 0;
+        console.error("❌ AI analysis error in queue handler:", err);
+        console.error("❌ Error stack:", err.stack);
+        
+        // Fallback: Tính điểm dựa trên transcript matching nếu có
+        if (transcriptText && transcriptText.trim()) {
+          const transcriptWords = transcriptText.toLowerCase().split(/\s+/).filter(w => w.length > 0);
+          const expectedWords = prompt.toLowerCase().split(/\s+/).filter(w => w.length > 0);
+          
+          // Tính số từ match
+          const matchedWords = expectedWords.filter(ew => {
+            const cleanExpected = ew.replace(/[.,!?;:]/g, "").trim();
+            if (!cleanExpected) return false;
+            return transcriptWords.some(tw => {
+              const cleanTranscript = tw.replace(/[.,!?;:]/g, "").trim();
+              if (!cleanTranscript) return false;
+              if (cleanTranscript === cleanExpected) return true;
+              if (cleanTranscript.length >= cleanExpected.length && cleanTranscript.includes(cleanExpected)) return true;
+              if (cleanExpected.length >= cleanTranscript.length && cleanExpected.includes(cleanTranscript) && cleanTranscript.length >= 3) return true;
+              return false;
+            });
+          });
+          
+          // Tính điểm dựa trên số từ đúng
+          const fallbackScore = matchedWords.length > 0 
+            ? Math.round((matchedWords.length / expectedWords.length) * 100)
+            : 0;
+          
+          const missingWords = expectedWords.filter(ew => !matchedWords.includes(ew));
+          
+          score = fallbackScore;
+          feedback = fallbackScore > 0 
+            ? `Bạn đã nói đúng ${matchedWords.length}/${expectedWords.length} từ. ${missingWords.length > 0 ? `Cần cải thiện: ${missingWords.slice(0, 5).join(", ")}` : "Tuyệt vời!"}`
+            : "Không thể phân tích chính xác. Vui lòng thử lại.";
+          analysis = {
+            score: fallbackScore,
+            feedback: feedback,
+            missing_words: missingWords,
+            errors: [],
+            corrected_text: prompt
+          };
+          
+          console.log(`⚠️ Using fallback scoring: score=${fallbackScore}, matched=${matchedWords.length}/${expectedWords.length}`);
+        } else {
+          // Không có transcript
+          feedback = "Bạn chưa nói gì. Hãy thử lại và nói to, rõ ràng.";
+          score = 0;
+          analysis = {
+            score: 0,
+            feedback: feedback,
+            missing_words: prompt.toLowerCase().split(/\s+/).filter(w => w.length > 0),
+            errors: [],
+            corrected_text: prompt
+          };
+        }
       }
     } else {
       score = 0;
       feedback = "Bạn chưa nói gì. Hãy thử lại và nói to, rõ ràng.";
+      analysis = {
+        score: 0,
+        feedback: feedback,
+        missing_words: prompt.toLowerCase().split(/\s+/).filter(w => w.length > 0),
+        errors: [],
+        corrected_text: prompt
+      };
     }
 
     // Build word_analysis từ transcript
@@ -225,25 +283,30 @@ registerProcessor("processSpeakingRound", async (job) => {
       }));
     }
 
-    // Cập nhật database với kết quả
-    await pool.query(
-      `UPDATE speaking_practice_rounds 
-       SET transcript = $1, score = $2, analysis = $3
-       WHERE id = $4`,
-      [
-        JSON.stringify(transcript),
-        score,
-        JSON.stringify({
-          feedback,
-          errors,
-          corrected_text: correctedText || prompt,
+    // Cập nhật database với kết quả (bao gồm missing_words để highlight từ sai)
+    try {
+      await pool.query(
+        `UPDATE speaking_practice_rounds 
+         SET transcript = $1, score = $2, analysis = $3
+         WHERE id = $4`,
+        [
+          transcript ? JSON.stringify(transcript) : null,
           score,
-          missing_words: analysis?.missing_words || [],
-          word_analysis: wordAnalysis.length > 0 ? wordAnalysis : []
-        }),
-        roundId
-      ]
-    );
+          JSON.stringify({
+            feedback,
+            errors,
+            corrected_text: correctedText || prompt,
+            score,
+            missing_words: analysis?.missing_words || [], // Các từ sai để highlight
+            word_analysis: wordAnalysis.length > 0 ? wordAnalysis : []
+          }),
+          roundId
+        ]
+      );
+      console.log(`✅ Queue handler: Updated round ${roundId} with score ${score}, missing_words=${analysis?.missing_words?.length || 0}`);
+    } catch (dbErr) {
+      console.error(`❌ Database update error in queue handler for round ${roundId}:`, dbErr);
+    }
 
     console.log("✅ Speaking round processed:", roundId);
   } catch (err) {

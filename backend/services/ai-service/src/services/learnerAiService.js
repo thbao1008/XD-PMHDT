@@ -98,7 +98,26 @@ Chỉ trả về JSON hợp lệ.
     );
     speechEval = aiService.safeParseJSON(resp?.choices?.[0]?.message?.content) || {};
   } catch (err) {
-    console.error("analyzeWithOpenRouter: speech scoring failed - ai-service learnerAiService.js:98", err);
+    // Xử lý lỗi payment required (402) - tự động giảm max_tokens và retry
+    if (err.status === 402 && err.code === 'PAYMENT_REQUIRED' && err.maxAffordableTokens) {
+      console.warn(`⚠️ Payment required for speech evaluation. Retrying with reduced max_tokens: ${err.maxAffordableTokens}`);
+      try {
+        const reducedTokens = Math.max(50, err.maxAffordableTokens - 10);
+        const resp = await aiService.callOpenRouter(
+          [
+            { role: "system", content: "Return strict JSON only." },
+            { role: "user", content: speechPrompt }
+          ],
+          { max_tokens: reducedTokens, temperature: 0.2 }
+        );
+        speechEval = aiService.safeParseJSON(resp?.choices?.[0]?.message?.content) || {};
+        console.log(`✅ Speech evaluation retry successful with max_tokens: ${reducedTokens}`);
+      } catch (retryErr) {
+        console.error("analyzeWithOpenRouter: speech scoring retry failed - ai-service learnerAiService.js", retryErr);
+      }
+    } else {
+      console.error("analyzeWithOpenRouter: speech scoring failed - ai-service learnerAiService.js:98", err);
+    }
   }
 
   // Step 2: Challenge alignment (nếu có challenge)
@@ -146,7 +165,26 @@ Chỉ trả về JSON hợp lệ.
       );
       alignmentEval = aiService.safeParseJSON(resp?.choices?.[0]?.message?.content);
     } catch (err) {
-      console.error("analyzeWithOpenRouter: alignment failed - ai-service learnerAiService.js", err);
+      // Xử lý lỗi payment required (402) - tự động giảm max_tokens và retry
+      if (err.status === 402 && err.code === 'PAYMENT_REQUIRED' && err.maxAffordableTokens) {
+        console.warn(`⚠️ Payment required for alignment evaluation. Retrying with reduced max_tokens: ${err.maxAffordableTokens}`);
+        try {
+          const reducedTokens = Math.max(50, err.maxAffordableTokens - 10);
+          const resp = await aiService.callOpenRouter(
+            [
+              { role: "system", content: "Return strict JSON only." },
+              { role: "user", content: alignmentPrompt }
+            ],
+            { max_tokens: reducedTokens, temperature: 0.3 }
+          );
+          alignmentEval = aiService.safeParseJSON(resp?.choices?.[0]?.message?.content);
+          console.log(`✅ Alignment evaluation retry successful with max_tokens: ${reducedTokens}`);
+        } catch (retryErr) {
+          console.error("analyzeWithOpenRouter: alignment retry failed - ai-service learnerAiService.js", retryErr);
+        }
+      } else {
+        console.error("analyzeWithOpenRouter: alignment failed - ai-service learnerAiService.js", err);
+      }
     }
   }
 

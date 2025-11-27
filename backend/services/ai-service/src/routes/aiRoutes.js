@@ -11,25 +11,28 @@ import {
 import * as challengeLearningService from "../services/challengeLearningService.js";
 import * as aiService from "../services/aiService.js";
 import * as learnerAiService from "../services/learnerAiService.js";
+import * as trainedAIService from "../services/trainedAIService.js";
 
 const router = express.Router();
 
 // AI routes
 router.post("/auto-topics", authGuard, detectTopics);
 
-// OpenRouter API route
-router.post("/call-openrouter", authGuard, async (req, res) => {
+// AI API route (chỉ dùng AiESP, không cần auth cho internal calls)
+// Route này được gọi từ các services khác, không cần auth
+router.post("/call-openrouter", async (req, res) => {
   try {
     const { messages, options } = req.body;
     if (!messages || !Array.isArray(messages)) {
       return res.status(400).json({ error: "messages must be an array" });
     }
+    // Chỉ dùng AiESP - đã loại bỏ OpenRouter
     const result = await aiService.callOpenRouter(messages, options || {});
     res.json(result);
   } catch (err) {
-    console.error("Error calling OpenRouter:", err);
+    console.error("Error calling AI (AiESP):", err);
     res.status(err.status || 500).json({ 
-      error: err.message || "Failed to call OpenRouter",
+      error: err.message || "Failed to call AI",
       code: err.code 
     });
   }
@@ -116,6 +119,28 @@ router.post("/challenge/learn-feedback", authGuard, async (req, res) => {
   } catch (err) {
     console.error("Error learning from mentor feedback:", err);
     res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Trained AI route (for Learner Service - prompt generation, etc.)
+// Internal service calls không cần auth
+router.post("/trained/call", async (req, res) => {
+  try {
+    const { trainingType, options = {}, messages = null, aiOptions = {} } = req.body;
+    
+    if (!trainingType) {
+      return res.status(400).json({ error: "trainingType is required" });
+    }
+    
+    // Gọi trainedAIService để xử lý với Python training data
+    const result = await trainedAIService.callTrainedAI(trainingType, options, messages, aiOptions);
+    res.json(result);
+  } catch (err) {
+    console.error("Error calling Trained AI:", err);
+    res.status(err.status || 500).json({ 
+      error: err.message || "Failed to call Trained AI",
+      code: err.code 
+    });
   }
 });
 

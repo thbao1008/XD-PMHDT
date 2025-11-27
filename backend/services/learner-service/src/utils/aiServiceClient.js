@@ -6,13 +6,14 @@ const AI_SERVICE_URL = process.env.AI_SERVICE_URL || `http://localhost:${process
  * Call OpenRouter API (via AI Service, with fallback to direct call)
  */
 export async function callOpenRouter(messages, options = {}) {
-  // Thử gọi qua AI Service trước
+  // Gọi qua API Gateway (khuyến nghị) thay vì trực tiếp AI Service
   try {
     // Tạo AbortController cho timeout (tương thích với mọi Node.js version)
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout (AiESP có thể chậm hơn)
     
-    const response = await fetch(`${AI_SERVICE_URL}/api/ai/call-openrouter`, {
+    // Gọi qua API Gateway thay vì trực tiếp AI Service
+    const response = await fetch(`${API_GATEWAY_URL}/api/ai/call-openrouter`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ messages, options }),
@@ -101,11 +102,12 @@ export async function transcribeWithWhisperX(audioFilePath, options = {}) {
 }
 
 /**
- * Call Trained AI (via AI Service)
+ * Call Trained AI (via AI Service through API Gateway)
  */
 export async function callTrainedAI(trainingType, options = {}, messages = null, aiOptions = {}) {
   try {
-    const response = await fetch(`${AI_SERVICE_URL}/api/ai/trained/call`, {
+    // Gọi qua API Gateway thay vì trực tiếp AI Service
+    const response = await fetch(`${API_GATEWAY_URL}/api/ai/trained/call`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ trainingType, options, messages, aiOptions })

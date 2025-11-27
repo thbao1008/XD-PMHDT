@@ -9,12 +9,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 /**
- * Tìm project root (đi lên từ mentor-service/src/services đến root)
+ * Tìm project root (đi lên từ mentor-service/src/services đến backend root)
  */
 function getProjectRoot() {
   // __dirname = backend/services/mentor-service/src/services
-  // Đi lên 3 cấp: services -> src -> mentor-service -> services -> backend
-  return path.resolve(__dirname, "..", "..", "..");
+  // Đi lên 4 cấp: services -> src -> mentor-service -> services -> backend
+  return path.resolve(__dirname, "..", "..", "..", "..");
 }
 
 // Helper to call AI Service via API Gateway
@@ -108,7 +108,7 @@ Chỉ trả về JSON hợp lệ.`;
         { role: "system", content: "Bạn là hệ thống phân tích và học hỏi từ đánh giá của mentor. Trả về JSON hợp lệ." },
         { role: "user", content: prompt }
       ],
-      { max_tokens: 1000, temperature: 0.3 }
+      { max_tokens: 500, temperature: 0.3 }
     );
 
     const result = safeParseJSON(resp?.choices?.[0]?.message?.content);
@@ -254,14 +254,45 @@ IMPORTANT:
 - Description should be in HTML format with all requirements
 - Make it engaging and educational!`;
     
-    const resp = await callOpenRouter(
-      [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt }
-      ],
-      { max_tokens: 1000, temperature: 0.8 },
-      authToken
-    );
+    // Try với max_tokens ban đầu, nếu gặp lỗi 402 thì retry với tokens giảm
+    let resp;
+    let maxTokens = 1000;
+    try {
+      resp = await callOpenRouter(
+        [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
+        ],
+        { max_tokens: maxTokens, temperature: 0.8 },
+        authToken
+      );
+    } catch (err) {
+      // Xử lý lỗi payment required (402) - tự động giảm max_tokens và retry
+      if (err.status === 402 && err.code === 'PAYMENT_REQUIRED' && err.maxAffordableTokens) {
+        console.warn(`⚠️ [mentorAiService] Payment required. Retrying with reduced max_tokens: ${err.maxAffordableTokens}`);
+        
+        // Retry với max_tokens giảm xuống (trừ 10 để đảm bảo an toàn)
+        const reducedTokens = Math.max(50, err.maxAffordableTokens - 10);
+        maxTokens = reducedTokens;
+        
+        try {
+          resp = await callOpenRouter(
+            [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userPrompt }
+            ],
+            { max_tokens: reducedTokens, temperature: 0.8 },
+            authToken
+          );
+          console.log(`✅ [mentorAiService] Retry successful with max_tokens: ${reducedTokens}`);
+        } catch (retryErr) {
+          console.error("❌ [mentorAiService] Retry failed:", retryErr);
+          throw err; // Throw original error
+        }
+      } else {
+        throw err; // Throw other errors
+      }
+    }
     
     const content = resp?.choices?.[0]?.message?.content || "";
     
@@ -330,14 +361,45 @@ Return the improved challenge in HTML format, ensuring:
 - Examples are provided
 - Requirements are measurable (speaking time, number of sentences, etc.)`;
     
-    const resp = await callOpenRouter(
-      [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt }
-      ],
-      { max_tokens: 1000, temperature: 0.7 },
-      authToken
-    );
+    // Try với max_tokens ban đầu, nếu gặp lỗi 402 thì retry với tokens giảm
+    let resp;
+    let maxTokens = 500;
+    try {
+      resp = await callOpenRouter(
+        [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
+        ],
+        { max_tokens: maxTokens, temperature: 0.7 },
+        authToken
+      );
+    } catch (err) {
+      // Xử lý lỗi payment required (402) - tự động giảm max_tokens và retry
+      if (err.status === 402 && err.code === 'PAYMENT_REQUIRED' && err.maxAffordableTokens) {
+        console.warn(`⚠️ [mentorAiService] Payment required in editChallengeAI. Retrying with reduced max_tokens: ${err.maxAffordableTokens}`);
+        
+        // Retry với max_tokens giảm xuống (trừ 10 để đảm bảo an toàn)
+        const reducedTokens = Math.max(50, err.maxAffordableTokens - 10);
+        maxTokens = reducedTokens;
+        
+        try {
+          resp = await callOpenRouter(
+            [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userPrompt }
+            ],
+            { max_tokens: reducedTokens, temperature: 0.7 },
+            authToken
+          );
+          console.log(`✅ [mentorAiService] editChallengeAI retry successful with max_tokens: ${reducedTokens}`);
+        } catch (retryErr) {
+          console.error("❌ [mentorAiService] editChallengeAI retry failed:", retryErr);
+          throw err; // Throw original error
+        }
+      } else {
+        throw err; // Throw other errors
+      }
+    }
     
     return resp?.choices?.[0]?.message?.content || content;
   } catch (err) {

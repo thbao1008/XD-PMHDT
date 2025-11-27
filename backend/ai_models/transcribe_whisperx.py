@@ -118,12 +118,23 @@ def run_whisperx(audio_path, output_path="outputs/record.json", model_size="base
                 # older whisperx API may not accept compute_type param; rely on env var
                 model = whisperx.load_model(model_size, device)
     except Exception as e:
+        error_str = str(e).lower()
+        # Kiểm tra nếu là lỗi torchvision compatibility
+        if "torchvision" in error_str or "nms" in error_str or "extension" in error_str:
+            print(f"[whisperx] ❌ Torchvision compatibility error detected - transcribe_whisperx.py:120", flush=True)
+            print(f"[whisperx] 💡 To fix: Run 'python backend/scripts/fix_torchvision.py' - transcribe_whisperx.py:121", flush=True)
+            print(f"[whisperx] 💡 Or manually: pip uninstall torch torchvision -y && pip install torch torchvision - transcribe_whisperx.py:122", flush=True)
+            raise RuntimeError(
+                "Torchvision compatibility error. Please run fix_torchvision.py script or reinstall torch/torchvision. "
+                f"Original error: {e}"
+            )
+        
         # Nếu vẫn lỗi, thử không truyền compute_type
-        print(f"[whisperx] ⚠️  Error loading model with compute_type, trying without: {e} - transcribe_whisperx.py:87", flush=True)
+        print(f"[whisperx] ⚠️  Error loading model with compute_type, trying without: {e} - transcribe_whisperx.py:127", flush=True)
         try:
             model = whisperx.load_model(model_size, device)
         except Exception as e2:
-            print(f"[whisperx] ❌ Failed to load model: {e2} - transcribe_whisperx.py:90", flush=True)
+            print(f"[whisperx] ❌ Failed to load model: {e2} - transcribe_whisperx.py:130", flush=True)
             raise
 
     # Transcribe (language optional)

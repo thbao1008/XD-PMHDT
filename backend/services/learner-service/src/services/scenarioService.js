@@ -17,8 +17,12 @@ function getProjectRoot() {
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = path.dirname(__filename);
   // __dirname = backend/services/learner-service/src/services
-  // Đi lên 3 cấp: services -> src -> learner-service -> services -> backend
-  return path.resolve(__dirname, "..", "..", "..");
+  // Go up 4 levels: services -> src -> learner-service -> services -> backend
+  // .. -> src
+  // .. -> learner-service
+  // .. -> services
+  // .. -> backend ✅
+  return path.resolve(__dirname, "..", "..", "..", "..");
 }
 
 /**

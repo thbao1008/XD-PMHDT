@@ -6,6 +6,7 @@
 import * as aiService from "./aiService.js";
 import { spawn } from "child_process";
 import path from "path";
+import fs from "fs";
 import { fileURLToPath } from "url";
 import { findPythonExecutable } from "../utils/whisperxRunner.js";
 
@@ -13,7 +14,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Get backend directory (go up from ai-service/src/services to backend)
-const backendDir = path.resolve(__dirname, "..", "..", "..");
+// __dirname = backend/services/ai-service/src/services
+// Go up 4 levels: services -> ai-service -> services -> backend
+const backendDir = path.resolve(__dirname, "..", "..", "..", "..");
 
 /**
  * Gọi Python trainer để tạo training data trước khi gọi OpenRouter
@@ -23,6 +26,13 @@ async function getTrainingDataFromPython(trainingType, options = {}) {
   return new Promise((resolve, reject) => {
     try {
       const trainerPath = path.resolve(backendDir, "ai_models", "comprehensiveAITrainer.py");
+      
+      // Kiểm tra xem file có tồn tại không
+      if (!fs.existsSync(trainerPath)) {
+        console.warn(`⚠️ comprehensiveAITrainer.py not found at ${trainerPath}, using fallback`);
+        // Resolve với null để trigger fallback
+        return resolve(null);
+      }
       
       // Tạo data object để gửi qua stdin
       let stdinData = { training_type: trainingType };

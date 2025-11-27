@@ -30,11 +30,26 @@ export async function processStoryMessage(req, res) {
     const { session_id, text } = req.body;
     let audioUrl = null;
 
+    // Debug: Log thông tin về file upload
+    console.log("📤 processStoryMessage - File info:", {
+      hasFile: !!req.file,
+      fileName: req.file?.filename,
+      fileSize: req.file?.size,
+      filePath: req.file?.path,
+      fileMimetype: req.file?.mimetype,
+      hasText: !!text,
+      sessionId: session_id
+    });
+
     if (req.file) {
       audioUrl = `/uploads/${req.file.filename}`;
+      console.log("✅ Audio file uploaded:", audioUrl, "Size:", req.file.size, "bytes");
+    } else {
+      console.warn("⚠️ No audio file in request. Request body:", Object.keys(req.body));
     }
 
     if (!text && !audioUrl) {
+      console.error("❌ No text or audio provided");
       return res.status(400).json({ message: "No text or audio provided" });
     }
 
@@ -135,34 +150,77 @@ export async function getStoryHistory(req, res) {
 }
 
 /**
- * Generate TTS audio using FPT.AI
+ * Generate TTS audio using CSM (preferred) or FPT.AI (fallback)
  */
 export async function generateTTS(req, res) {
-  // Set timeout cho request (30 giây)
-  const timeout = setTimeout(() => {
+  // Set timeout cho request (70 giây - đủ cho CSM load model lần đầu)
+  let timeoutId = null;
+  let responseSent = false;
+
+  const sendResponse = (status, data) => {
+    if (responseSent) return;
+    responseSent = true;
+    if (timeoutId) clearTimeout(timeoutId);
     if (!res.headersSent) {
-      res.status(504).json({ 
-        success: false,
-        message: "TTS request timeout, using browser TTS",
-        fallback: true
-      });
+      res.status(status).json(data);
     }
-  }, 30000); // 30 giây timeout
+  };
+
+  timeoutId = setTimeout(() => {
+    sendResponse(504, { 
+      success: false,
+      message: "TTS request timeout, using browser TTS",
+      fallback: true
+    });
+  }, 70000); // 70 giây timeout (đủ cho CSM 60s + buffer)
 
   try {
-    const { text, voiceType, voiceOrigin, region } = req.body;
+    const { text, voiceType, voiceOrigin, region, useCSM, context } = req.body;
 
     if (!text || text.length < 3) {
-      clearTimeout(timeout);
-      return res.status(400).json({ message: "Text must be at least 3 characters" });
+      return sendResponse(400, { message: "Text must be at least 3 characters" });
     }
 
     if (text.length > 5000) {
-      clearTimeout(timeout);
-      return res.status(400).json({ message: "Text must not exceed 5000 characters" });
+      return sendResponse(400, { message: "Text must not exceed 5000 characters" });
     }
 
-    // Dùng FPT.AI cho giọng Việt Nam (cả nam và nữ)
+    // Thử CSM trước nếu được yêu cầu hoặc mặc định
+    const shouldUseCSM = useCSM !== false && process.env.USE_CSM_TTS !== 'false';
+    
+    if (shouldUseCSM) {
+      try {
+        const { generateCSMSpeech } = await import("../services/csmTtsService.js");
+        
+        // Map voiceType to speaker ID (0 = first speaker, 1 = second speaker)
+        const speaker = voiceType === 'male' ? 1 : 0;
+        
+        const csmResult = await Promise.race([
+          generateCSMSpeech(text, speaker, context || [], 10000),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('CSM TTS timeout')), 60000) // Tăng lên 60s cho lần load đầu
+          )
+        ]);
+
+        if (csmResult.success) {
+          return sendResponse(200, {
+            success: true,
+            audioBase64: csmResult.audioBase64,
+            mimeType: csmResult.mimeType || 'audio/wav',
+            source: 'csm'
+          });
+        } else {
+          console.warn("⚠️ CSM TTS failed, falling back to FPT.AI:", csmResult.error);
+          // Fall through to FPT.AI
+        }
+      } catch (err) {
+        console.warn("⚠️ CSM TTS error, falling back to FPT.AI:", err.message);
+        // Fall through to FPT.AI (only if headers not sent)
+        if (responseSent) return;
+      }
+    }
+
+    // Dùng FPT.AI cho giọng Việt Nam (cả nam và nữ) - fallback
     if (voiceOrigin === 'asian') {
       try {
         // Luôn dùng giọng miền Bắc, bỏ qua region parameter
@@ -179,19 +237,17 @@ export async function generateTTS(req, res) {
           )
         ]);
 
-        clearTimeout(timeout);
         if (result) {
-          return res.json({
+          return sendResponse(200, {
             success: true,
             audioBase64: result.audioBase64,
             mimeType: result.mimeType
           });
         }
       } catch (err) {
-        clearTimeout(timeout);
         console.error("❌ FPT.AI TTS error:", err);
         // Fallback: trả về null để frontend dùng SpeechSynthesis
-        return res.json({
+        return sendResponse(200, {
           success: false,
           message: "FPT.AI TTS unavailable, using browser TTS",
           fallback: true
@@ -199,19 +255,15 @@ export async function generateTTS(req, res) {
       }
     }
 
-    clearTimeout(timeout);
     // Các giọng khác dùng SpeechSynthesis ở frontend
-    return res.json({
+    return sendResponse(200, {
       success: false,
       message: "Use browser SpeechSynthesis for this voice type",
       fallback: true
     });
   } catch (err) {
-    clearTimeout(timeout);
     console.error("❌ generateTTS error:", err);
-    if (!res.headersSent) {
-      res.status(500).json({ message: err.message || "Server error" });
-    }
+    return sendResponse(500, { message: err.message || "Server error" });
   }
 }
 

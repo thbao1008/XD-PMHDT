@@ -448,7 +448,9 @@ export async function editChallengeAI(req, res) {
 export async function chatWithAI(req, res) {
   try {
     const { message, context } = req.body || {};
-    const suggestion = await mentorAiService.chatWithAI(message, context);
+    // Lấy token từ request headers để truyền vào AI Service
+    const authToken = req.headers.authorization?.replace("Bearer ", "") || null;
+    const suggestion = await mentorAiService.chatWithAI(message, context, authToken);
     return res.json({ suggestion });
   } catch (err) {
     console.error("chatWithAI error - mentor-service mentorController.js:416", err);

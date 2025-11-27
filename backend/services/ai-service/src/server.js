@@ -2,12 +2,24 @@ import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
 
-// Load .env from project root
+// Load .env from backend/ai_models/.env
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const projectRoot = path.resolve(__dirname, "..", "..", "..");
-const envPath = path.resolve(projectRoot, ".env");
-dotenv.config({ path: envPath });
+const backendRoot = path.resolve(__dirname, "..", "..", "..");
+// Try backend/ai_models/.env first, then fallback to backend/.env
+import fs from "fs";
+const envPath1 = path.resolve(backendRoot, "ai_models", ".env");
+const envPath2 = path.resolve(backendRoot, ".env");
+if (fs.existsSync(envPath1)) {
+  dotenv.config({ path: envPath1 });
+  console.log(`✅ Loaded .env from: ${envPath1}`);
+} else if (fs.existsSync(envPath2)) {
+  dotenv.config({ path: envPath2 });
+  console.log(`✅ Loaded .env from: ${envPath2}`);
+} else {
+  console.warn(`⚠️ .env file not found at ${envPath1} or ${envPath2}`);
+  dotenv.config(); // Try default locations
+}
 
 import express from "express";
 import cors from "cors";

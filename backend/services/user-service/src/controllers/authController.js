@@ -112,21 +112,26 @@ export async function register(req, res) {
 export async function login(req, res) {
   try {
     const { identifier, password } = req.body;
+    console.log(`[Login] Attempt: identifier=${identifier?.substring(0, 20)}...`);
+    
     if (!identifier || !password) {
+      console.log(`[Login] Missing credentials`);
       return res.status(400).json({ message: "Vui lòng cung cấp tài khoản và mật khẩu" });
     }
 
     // Find user with timeout
     let user;
     try {
+      console.log(`[Login] Searching for user: ${identifier}`);
       user = await Promise.race([
         findUserByIdentifier(identifier),
         new Promise((_, reject) => 
           setTimeout(() => reject(new Error("Database query timeout")), 10000)
         )
       ]);
+      console.log(`[Login] User found: ${user ? `ID=${user.id}, email=${user.email}` : 'NOT FOUND'}`);
     } catch (dbErr) {
-      console.error("Database query error in login:", dbErr.message);
+      console.error("[Login] Database query error:", dbErr.message);
       if (dbErr.message === "Database query timeout") {
         return res.status(503).json({ 
           message: "Database query timeout. Vui lòng thử lại sau.",
@@ -142,7 +147,10 @@ export async function login(req, res) {
       throw dbErr; // Re-throw other errors
     }
     
-    if (!user) return res.status(401).json({ message: "Sai tài khoản hoặc mật khẩu" });
+    if (!user) {
+      console.log(`[Login] User not found for identifier: ${identifier}`);
+      return res.status(401).json({ message: "Sai tài khoản hoặc mật khẩu" });
+    }
 
     // Check if user is banned
     if (user.status === 'banned') {
@@ -153,8 +161,13 @@ export async function login(req, res) {
       });
     }
 
+    console.log(`[Login] Comparing password for user: ${user.email}`);
     const match = await bcrypt.compare(password, user.password);
-    if (!match) return res.status(401).json({ message: "Sai tài khoản hoặc mật khẩu" });
+    console.log(`[Login] Password match: ${match}`);
+    if (!match) {
+      console.log(`[Login] Password mismatch for user: ${user.email}`);
+      return res.status(401).json({ message: "Sai tài khoản hoặc mật khẩu" });
+    }
 
     // Lấy thông tin device từ request
     const deviceInfo = req.headers['user-agent'] || 'Unknown';

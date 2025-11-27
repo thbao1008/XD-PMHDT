@@ -211,45 +211,166 @@ export async function getTrafficStats() {
   }
 }
 
-// Lấy tiến trình AI hiện tại
+// Lấy tiến trình AiESP học tập và token usage
 export async function getAIProgress() {
   try {
-    // Số lượng training samples
+    // Lấy thông tin từ assistant_ai_training (AiESP training data)
+    let trainingSamples = 0;
+    let newSamples = 0;
+    try {
     const trainingSamplesResult = await pool.query(`
       SELECT COUNT(*) as count 
-      FROM challenge_creator_training
+        FROM assistant_ai_training
     `);
-    const trainingSamples = parseInt(trainingSamplesResult.rows[0].count) || 0;
+      trainingSamples = parseInt(trainingSamplesResult.rows[0].count) || 0;
+    } catch (e) {
+      console.warn("Table assistant_ai_training may not exist:", e.message);
+    }
 
-    // Số lượng AI reports đã tạo
-    const aiReportsResult = await pool.query(`
-      SELECT COUNT(*) as count 
-      FROM ai_reports
-    `);
-    const aiReports = parseInt(aiReportsResult.rows[0].count) || 0;
-
-    // Accuracy/Performance (giả sử có bảng lưu kết quả training)
-    // Nếu không có, trả về null
-    let accuracy = null;
+    // Lấy thông tin từ assistant_ai_models (AiESP models)
+    let models = [];
+    let totalModels = 0;
     try {
-      const accuracyResult = await pool.query(`
-        SELECT accuracy 
-        FROM ai_model_performance 
-        ORDER BY created_at DESC 
-        LIMIT 1
+      const modelsResult = await pool.query(`
+        SELECT 
+          task_type,
+          accuracy_score,
+          trained_at,
+          model_state
+        FROM assistant_ai_models
+        ORDER BY trained_at DESC
       `);
-      if (accuracyResult.rows.length > 0) {
-        accuracy = parseFloat(accuracyResult.rows[0].accuracy);
+      models = modelsResult.rows || [];
+      totalModels = models.length;
+    } catch (e) {
+      console.warn("Table assistant_ai_models may not exist:", e.message);
+    }
+    
+    // Tính accuracy trung bình
+    let avgAccuracy = null;
+    if (models.length > 0) {
+      const accuracies = models
+        .map(m => parseFloat(m.accuracy_score))
+        .filter(a => !isNaN(a));
+      if (accuracies.length > 0) {
+        avgAccuracy = accuracies.reduce((sum, a) => sum + a, 0) / accuracies.length;
+      }
+    }
+
+    // Lấy số lượng training data mới (chưa train)
+    try {
+      const newSamplesResult = await pool.query(`
+      SELECT COUNT(*) as count 
+        FROM assistant_ai_training
+        WHERE created_at > (
+          SELECT COALESCE(MAX(trained_at), '1970-01-01')
+          FROM assistant_ai_models
+        )
+      `);
+      newSamples = parseInt(newSamplesResult.rows[0].count) || 0;
+    } catch (e) {
+      console.warn("Could not get new samples:", e.message);
+    }
+
+    // Kiểm tra token usage (ước tính từ OpenRouter calls)
+    // Ước tính từ số lượng training data (mỗi training data = 1 lần gọi OpenRouter)
+    let tokenUsage = {
+      total: 0,
+      today: 0,
+      thisMonth: 0,
+      limit: process.env.OPENROUTER_TOKEN_LIMIT ? parseInt(process.env.OPENROUTER_TOKEN_LIMIT) : 1000000 // Default 1M tokens
+    };
+
+    try {
+      // Đếm số lần gọi OpenRouter (ước tính từ training data)
+      // Mỗi record trong assistant_ai_training = 1 lần gọi OpenRouter để học
+      const tokenUsageResult = await pool.query(`
+        SELECT 
+          COUNT(*) as total_calls,
+          COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE) as today_calls,
+          COUNT(*) FILTER (WHERE created_at >= DATE_TRUNC('month', CURRENT_DATE)) as month_calls
+        FROM assistant_ai_training
+      `);
+      
+      if (tokenUsageResult.rows.length > 0) {
+        const row = tokenUsageResult.rows[0];
+        // Ước tính: mỗi call ~500 tokens (input + output)
+        // Có thể điều chỉnh dựa trên thực tế
+        const tokensPerCall = 500;
+        tokenUsage.total = parseInt(row.total_calls) * tokensPerCall;
+        tokenUsage.today = parseInt(row.today_calls) * tokensPerCall;
+        tokenUsage.thisMonth = parseInt(row.month_calls) * tokensPerCall;
       }
     } catch (e) {
-      // Bảng không tồn tại, bỏ qua
+      console.warn("Could not calculate token usage:", e.message);
+    }
+
+    // Status dựa trên accuracy và training samples
+    let status = 'initializing';
+    if (trainingSamples > 0) {
+      if (avgAccuracy !== null) {
+        status = avgAccuracy >= 0.85 ? 'excellent' : avgAccuracy >= 0.70 ? 'good' : 'training';
+      } else {
+        status = 'training';
+      }
+    }
+
+    // Task types breakdown
+    const taskTypes = ['conversation_ai', 'translation_check', 'speaking_practice', 'game_conversation'];
+    const taskTypeStats = {};
+    
+    for (const taskType of taskTypes) {
+      try {
+        const taskModels = models.filter(m => m.task_type === taskType);
+        let taskTrainingCount = 0;
+        try {
+          const taskTraining = await pool.query(`
+            SELECT COUNT(*) as count
+            FROM assistant_ai_training
+            WHERE task_type = $1
+          `, [taskType]);
+          taskTrainingCount = parseInt(taskTraining.rows[0].count) || 0;
+        } catch (e) {
+          // Table may not exist
+        }
+        
+        taskTypeStats[taskType] = {
+          modelCount: taskModels.length,
+          trainingSamples: taskTrainingCount,
+          latestAccuracy: taskModels.length > 0 ? parseFloat(taskModels[0].accuracy_score) : null,
+          latestTrained: taskModels.length > 0 ? taskModels[0].trained_at : null
+        };
+      } catch (e) {
+        console.warn(`Error getting stats for ${taskType}:`, e.message);
+        taskTypeStats[taskType] = {
+          modelCount: 0,
+          trainingSamples: 0,
+          latestAccuracy: null,
+          latestTrained: null
+        };
+      }
     }
 
     return {
+      // AiESP Learning Progress
       trainingSamples,
-      aiReports,
-      accuracy,
-      status: accuracy ? (accuracy >= 0.8 ? 'excellent' : accuracy >= 0.6 ? 'good' : 'training') : 'initializing'
+      newSamples,
+      totalModels,
+      accuracy: avgAccuracy,
+      status,
+      taskTypes: taskTypeStats,
+      
+      // Token Usage
+      tokenUsage: {
+        used: tokenUsage.total,
+        usedToday: tokenUsage.today,
+        usedThisMonth: tokenUsage.thisMonth,
+        limit: tokenUsage.limit,
+        percentage: tokenUsage.limit > 0 ? (tokenUsage.total / tokenUsage.limit * 100) : 0,
+        status: tokenUsage.limit > 0 
+          ? (tokenUsage.total / tokenUsage.limit > 0.9 ? 'warning' : tokenUsage.total / tokenUsage.limit > 0.7 ? 'caution' : 'ok')
+          : 'ok'
+      }
     };
   } catch (err) {
     console.error("Error getAIProgress:", err);

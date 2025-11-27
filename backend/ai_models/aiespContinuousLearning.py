@@ -501,6 +501,7 @@ def main():
         print("Usage:", file=sys.stderr)
         print("  python aiespContinuousLearning.py check [task_type]", file=sys.stderr)
         print("  python aiespContinuousLearning.py train [task_type]", file=sys.stderr)
+        print("  python aiespContinuousLearning.py train-all", file=sys.stderr)
         print("  python aiespContinuousLearning.py monitor", file=sys.stderr)
         print("  python aiespContinuousLearning.py continuous [interval_seconds]", file=sys.stderr)
         sys.exit(1)
@@ -520,6 +521,20 @@ def main():
         task_type = sys.argv[2] if len(sys.argv) > 2 else 'conversation_ai'
         result = learner.train_task(task_type)
         print(json.dumps(result, indent=2, ensure_ascii=False))
+    
+    elif command == 'train-all':
+        # Train tất cả task types
+        task_types = ['conversation_ai', 'translation_check', 'speaking_practice', 'game_conversation']
+        results = {}
+        for tt in task_types:
+            print(f"\n📚 Training {tt}...", file=sys.stderr)
+            result = learner.train_task(tt)
+            results[tt] = result
+            if result.get('status') == 'success':
+                print(f"✅ {tt} training completed", file=sys.stderr)
+            else:
+                print(f"⚠️ {tt} training: {result.get('error', 'Unknown error')}", file=sys.stderr)
+        print(json.dumps(results, indent=2, ensure_ascii=False))
     
     elif command == 'monitor':
         monitoring = learner.monitor_all_models()

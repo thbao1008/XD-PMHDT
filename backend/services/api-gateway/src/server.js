@@ -1,8 +1,29 @@
-import "dotenv/config";
+import dotenv from "dotenv";
 import express from "express";
 import cors from "cors";
 import { createProxyMiddleware } from "http-proxy-middleware";
 import { execSync } from "child_process";
+import path from "path";
+import { fileURLToPath } from "url";
+import { dirname } from "path";
+import fs from "fs";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Load .env.docker if DOCKER=true, otherwise use default dotenv
+if (process.env.DOCKER === "true") {
+  const backendRoot = path.resolve(__dirname, "..", "..", "..", "..");
+  const envDockerPath = path.resolve(backendRoot, ".env.docker");
+  if (fs.existsSync(envDockerPath)) {
+    dotenv.config({ path: envDockerPath });
+    console.log(`✅ API Gateway loaded .env.docker from: ${envDockerPath}`);
+  } else {
+    dotenv.config(); // Fallback to default
+  }
+} else {
+  dotenv.config(); // Default behavior for local development
+}
 
 const app = express();
 const PORT = process.env.API_GATEWAY_PORT || 4000;
@@ -173,9 +194,7 @@ app.use("/api/auth", createProxyMiddleware({
     // So path is "/login" not "/api/auth/login"
     // We need to add /auth prefix: "/login" -> "/auth/login"
     const newPath = `/auth${path}`;
-    if (process.env.NODE_ENV === "development") {
-      console.log(`[API Gateway] PathRewrite: ${path} → ${newPath} (original URL: ${req.originalUrl || req.url})`);
-    }
+    console.log(`[API Gateway] /api/auth${path} → ${SERVICES.user}${newPath}`);
     return newPath;
   },
   timeout: 30000, // 30 seconds timeout
@@ -192,12 +211,11 @@ app.use("/api/auth", createProxyMiddleware({
     });
     
     // http-proxy-middleware automatically forwards the body stream
-    // We don't need to manually forward it since express.json() is not used
-    
-    // Log request in dev mode
-    if (process.env.NODE_ENV === "development") {
-      const targetPath = req.url.replace("/api/auth", "/auth");
-      console.log(`[API Gateway] ${req.method} ${req.url} → ${SERVICES.user}${targetPath}`);
+    // Log request for debugging
+    const targetPath = `/auth${req.url.replace("/api/auth", "")}`;
+    console.log(`[API Gateway] ${req.method} ${req.url} → ${SERVICES.user}${targetPath}`);
+    if (req.body) {
+      console.log(`[API Gateway] Body: ${JSON.stringify(req.body).substring(0, 100)}`);
     }
   },
   onError: (err, req, res) => {
@@ -440,8 +458,8 @@ app.use("/api/learners", createProxyMiddleware({
     }
     return newPath;
   },
-  timeout: 15000, // Giảm timeout xuống 15 giây
-  proxyTimeout: 15000,
+  timeout: 60000, // 60 seconds for long-running operations (submissions, analysis)
+  proxyTimeout: 60000,
   onProxyReq: (proxyReq, req, res) => {
     // Forward all headers (except host and connection)
     Object.keys(req.headers).forEach(key => {
@@ -467,12 +485,26 @@ app.use("/api/learners", createProxyMiddleware({
     }
   },
   onError: (err, req, res) => {
-    console.error(`[API Gateway] Proxy error for /api/learners${req.url}:`, err.message);
+    console.error(`[API Gateway] Proxy error for /api/learners${req.url}:`, err.message, err.code);
     if (!res.headersSent) {
-      // Check if it's a timeout error
-      if (err.code === 'ECONNRESET' || err.code === 'ETIMEDOUT' || err.message.includes('timeout')) {
+      // Handle socket hang up - connection closed unexpectedly
+      if (err.code === 'ECONNRESET' || err.message?.includes('socket hang up')) {
+        // Don't send error if client disconnected
+        if (req.aborted) {
+          return;
+        }
+        res.status(502).json({ 
+          message: "Kết nối đến Learner Service bị đóng đột ngột. Vui lòng thử lại.",
+          error: process.env.NODE_ENV === "development" ? err.message : undefined
+        });
+      } else if (err.code === 'ECONNREFUSED') {
+        res.status(503).json({ 
+          message: "Learner Service không khả dụng. Vui lòng kiểm tra service đã chạy chưa.",
+          error: process.env.NODE_ENV === "development" ? err.message : undefined
+        });
+      } else if (err.code === 'ETIMEDOUT' || err.message?.includes('timeout')) {
         res.status(504).json({ 
-          message: "Learner Service timeout. The service may be unavailable or overloaded.",
+          message: "Learner Service timeout. Request đang xử lý quá lâu, vui lòng thử lại sau.",
           error: process.env.NODE_ENV === "development" ? err.message : undefined
         });
       } else {

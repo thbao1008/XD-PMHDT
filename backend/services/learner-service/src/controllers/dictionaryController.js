@@ -53,13 +53,24 @@ IMPORTANT: Respond ONLY with valid JSON, no markdown code blocks, no explanation
       { model: "openai/gpt-4o-mini", temperature: 0.7 }
     );
 
-    // AI Service returns OpenRouter response directly
+    // AI Service returns AiESP response (có thể là JSON string hoặc plain text)
     let content = response.choices?.[0]?.message?.content || response.content || "{}";
     
-    // Loại bỏ markdown code block nếu có (```json ... ``` hoặc ``` ... ```)
+    // Nếu content là string, thử parse JSON trước
+    if (typeof content === 'string') {
     content = content.trim();
     
-    // Xử lý markdown code block với regex
+      // Thử parse trực tiếp nếu là JSON string
+      try {
+        const parsed = JSON.parse(content);
+        if (typeof parsed === 'object') {
+          return res.json(parsed);
+        }
+      } catch {
+        // Không phải JSON, tiếp tục xử lý
+      }
+      
+      // Loại bỏ markdown code block nếu có (```json ... ``` hoặc ``` ... ```)
     const codeBlockRegex = /```(?:json)?\s*([\s\S]*?)```/;
     const codeBlockMatch = content.match(codeBlockRegex);
     if (codeBlockMatch && codeBlockMatch[1]) {
@@ -87,6 +98,7 @@ IMPORTANT: Respond ONLY with valid JSON, no markdown code blocks, no explanation
           content = lines.slice(startIdx, endIdx).join("\n").trim();
         } else {
           content = lines.slice(startIdx).join("\n").trim();
+          }
         }
       }
     }
@@ -94,7 +106,15 @@ IMPORTANT: Respond ONLY with valid JSON, no markdown code blocks, no explanation
     // Tìm JSON object trong content (tìm từ { đầu tiên đến } cuối cùng cân bằng)
     let jsonStart = content.indexOf("{");
     if (jsonStart === -1) {
-      throw new Error("No JSON object found in response");
+      // Nếu không tìm thấy JSON, tạo response mặc định từ AiESP response
+      console.warn("⚠️ AiESP returned non-JSON response, creating default dictionary entry");
+      return res.json({
+        word: normalizedWord,
+        pronunciation: "",
+        definition: content || "Definition not available",
+        usage: "",
+        example: ""
+      });
     }
     
     // Tìm } cuối cùng với balance braces

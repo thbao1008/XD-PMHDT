@@ -17,8 +17,21 @@ function getProjectRoot() {
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = path.dirname(__filename);
   // __dirname = backend/services/learner-service/src/services
-  // Đi lên 3 cấp: services -> src -> learner-service -> services -> backend
-  return path.resolve(__dirname, "..", "..", "..");
+  // Go up 4 levels: services -> src -> learner-service -> services -> backend
+  // .. -> src
+  // .. -> learner-service
+  // .. -> services
+  // .. -> backend ✅
+  const backendDir = path.resolve(__dirname, "..", "..", "..", "..");
+  
+  console.log("🔍 getProjectRoot() called from speakingPracticeService.js:", {
+    __dirname: __dirname,
+    backendDir: backendDir,
+    aiModelsDir: path.join(backendDir, "ai_models"),
+    aiModelsExists: fs.existsSync(path.join(backendDir, "ai_models"))
+  });
+  
+  return backendDir;
 }
 
 // QUAN TRỌNG: Không còn hardcoded prompts
@@ -993,6 +1006,7 @@ async function processRoundInBackground(roundId, audioUrl, prompt, level, sessio
     : audioUrl;
 
   let transcript = null;
+  let transcriptionError = null;
   if (fs.existsSync(localPath)) {
     try {
       const { json: transcriptJson } = await runWhisperX(localPath, {
@@ -1002,7 +1016,16 @@ async function processRoundInBackground(roundId, audioUrl, prompt, level, sessio
       transcript = transcriptJson;
     } catch (err) {
       console.error("❌ Transcription error:", err);
-      return;
+      const errMsg = err.message || String(err);
+      
+      // Kiểm tra nếu là lỗi torchvision compatibility
+      if (errMsg.includes("torchvision") || errMsg.includes("nms") || errMsg.includes("extension")) {
+        transcriptionError = `Lỗi tương thích torchvision/torch. Vui lòng chạy script fix: python backend/scripts/fix_torchvision.py. Chi tiết: ${errMsg}`;
+        console.error("💡 To fix torchvision error, run: python backend/scripts/fix_torchvision.py");
+      } else {
+        transcriptionError = errMsg;
+      }
+      // Không return ngay - tiếp tục để cập nhật database với lỗi
     }
   }
 
@@ -1013,12 +1036,37 @@ async function processRoundInBackground(roundId, audioUrl, prompt, level, sessio
   let errors = [];
   let correctedText = "";
 
-  if (transcript) {
+  // Nếu có lỗi transcription, cập nhật database với thông báo lỗi
+  if (transcriptionError) {
+    feedback = `Lỗi phân tích âm thanh: ${transcriptionError}. Vui lòng thử lại hoặc kiểm tra file audio.`;
+    score = 0;
+    analysis = {
+      score: 0,
+      feedback: feedback,
+      missing_words: prompt.toLowerCase().split(/\s+/).filter(w => w.length > 0),
+      errors: [{ type: "transcription_error", message: transcriptionError }],
+      corrected_text: prompt
+    };
+  } else if (transcript) {
     const transcriptText =
       transcript.text ||
       (transcript.segments || [])
         .map((s) => s.text || "")
         .join(" ");
+    
+    // Kiểm tra nếu transcriptText rỗng
+    if (!transcriptText || !transcriptText.trim()) {
+      console.warn(`⚠️ Empty transcript text for round ${roundId}`);
+      score = 0;
+      feedback = "Không thể nhận diện được lời nói. Vui lòng nói to và rõ ràng hơn.";
+      analysis = {
+        score: 0,
+        feedback: feedback,
+        missing_words: prompt.toLowerCase().split(/\s+/).filter(w => w.length > 0),
+        errors: [],
+        corrected_text: prompt
+      };
+    } else {
 
     try {
       // Lấy learner_id từ session để lưu vào quick_evaluations
@@ -1028,14 +1076,18 @@ async function processRoundInBackground(roundId, audioUrl, prompt, level, sessio
       );
       const learnerId = sessionInfo.rows[0]?.learner_id;
       
+      console.log(`📊 Analyzing: transcript="${transcriptText.substring(0, 50)}...", prompt="${prompt.substring(0, 50)}..."`);
       analysis = await analyzePronunciation(transcriptText, prompt, level, roundId, sessionId, learnerId);
       score = Math.round(analysis.score || 0); // Làm tròn điểm
       feedback = analysis.feedback || "";
       errors = analysis.errors || [];
       correctedText = analysis.corrected_text || "";
       
+      console.log(`✅ Analysis result for round ${roundId}: score=${score}, missing_words=${analysis?.missing_words?.length || 0}`);
+      
     } catch (err) {
       console.error("❌ AI analysis error:", err);
+      console.error("❌ Error stack:", err.stack);
       feedback = "Không thể phân tích. Vui lòng thử lại.";
       score = 0; // Nếu lỗi, score = 0
       analysis = {
@@ -1045,6 +1097,7 @@ async function processRoundInBackground(roundId, audioUrl, prompt, level, sessio
         errors: [],
         corrected_text: prompt
       };
+    }
     }
   } else {
     // Nếu không có transcript (không nói gì), score = 0
@@ -1073,24 +1126,31 @@ async function processRoundInBackground(roundId, audioUrl, prompt, level, sessio
   
   // Cập nhật database với kết quả (bao gồm missing_words)
   // Lưu ý: word_analysis không có trong schema, chỉ lưu trong analysis
-  await pool.query(
-    `UPDATE speaking_practice_rounds 
-     SET transcript = $1, score = $2, analysis = $3
-     WHERE id = $4`,
-    [
-      JSON.stringify(transcript),
-      score,
-      JSON.stringify({
-        feedback,
-        errors,
-        corrected_text: correctedText || prompt,
+  try {
+    await pool.query(
+      `UPDATE speaking_practice_rounds 
+       SET transcript = $1, score = $2, analysis = $3
+       WHERE id = $4`,
+      [
+        transcript ? JSON.stringify(transcript) : null,
         score,
-        missing_words: analysis?.missing_words || [],
-        word_analysis: wordAnalysis.length > 0 ? wordAnalysis : []
-      }),
-      roundId
-    ]
-  );
+        JSON.stringify({
+          feedback,
+          errors,
+          corrected_text: correctedText || prompt,
+          score,
+          missing_words: analysis?.missing_words || [],
+          word_analysis: wordAnalysis.length > 0 ? wordAnalysis : [],
+          transcription_error: transcriptionError || null
+        }),
+        roundId
+      ]
+    );
+    console.log(`✅ Updated round ${roundId} with score ${score}`);
+  } catch (dbErr) {
+    console.error(`❌ Database update error for round ${roundId}:`, dbErr);
+    // Không throw - đã log lỗi
+  }
 }
 
 /**
@@ -1114,16 +1174,40 @@ async function analyzePronunciation(transcript, expectedText, level, roundId = n
   const transcriptWords = transcript.toLowerCase().split(/\s+/).filter(w => w.length > 0);
   const expectedWords = expectedText.toLowerCase().split(/\s+/).filter(w => w.length > 0);
   
+  console.log(`🔍 Word matching: expected="${expectedText.substring(0, 60)}..." (${expectedWords.length} words)`);
+  console.log(`🔍 Transcript: "${transcript.substring(0, 60)}..." (${transcriptWords.length} words)`);
+  
   // Nếu không có từ nào match, score = 0
+  // Logic: Một từ được coi là "đúng" nếu:
+  // 1. Exact match (sau khi loại bỏ dấu câu)
+  // 2. Transcript word chứa expected word (cho phép nói thêm)
+  // 3. Expected word chứa transcript word (cho phép nói ngắn gọn)
   const matchedWords = expectedWords.filter(ew => {
-    const cleanExpected = ew.replace(/[.,!?;:]/g, "");
+    const cleanExpected = ew.replace(/[.,!?;:]/g, "").trim();
+    if (!cleanExpected) return false;
+    
     return transcriptWords.some(tw => {
-      const cleanTranscript = tw.replace(/[.,!?;:]/g, "");
-      return cleanTranscript === cleanExpected || 
-             cleanTranscript.includes(cleanExpected) || 
-             cleanExpected.includes(cleanTranscript);
+      const cleanTranscript = tw.replace(/[.,!?;:]/g, "").trim();
+      if (!cleanTranscript) return false;
+      
+      // Exact match
+      if (cleanTranscript === cleanExpected) return true;
+      
+      // Partial match: transcript chứa expected (cho phép nói thêm)
+      if (cleanTranscript.length >= cleanExpected.length && cleanTranscript.includes(cleanExpected)) return true;
+      
+      // Partial match: expected chứa transcript (cho phép nói ngắn gọn, nhưng phải >= 3 ký tự)
+      if (cleanExpected.length >= cleanTranscript.length && cleanExpected.includes(cleanTranscript) && cleanTranscript.length >= 3) return true;
+      
+      return false;
     });
   });
+  
+  console.log(`✅ Matched words: ${matchedWords.length}/${expectedWords.length} = ${Math.round((matchedWords.length / expectedWords.length) * 100)}%`);
+  if (matchedWords.length < expectedWords.length) {
+    const missing = expectedWords.filter(ew => !matchedWords.includes(ew));
+    console.log(`⚠️ Missing words:`, missing.slice(0, 10));
+  }
   
   // Nếu không match từ nào, score = 0
   if (matchedWords.length === 0) {
@@ -1186,21 +1270,45 @@ async function analyzePronunciation(transcript, expectedText, level, roundId = n
         return await analyzePronunciationFallback(transcript, expectedText, level);
       }
       
-      // Tính missing_words từ kết quả phân tích
+      // Tính missing_words từ kết quả phân tích (các từ KHÔNG được nói đúng)
+      // Dùng cùng logic với matchedWords để đảm bảo consistency
       const missingWords = expectedWords.filter(ew => {
-        const cleanExpected = ew.replace(/[.,!?;:]/g, "");
+        const cleanExpected = ew.replace(/[.,!?;:]/g, "").trim();
+        if (!cleanExpected) return false;
+        
         return !transcriptWords.some(tw => {
-          const cleanTranscript = tw.replace(/[.,!?;:]/g, "");
-          return cleanTranscript === cleanExpected || 
-                 cleanTranscript.includes(cleanExpected) || 
-                 cleanExpected.includes(cleanTranscript);
+          const cleanTranscript = tw.replace(/[.,!?;:]/g, "").trim();
+          if (!cleanTranscript) return false;
+          
+          // Exact match
+          if (cleanTranscript === cleanExpected) return true;
+          
+          // Partial match: transcript chứa expected
+          if (cleanTranscript.length >= cleanExpected.length && cleanTranscript.includes(cleanExpected)) return true;
+          
+          // Partial match: expected chứa transcript (>= 3 ký tự)
+          if (cleanExpected.length >= cleanTranscript.length && cleanExpected.includes(cleanTranscript) && cleanTranscript.length >= 3) return true;
+          
+          return false;
         });
       });
       
-      // Đảm bảo score không vượt quá tỷ lệ từ đã nói đúng (thang 100)
+      // Tính điểm dựa trên số từ đúng / tổng số từ (thang 100)
+      // Đây là logic chính: điểm = (số từ đúng / tổng số từ) * 100
       const accuracyRatio = matchedWords.length / expectedWords.length;
-      const calculatedScore = parsed.score ? (parsed.score * 10) : (accuracyRatio * 100); // Convert từ thang 10 sang 100 nếu có
-      const finalScore = Math.min(calculatedScore, accuracyRatio * 100); // Không vượt quá tỷ lệ đúng (thang 100)
+      const baseScore = accuracyRatio * 100; // Điểm cơ bản dựa trên số từ đúng
+      
+      console.log(`📊 Score calculation: matched=${matchedWords.length}, total=${expectedWords.length}, ratio=${accuracyRatio.toFixed(2)}, baseScore=${baseScore.toFixed(1)}`);
+      
+      // Nếu AI trả về score, dùng nó nhưng không được vượt quá baseScore
+      // AI score thường là thang 10, cần convert sang 100
+      const aiScore = parsed.score ? (parsed.score * 10) : null;
+      
+      // Điểm cuối cùng: ưu tiên baseScore (dựa trên số từ đúng), AI chỉ điều chỉnh nhẹ
+      // Đảm bảo điểm không thấp hơn 70% của baseScore và không vượt quá baseScore
+      const finalScore = aiScore ? Math.min(Math.max(aiScore, baseScore * 0.7), baseScore) : baseScore;
+      
+      console.log(`📊 Final score: aiScore=${aiScore}, finalScore=${finalScore.toFixed(1)}, missing_words=${missingWords.length}`);
       
       // Lưu quick evaluation vào database
       if (roundId && learnerId) {
@@ -1254,16 +1362,28 @@ async function analyzePronunciationFallback(transcript, expectedText, level) {
     };
   }
   
-  // Tính missing_words
+  // Tính missing_words và matchedWords với logic nhất quán
   const transcriptWords = transcript.toLowerCase().split(/\s+/).filter(w => w.length > 0);
   const expectedWords = expectedText.toLowerCase().split(/\s+/).filter(w => w.length > 0);
+  
   const matchedWords = expectedWords.filter(ew => {
-    const cleanExpected = ew.replace(/[.,!?;:]/g, "");
+    const cleanExpected = ew.replace(/[.,!?;:]/g, "").trim();
+    if (!cleanExpected) return false;
+    
     return transcriptWords.some(tw => {
-      const cleanTranscript = tw.replace(/[.,!?;:]/g, "");
-      return cleanTranscript === cleanExpected || 
-             cleanTranscript.includes(cleanExpected) || 
-             cleanExpected.includes(cleanTranscript);
+      const cleanTranscript = tw.replace(/[.,!?;:]/g, "").trim();
+      if (!cleanTranscript) return false;
+      
+      // Exact match
+      if (cleanTranscript === cleanExpected) return true;
+      
+      // Partial match: transcript chứa expected
+      if (cleanTranscript.length >= cleanExpected.length && cleanTranscript.includes(cleanExpected)) return true;
+      
+      // Partial match: expected chứa transcript (>= 3 ký tự)
+      if (cleanExpected.length >= cleanTranscript.length && cleanExpected.includes(cleanTranscript) && cleanTranscript.length >= 3) return true;
+      
+      return false;
     });
   });
   
@@ -1312,53 +1432,88 @@ Return JSON ONLY:
     const content = response.choices?.[0]?.message?.content || "{}";
     const parsed = JSON.parse(content);
     
-    // Tính missing_words
+    // Tính missing_words (các từ KHÔNG được nói đúng) - dùng cùng logic với matchedWords
     const missingWords = expectedWords.filter(ew => {
-      const cleanExpected = ew.replace(/[.,!?;:]/g, "");
+      const cleanExpected = ew.replace(/[.,!?;:]/g, "").trim();
+      if (!cleanExpected) return false;
+      
       return !transcriptWords.some(tw => {
-        const cleanTranscript = tw.replace(/[.,!?;:]/g, "");
-        return cleanTranscript === cleanExpected || 
-               cleanTranscript.includes(cleanExpected) || 
-               cleanExpected.includes(cleanTranscript);
+        const cleanTranscript = tw.replace(/[.,!?;:]/g, "").trim();
+        if (!cleanTranscript) return false;
+        
+        // Exact match
+        if (cleanTranscript === cleanExpected) return true;
+        
+        // Partial match: transcript chứa expected
+        if (cleanTranscript.length >= cleanExpected.length && cleanTranscript.includes(cleanExpected)) return true;
+        
+        // Partial match: expected chứa transcript (>= 3 ký tự)
+        if (cleanExpected.length >= cleanTranscript.length && cleanExpected.includes(cleanTranscript) && cleanTranscript.length >= 3) return true;
+        
+        return false;
       });
     });
     
-    // Đảm bảo score không vượt quá tỷ lệ từ đã nói đúng
+    // Tính điểm dựa trên số từ đúng / tổng số từ (thang 100)
     const accuracyRatio = matchedWords.length / expectedWords.length;
-    const calculatedScore = parsed.score || (accuracyRatio * 10);
-    const finalScore = Math.min(calculatedScore, accuracyRatio * 10);
+    const baseScore = accuracyRatio * 100; // Điểm cơ bản dựa trên số từ đúng
+    
+    console.log(`📊 Fallback score calculation: matched=${matchedWords.length}, total=${expectedWords.length}, ratio=${accuracyRatio.toFixed(2)}, baseScore=${baseScore.toFixed(1)}`);
+    
+    // Nếu AI trả về score (thang 10), convert sang 100 và điều chỉnh
+    const aiScore = parsed.score ? (parsed.score * 10) : null;
+    
+    // Điểm cuối cùng: ưu tiên baseScore (dựa trên số từ đúng), nhưng có thể điều chỉnh nhẹ bởi AI
+    const finalScore = aiScore ? Math.min(Math.max(aiScore, baseScore * 0.7), baseScore) : baseScore;
+    
+    console.log(`📊 Fallback final score: aiScore=${aiScore}, finalScore=${finalScore.toFixed(1)}, missing_words=${missingWords.length}`);
     
     return {
-      score: Math.round(finalScore), // Làm tròn điểm
+      score: Math.round(finalScore), // Làm tròn điểm (thang 100)
       feedback: parsed.feedback || "Good effort!",
       errors: [],
       corrected_text: expectedText,
-      missing_words: missingWords,
+      missing_words: missingWords, // Các từ sai để highlight
       strengths: parsed.strengths || [],
       improvements: parsed.improvements || []
     };
   } catch (err) {
-    // Fallback: tính điểm dựa trên tỷ lệ từ đúng
+    // Fallback: tính điểm dựa trên tỷ lệ từ đúng (thang 100)
     const accuracyRatio = matchedWords.length / expectedWords.length;
-    const fallbackScore = accuracyRatio * 10;
+    const fallbackScore = accuracyRatio * 100; // Thang 100, không phải 10
+    
+    // Tính missing_words với logic nhất quán
     const missingWords = expectedWords.filter(ew => {
-      const cleanExpected = ew.replace(/[.,!?;:]/g, "");
+      const cleanExpected = ew.replace(/[.,!?;:]/g, "").trim();
+      if (!cleanExpected) return false;
+      
       return !transcriptWords.some(tw => {
-        const cleanTranscript = tw.replace(/[.,!?;:]/g, "");
-        return cleanTranscript === cleanExpected || 
-               cleanTranscript.includes(cleanExpected) || 
-               cleanExpected.includes(cleanTranscript);
+        const cleanTranscript = tw.replace(/[.,!?;:]/g, "").trim();
+        if (!cleanTranscript) return false;
+        
+        // Exact match
+        if (cleanTranscript === cleanExpected) return true;
+        
+        // Partial match: transcript chứa expected
+        if (cleanTranscript.length >= cleanExpected.length && cleanTranscript.includes(cleanExpected)) return true;
+        
+        // Partial match: expected chứa transcript (>= 3 ký tự)
+        if (cleanExpected.length >= cleanTranscript.length && cleanExpected.includes(cleanTranscript) && cleanTranscript.length >= 3) return true;
+        
+        return false;
       });
     });
     
+    console.log(`📊 Final fallback: score=${fallbackScore.toFixed(1)}, missing_words=${missingWords.length}`);
+    
     return {
-      score: fallbackScore,
-      feedback: "Không thể phân tích chi tiết.",
+      score: Math.round(fallbackScore), // Thang 100 - làm tròn điểm
+      feedback: `Bạn đã nói đúng ${matchedWords.length}/${expectedWords.length} từ (${Math.round(accuracyRatio * 100)}%). ${missingWords.length > 0 ? `Cần cải thiện các từ: ${missingWords.slice(0, 5).join(", ")}` : "Tuyệt vời!"}`,
       errors: [],
       corrected_text: expectedText,
-      missing_words: missingWords,
-      strengths: [],
-      improvements: []
+      missing_words: missingWords, // Các từ sai để highlight
+      strengths: matchedWords.length > 0 ? [`Đã nói đúng ${matchedWords.length}/${expectedWords.length} từ`] : [],
+      improvements: missingWords.length > 0 ? [`Cần cải thiện các từ: ${missingWords.slice(0, 5).join(", ")}`] : ["Tuyệt vời! Bạn đã nói đúng tất cả các từ."]
     };
   }
 }
@@ -1566,7 +1721,10 @@ Return JSON only:
     summaryData = JSON.parse(content);
   } catch (err) {
     console.error("❌ Summary generation error:", err);
-    console.error("Content:", response.choices?.[0]?.message?.content);
+    // Không log response vì có thể undefined khi error
+    if (err.response) {
+      console.error("Error response:", err.response);
+    }
   }
 
   // Update session
