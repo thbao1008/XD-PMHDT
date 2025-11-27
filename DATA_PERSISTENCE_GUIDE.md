@@ -265,3 +265,4 @@ docker exec aesp-db-1 psql -U postgres -d aesp -c "SELECT COUNT(*) FROM informat
 - [DOCKER_REBUILD_GUIDE.md](./DOCKER_REBUILD_GUIDE.md) - Hướng dẫn rebuild Docker
 
 
+
