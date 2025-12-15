@@ -34,14 +34,14 @@
     "check:assistant": "node backend/scripts/checkAssistantAI.js",
     "check:current-ai": "node backend/scripts/checkCurrentAI.js",
     "check:whisperx": "node backend/scripts/checkWhisperX.js",
-    "csm:check": "python backend/ai_models/csm_service.py check",
-    "csm:setup": "cd backend/ai_models && python -m venv csm/.venv && csm/.venv/Scripts/pip install -r csm/requirements.txt",
     "fix:pytorch": "node backend/scripts/fixPyTorchCUDA.js",
     "fix:all": "node fix-all.js",
     "install:all": "npm install",
     "build": "npm run build:fe",
     "build:fe": "cd frontend && npm run build",
-    "start": "cd backend/services && node start-all-services.js"
+    "serve:fe": "cd frontend && npx serve dist -p 5173",
+    "start": "cd backend/services && node start-all-services.js",
+    "start:prod": "concurrently -n BE,FE -c green,blue \"npm run start\" \"npm run serve:fe\""
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
@@ -56,6 +56,7 @@
     "concurrently": "^8.2.2",
     "cross-port-killer": "^1.4.0",
     "nodemon": "^3.1.10",
+    "serve": "^14.2.1",
     "vite": "^5.4.21"
   }
 }

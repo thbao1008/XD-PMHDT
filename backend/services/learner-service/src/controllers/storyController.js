@@ -185,38 +185,44 @@ export async function generateTTS(req, res) {
       return sendResponse(400, { message: "Text must not exceed 5000 characters" });
     }
 
-    // Thử CSM trước nếu được yêu cầu hoặc mặc định
-    const shouldUseCSM = useCSM !== false && process.env.USE_CSM_TTS !== 'false';
+    // Thay thế CSM bằng OpenRouter để generate text response
+    const shouldUseOpenRouter = useCSM !== false && process.env.USE_OPENROUTER_RESPONSE !== 'false';
     
-    if (shouldUseCSM) {
+    if (shouldUseOpenRouter) {
       try {
-        const { generateCSMSpeech } = await import("../services/csmTtsService.js");
+        const { callOpenRouter } = await import("../utils/aiServiceClient.js");
         
-        // Map voiceType to speaker ID (0 = first speaker, 1 = second speaker)
-        const speaker = voiceType === 'male' ? 1 : 0;
+        // Tạo messages cho conversation
+        const messages = [
+          {
+            role: "system",
+            content: "You are a friendly AI companion. Respond warmly and naturally to the user's story. Keep responses short and engaging."
+          },
+          {
+            role: "user", 
+            content: text
+          }
+        ];
         
-        const csmResult = await Promise.race([
-          generateCSMSpeech(text, speaker, context || [], 10000),
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('CSM TTS timeout')), 60000) // Tăng lên 60s cho lần load đầu
-          )
-        ]);
+        const aiResult = await callOpenRouter(messages, { 
+          model: "openai/gpt-4o-mini",
+          temperature: 0.7,
+          max_tokens: 200
+        });
 
-        if (csmResult.success) {
+        if (aiResult.success && aiResult.response) {
           return sendResponse(200, {
             success: true,
-            audioBase64: csmResult.audioBase64,
-            mimeType: csmResult.mimeType || 'audio/wav',
-            source: 'csm'
+            text: aiResult.response,
+            source: 'openrouter'
           });
         } else {
-          console.warn("⚠️ CSM TTS failed, falling back to FPT.AI:", csmResult.error);
+          console.warn("⚠️ OpenRouter response failed, falling back to FPT.AI:", aiResult.error);
           // Fall through to FPT.AI
         }
       } catch (err) {
-        console.warn("⚠️ CSM TTS error, falling back to FPT.AI:", err.message);
-        // Fall through to FPT.AI (only if headers not sent)
-        if (responseSent) return;
+        console.warn("⚠️ OpenRouter error, falling back to FPT.AI:", err.message);
+        // Fall through to FPT.AI
       }
     }
 

@@ -25,6 +25,9 @@ RUN cd frontend && npm install
 # Copy source code
 COPY . .
 
+# Build frontend for production - REMOVED for clean Docker
+# RUN cd frontend && npm run build
+
 # Install all service dependencies individually
 RUN cd backend/services && \
     if [ -f "api-gateway/package.json" ]; then cd api-gateway && npm install && cd ..; fi && \

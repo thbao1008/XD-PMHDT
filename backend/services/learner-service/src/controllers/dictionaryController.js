@@ -16,9 +16,9 @@ export async function getWordDefinition(req, res) {
     // Kiểm tra cache trong database trước
     try {
       const cacheResult = await pool.query(
-        `SELECT definition_data, updated_at 
-         FROM dictionary_cache 
-         WHERE word = $1 
+        `SELECT definition_data, updated_at
+         FROM dictionary_cache
+         WHERE word = $1
          AND updated_at > NOW() - INTERVAL '30 days'`,
         [normalizedWord]
       );
@@ -34,7 +34,7 @@ export async function getWordDefinition(req, res) {
       console.warn("Dictionary cache table may not exist, continuing without cache:", cacheErr.message);
     }
 
-    // Dùng AI để lấy định nghĩa
+    // Dùng OpenRouter để lấy định nghĩa
     const prompt = `Provide a dictionary entry for the English word "${normalizedWord}".
 
 IMPORTANT: Respond ONLY with valid JSON, no markdown code blocks, no explanations, just the JSON object.
@@ -161,8 +161,8 @@ IMPORTANT: Respond ONLY with valid JSON, no markdown code blocks, no explanation
     pool.query(
       `INSERT INTO dictionary_cache (word, definition_data, updated_at)
        VALUES ($1, $2, NOW())
-       ON CONFLICT (word) DO UPDATE 
-       SET definition_data = EXCLUDED.definition_data, 
+       ON CONFLICT (word) DO UPDATE
+       SET definition_data = EXCLUDED.definition_data,
            updated_at = NOW()`,
       [normalizedWord, JSON.stringify(result)]
     ).catch(err => {

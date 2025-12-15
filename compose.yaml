@@ -19,6 +19,7 @@ services:
     environment:
       # Ensure DOCKER flag is set
       - DOCKER=true
+      - NODE_ENV=production
       # Database connection (override from env_file if needed)
       - DB_HOST=db
       - DB_PORT=5432
@@ -47,62 +48,10 @@ services:
         condition: service_healthy
     networks:
       - aesp_network
-    command: sh -c "npm run dev:all"
-
-  # init-db: One-time setup - run with: docker-compose run --rm init-db
-  init-db:
-    build: .
-    env_file:
-      - ./backend/.env.docker  
-    environment:
-      - DOCKER=true
-      - DB_HOST=db
-      - DB_PORT=5432
-      - DB_USER=postgres
-      - DB_PASSWORD=1234
-      - DB_NAME=aesp
-    volumes:
-      - .:/app
-      - /app/node_modules
-      - /app/backend/services/node_modules
-      - /app/frontend/node_modules
-    depends_on:
-      db:
-        condition: service_healthy
-    networks:
-      - aesp_network
-    working_dir: /app
-    command: sh -c "node backend/db/setup-db-docker.js"
-    profiles: ["setup"]  # Only run when explicitly requested
-
-  # seed: One-time setup - run with: docker-compose run --rm seed
-  seed:
-    build: .
-    env_file:
-      - ./backend/.env.docker  
-    environment:
-      - DOCKER=true
-      - DB_HOST=db
-      - DB_PORT=5432
-      - DB_USER=postgres
-      - DB_PASSWORD=1234
-      - DB_NAME=aesp
-    volumes:
-      - .:/app
-      - /app/node_modules
-      - /app/backend/services/node_modules
-      - /app/frontend/node_modules
-    depends_on:
-      db:
-        condition: service_healthy
-    networks:
-      - aesp_network
-    working_dir: /app
-    command: sh -c "node backend/seed/seedAdminsFromFile.js"
-    profiles: ["setup"]  # Only run when explicitly requested
+    command: sh -c "if [ \"$NODE_ENV\" = \"production\" ]; then npm run start:prod; else npm run dev:all; fi"
 
   db:
-    image: postgres:15
+    image: postgres:latest
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: 1234
@@ -110,11 +59,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - db_data:/var/lib/postgresql/data
-      # Mount aesp.sql để tự động import khi container khởi động lần đầu
-      # Lưu ý: Chỉ chạy khi database được khởi tạo lần đầu (volume db_data chưa tồn tại)
-      # Nếu database đã tồn tại, dùng script import-aesp-sql.sh hoặc import-aesp-sql.ps1
-      - ./aesp.sql:/docker-entrypoint-initdb.d/aesp.sql
+      - db_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d aesp"]
       interval: 5s
